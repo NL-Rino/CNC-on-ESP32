@@ -1,0 +1,65 @@
+{
+  "name": "ong-nhanh-chu-T",
+  "notes": "",
+  "optimize_order": true,
+  "operations": [
+    {
+      "type": "ring_mark",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "x": 40
+      }
+    },
+    {
+      "type": "hole",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "diameter": 25,
+        "x": 90,
+        "theta": 0,
+        "angle": 90.0,
+        "offset": 0.0
+      }
+    },
+    {
+      "type": "hole",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "diameter": 25,
+        "x": 90,
+        "theta": 180,
+        "angle": 90.0,
+        "offset": 0.0
+      }
+    },
+    {
+      "type": "slot",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "x": 150,
+        "theta": 90,
+        "length": 45,
+        "width_deg": 70,
+        "corner": 5
+      }
+    },
+    {
+      "type": "saddle",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "main_diameter": 114.3,
+        "angle": 90,
+        "offset": 0.0,
+        "x": 260,
+        "reference": "heel",
+        "roll": 0.0,
+        "bevel_axis": true
+      }
+    }
+  ]
+}

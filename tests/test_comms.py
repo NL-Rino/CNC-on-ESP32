@@ -215,3 +215,87 @@ class TestStreaming(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLanTransport(unittest.TestCase):
+    """Giao tiếp với FluidNC qua mạng LAN (cổng telnet), dùng socket thật."""
+
+    def setUp(self):
+        from pipecut.simulator import FluidNCServer
+
+        self.profile = MachineProfile()
+        self.profile.pipe.shape = "square"
+        self.profile.pipe.width = 50.0
+        cross = self.profile.axis("cross")
+        cross.min_travel, cross.max_travel = -100.0, 100.0
+        self.sim = FluidNCSimulator(axes="".join(self.profile.letters),
+                                    rx_buffer=self.profile.connection.rx_buffer,
+                                    time_scale=300.0)
+        self.server = FluidNCServer(self.sim, "127.0.0.1", 0)
+        self.port = self.server.start()
+        self.controller = DeviceController(self.profile)
+
+    def tearDown(self):
+        try:
+            self.controller.disconnect()
+        finally:
+            self.server.stop()
+
+    def test_nhan_dien_dia_chi_mang(self):
+        from pipecut.transport import parse_address
+
+        self.assertEqual(parse_address("192.168.1.50"), ("192.168.1.50", 23))
+        self.assertEqual(parse_address("192.168.1.50:2323"), ("192.168.1.50", 2323))
+        self.assertEqual(parse_address("fluidnc.local"), ("fluidnc.local", 23))
+        self.assertIsNone(parse_address("COM7"))
+        self.assertIsNone(parse_address("/dev/ttyUSB0"))
+        self.assertIsNone(parse_address("GIA-LAP"))
+
+    def test_loc_chuoi_thuong_luong_telnet(self):
+        from pipecut.transport import _strip_telnet
+
+        self.assertEqual(_strip_telnet(b"ok\r\n"), b"ok\r\n")
+        # IAC DO/WILL ... phải bị bỏ, dữ liệu thật giữ nguyên
+        self.assertEqual(_strip_telnet(b"\xff\xfd\x18ok\r\n"), b"ok\r\n")
+        self.assertEqual(_strip_telnet(b"a\xff\xffb"), b"a\xffb")
+
+    def test_nap_tron_ven_mot_chuong_trinh_qua_mang(self):
+        job = Job(name="qua-mang")
+        job.add("cutoff", x=250.0, angle=0.0)
+        tp, _w = job.build_toolpath(self.profile)
+        lines = build_program(self.profile, tp).stream_lines()
+
+        c = self.controller
+        c.connect(port=f"127.0.0.1:{self.port}")
+        self.assertTrue(c.is_connected)
+        self.assertIn("LAN", c.transport.description)
+        time.sleep(0.3)
+        c.start_job(lines)
+        end = time.time() + 60
+        while c.progress.running and time.time() < end:
+            time.sleep(0.05)
+        self.assertFalse(c.progress.running)
+        self.assertEqual(c.progress.acked, len(lines))
+        self.assertEqual(c.progress.errors, [])
+        # máy ảo phải thực sự chạy tới cuối chương trình
+        self.assertGreater(abs(self.sim.pos["A"]), 300.0)
+
+    def test_lay_duoc_bao_cao_trang_thai_qua_mang(self):
+        c = self.controller
+        c.connect(port=f"127.0.0.1:{self.port}")
+        end = time.time() + 5
+        while c.status is None and time.time() < end:
+            time.sleep(0.05)
+        self.assertIsNotNone(c.status)
+        self.assertIn(c.status.state, ("Idle", "Run", "Jog"))
+        self.assertIn(self.profile.letter("along"), c.status.mpos)
+
+    def test_jog_va_lenh_thoi_gian_thuc_qua_mang(self):
+        c = self.controller
+        c.connect(port=f"127.0.0.1:{self.port}")
+        time.sleep(0.2)
+        c.jog({self.profile.letter("along"): 25.0}, 1000.0)
+        end = time.time() + 5
+        while abs(self.sim.pos["Y"]) < 24.0 and time.time() < end:
+            time.sleep(0.05)
+        self.assertAlmostEqual(self.sim.pos["Y"], 25.0, delta=0.5)

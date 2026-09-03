@@ -321,3 +321,85 @@ class FluidNCSimulator:
         self.queue.clear()
         self.block_start = None
         self._emit(f"ALARM:{code}")
+
+
+# --------------------------------------------------------------------------
+# Máy ảo chạy trên mạng
+# --------------------------------------------------------------------------
+class FluidNCServer:
+    """Cho máy ảo lắng nghe trên một cổng TCP như FluidNC thật.
+
+    Dùng để thử đường truyền LAN mà không cần bo mạch: mở máy chủ này rồi trỏ
+    phần mềm tới ``127.0.0.1:<cổng>``.  Cũng là cách kiểm thử toàn bộ đường đi
+    qua socket thật thay vì giả lập trong bộ nhớ.
+    """
+
+    def __init__(self, simulator: "FluidNCSimulator", host: str = "127.0.0.1",
+                 port: int = 0):
+        self.sim = simulator
+        self.host = host
+        self.port = port
+        self._sock = None
+        self._thread = None
+        self._running = False
+
+    def start(self) -> int:
+        """Bắt đầu lắng nghe, trả về cổng thực tế đang dùng."""
+        import socket
+        import threading
+
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._sock.bind((self.host, self.port))
+        self._sock.listen(1)
+        self.port = self._sock.getsockname()[1]
+        self._running = True
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread.start()
+        return self.port
+
+    def stop(self) -> None:
+        self._running = False
+        if self._sock is not None:
+            try:
+                self._sock.close()
+            finally:
+                self._sock = None
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+            self._thread = None
+
+    def _serve(self) -> None:
+        import socket
+
+        while self._running:
+            try:
+                conn, _addr = self._sock.accept()
+            except OSError:
+                return
+            conn.settimeout(0.02)
+            self.sim.reset()
+            try:
+                while self._running:
+                    try:
+                        data = conn.recv(4096)
+                        if not data:
+                            break
+                        self.sim.feed_input(data)
+                    except (socket.timeout, TimeoutError):
+                        pass
+                    except OSError:
+                        break
+                    self.sim.tick()
+                    out = self.sim.take_output(4096)
+                    if out:
+                        try:
+                            conn.sendall(out)
+                        except OSError:
+                            break
+                    time.sleep(0.002)
+            finally:
+                try:
+                    conn.close()
+                except OSError:
+                    pass

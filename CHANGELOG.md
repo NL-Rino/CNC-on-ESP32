@@ -1,5 +1,82 @@
 # Nhật ký thay đổi
 
+## v1.4.0 — 2026-09-03
+
+### Nhập biên dạng từ bốn nguồn ngoài
+
+Hình đã vẽ ở phần mềm khác thì nạp thẳng vào, không phải vẽ lại. Nguyên công
+`pattern` giờ đọc được:
+
+| Định dạng | Đọc được những gì |
+|---|---|
+| **DXF** | LINE, CIRCLE, ARC, ELLIPSE, LWPOLYLINE *(kể cả cung bulge)*, POLYLINE, SPLINE *(De Boor, đúng vector nút)*; tự quy đơn vị theo `$INSUNITS`; lọc theo lớp |
+| **SVG** | `path` đủ lệnh M L H V C S Q T A Z, `rect` *(kể cả bo góc `rx`/`ry`)*, `circle`, `ellipse`, `polyline`, `polygon`, `line`, `transform` lồng nhau |
+| **G-code phẳng** | G0/G1/G2/G3 *(cả kiểu I/J lẫn kiểu R, R âm cho cung lớn)*, G90/G91, G20/G21 — cửa ngõ để dùng **CAM bất kỳ** |
+| **STL / OBJ** | Mô hình 3D chi tiết đã cắt — tự dò ra đường cắt trên mặt phôi |
+
+Điểm quan trọng: biên dạng nhập vào đi **đúng dây chuyền xử lý của biên dạng tự
+sinh** — bù bề rộng mạch cắt, vào/ra dao, bo góc, chèn điểm gãy theo tiết diện,
+chiến lược vượt góc ống hộp, bù tốc độ tổng hợp bốn trục. Nạp vào rồi thì không
+còn phân biệt hình tự vẽ hay hình nhập nữa.
+
+Một tệp chứa nhiều đường thì nạp hết, mỗi đường thành một biên dạng riêng.
+
+Thêm ô **Xoay biên dạng** và **Lật** (theo chiều dọc ống hoặc chiều chu vi), và
+ô **Khép kín** nhận thêm lựa chọn `auto` — theo đúng tệp gốc.
+
+### Nhận mô hình 3D thì tự chỉnh những gì
+
+Không phải "chỉ nhận dạng rồi để đấy". Trình tự tự động: dò trục phôi → dò tâm
+tiết diện và bù góc xoay → tách mặt phôi gốc khỏi mặt cắt mới bằng khoảng cách
+có dấu → lấy ranh giới giữa hai phần làm đường cắt → trải phẳng và gỡ cuộn →
+soát lại việc khai báo phôi → rồi đi tiếp đúng dây chuyền chung.
+
+Đường cắt quấn trọn một vòng quanh phôi (cắt đứt, vát đầu ống) được nhận ra và
+đánh dấu riêng, khác với vòng kín tại chỗ (lỗ, rãnh).
+
+Kiểm chứng bằng cách dựng lưới của một nhát cắt lượn sóng đã biết trước phương
+trình rồi cho thuật toán đọc lại: sai lệch **dưới 1e-6 mm**.
+
+Khai sai tiết diện phôi thì **cảnh báo rõ chỗ sai** chứ không lặng lẽ cho ra
+đường cắt sai — bắt được cả ba nhầm lẫn hay gặp: phôi khai nhỏ quá, quên bán
+kính bo góc ống hộp, và nhầm đơn vị inch.
+
+**STEP/IGES vẫn không đọc được** (định dạng B-rep, cần cả một nhân hình học
+nặng) — hãy xuất STL với sai số lưới 0,01–0,05 mm.
+
+### Kết nối qua WiFi trong mạng LAN
+
+Nói chuyện với ESP32 qua **Telnet** mà FluidNC mở sẵn (cổng 23), dùng đúng giao
+thức `ok`/`error` như cổng COM — nên toàn bộ phần đếm ký tự, phân tích trạng
+thái và lệnh thời gian thực giữ nguyên không đổi.
+
+* Ô **Cổng / địa chỉ** trong giao diện gõ thẳng được `192.168.1.50`,
+  `192.168.1.50:23` hay `fluidnc.local`; phần mềm tự nhận ra đó là địa chỉ mạng.
+* Nút **Dò trong mạng LAN** quét cả dải `/24`, chạy ở luồng riêng nên giao diện
+  không đứng.
+* `python -m pipecut scan` làm việc tương tự ở dòng lệnh.
+* `python -m pipecut sim ra.nc --serve 2323` mở **máy ảo ra cổng mạng**, thử
+  trọn đường truyền WiFi khi chưa có bo mạch.
+
+Lọc sẵn lệnh thương lượng Telnet (IAC) và gom đệm gói tin bị chia nhỏ.
+
+> Cắt thật thì vẫn nên cắm dây: WiFi tiện cho khâu chuẩn bị, nhưng xưởng có máy
+> hàn, biến tần, nguồn plasma là môi trường nhiễu nặng.
+
+### Khác
+
+* Lệnh mới `python -m pipecut import <tệp>` — xem trong tệp có mấy đường, dài
+  bao nhiêu, khổ bao nhiêu, trước khi đưa vào công việc.
+* Giao diện: nút **Chọn...** mở hộp thoại lọc sẵn theo định dạng đọc được, và
+  đọc thử ngay để hiện nội dung tệp dưới ô mô tả nguyên công.
+* Sửa `rect` trong SVG bỏ qua bo góc `rx`/`ry` — trước đây một hình chữ nhật bo
+  góc bị đọc thành hình chữ nhật góc vuông.
+* Đọc được STL nhị phân có byte thừa ở cuối (một số phần mềm ghi thêm).
+* Thêm tệp mẫu: `examples/bien_dang_cua_so.dxf`,
+  `examples/bien_dang_trang_tri.svg`, `examples/bien_dang_cam.nc` và công việc
+  mẫu `examples/vi_du_nhap_dxf.json`.
+* Bổ sung 43 bài kiểm thử (tổng cộng **160**).
+
 ## v1.3.0 — 2026-09-03
 
 ### Vượt góc ống hộp kiểu "xoay 45 độ" (`corner_mode = "pivot"`) — mặc định mới

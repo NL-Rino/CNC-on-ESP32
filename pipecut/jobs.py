@@ -127,16 +127,31 @@ OP_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
     },
     "pattern": {
-        "label": "Biên dạng trải phẳng",
-        "desc": "Cuốn một biên dạng 2D (từ DXF/CSV) lên mặt ống.",
+        "label": "Nhập biên dạng từ tệp",
+        "desc": ("Nạp biên dạng từ DXF, SVG, G-code phẳng, mô hình 3D (STL/OBJ) "
+                 "hay danh sách điểm, rồi cuốn lên mặt phôi. Một tệp có thể chứa "
+                 "nhiều đường - tất cả đều được nạp thành nguyên công con."),
         "params": [
             P("file", "Tệp biên dạng", "", "", "file",
-              hint="CSV hai cột u,v (mm) hoặc JSON danh sách điểm"),
+              hint="DXF · SVG · NC/G-code · STL/OBJ · CSV/JSON"),
             P("x_offset", "Dịch dọc ống", 0.0, "mm"),
             P("theta_offset", "Dịch theo góc", 0.0, "độ"),
             P("scale", "Tỉ lệ", 1.0, ""),
-            P("closed", "Khép kín", True, "", "bool"),
+            P("rotate", "Xoay biên dạng", 0.0, "độ",
+              hint="Xoay trên tấm trải phẳng trước khi cuốn lên phôi"),
+            P("mirror", "Lật", "none", "", "choice", choices=["none", "u", "v"],
+              hint="u = lật theo chiều dọc ống, v = lật theo chiều chu vi"),
+            P("closed", "Khép kín", "auto", "", "choice",
+              choices=["auto", "yes", "no"],
+              hint="auto = theo đúng tệp gốc"),
             P("corner", "Bo góc", 0.0, "mm"),
+            P("layers", "Lớp cần lấy", "", "", "text",
+              hint="Chỉ với DXF; nhiều lớp cách nhau bằng dấu phẩy, để trống là lấy hết"),
+            P("mesh_axis", "Trục phôi trong mô hình", "auto", "", "choice",
+              choices=["auto", "x", "y", "z"], hint="Chỉ với STL/OBJ"),
+            P("mesh_roll", "Xoay mô hình quanh trục", 0.0, "độ", hint="Chỉ với STL/OBJ"),
+            P("mesh_tol", "Dung sai bề mặt", 0.4, "mm",
+              hint="Chỉ với STL/OBJ: sai lệch cho phép để coi một mảnh lưới là còn nằm trên mặt phôi"),
         ],
     },
 }
@@ -190,36 +205,99 @@ class Operation:
                    name=d.get("name", ""), enabled=bool(d.get("enabled", True)))
 
 
-def load_pattern_points(path: str) -> List[Tuple[float, float]]:
-    """Nạp biên dạng phẳng từ CSV (``u,v``) hoặc JSON (``[[u,v], ...]``)."""
-    if not path or not os.path.exists(path):
-        raise shapes.ShapeError(f"Không tìm thấy tệp biên dạng: {path}")
-    if path.lower().endswith(".json"):
-        with open(path, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-        pts = data["points"] if isinstance(data, dict) else data
-        return [(float(p[0]), float(p[1])) for p in pts]
-    pts: List[Tuple[float, float]] = []
-    with open(path, "r", encoding="utf-8") as fh:
-        for raw in fh:
-            line = raw.strip()
-            if not line or line[0] in "#;":
-                continue
-            parts = line.replace(";", ",").replace("\t", ",").split(",")
-            if len(parts) < 2:
-                continue
-            try:
-                pts.append((float(parts[0]), float(parts[1])))
-            except ValueError:
-                continue
-    if len(pts) < 2:
-        raise shapes.ShapeError(f"Tệp '{os.path.basename(path)}' không có đủ điểm hợp lệ.")
-    return pts
-
-
 # --------------------------------------------------------------------------
 # Dựng biên dạng từ nguyên công
 # --------------------------------------------------------------------------
+def _resolve(path: str, base_dir: str) -> str:
+    if base_dir and path and not os.path.isabs(path):
+        return os.path.join(base_dir, path)
+    return path
+
+
+def _as_closed(value: Any, fallback: bool) -> Optional[bool]:
+    """Ô "khép kín" nhận cả kiểu cũ (True/False) lẫn kiểu mới ("auto"/yes/no)."""
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in ("auto", ""):
+        return None
+    if text in ("yes", "true", "1", "co", "có"):
+        return True
+    if text in ("no", "false", "0", "khong", "không"):
+        return False
+    return fallback
+
+
+def build_imported(op: Operation, section, tolerance: float,
+                   base_dir: str = "") -> List[Contour]:
+    """Nạp một tệp ngoài thành danh sách biên dạng đã cuốn lên phôi.
+
+    Mọi định dạng đều đi chung một đường: bộ nhập trả về đường cong phẳng, rồi
+    ``flat_pattern`` cuốn lên mặt phôi.  Nhờ vậy biên dạng nhập vào được hưởng
+    y hệt dây chuyền xử lý của biên dạng tự sinh: bù bề rộng mạch cắt, vào/ra
+    dao, xoay góc ống hộp, bù tốc độ tổng hợp bốn trục.
+    """
+    from .importers import ImportError_, load_curves
+
+    gp = op.get
+    path = _resolve(str(gp("file")), base_dir)
+    layers = [x.strip() for x in str(gp("layers", "")).split(",") if x.strip()]
+    notes: List[str] = []
+    try:
+        curves = load_curves(
+            path,
+            section=section,
+            tolerance=tolerance,
+            layers=layers or None,
+            mesh_axis=str(gp("mesh_axis", "auto")),
+            mesh_roll=float(gp("mesh_roll", 0.0)),
+            mesh_tolerance=float(gp("mesh_tol", 0.4)),
+            notes=notes,
+        )
+    except ImportError_ as exc:
+        raise shapes.ShapeError(str(exc)) from exc
+
+    force_closed = _as_closed(gp("closed", "auto"), True)
+    out: List[Contour] = []
+    for i, curve in enumerate(curves, 1):
+        if curve.rapid or len(curve.points) < 2:
+            continue
+        name = op.label() if len(curves) == 1 else f"{op.label()} #{i}"
+        closed = curve.closed if force_closed is None else force_closed
+        contour = shapes.flat_pattern(
+            section, curve.points,
+            closed=closed,
+            x_offset=float(gp("x_offset", 0.0)),
+            theta_offset_deg=float(gp("theta_offset", 0.0)),
+            scale=float(gp("scale", 1.0)),
+            tolerance=tolerance,
+            corner_radius=float(gp("corner", 0.0)),
+            name=name,
+            wrap=curve.wrap,
+            rotate_deg=float(gp("rotate", 0.0)),
+            mirror=str(gp("mirror", "none")),
+        )
+        contour.meta["source"] = os.path.basename(path)
+        if curve.layer:
+            contour.meta["layer"] = curve.layer
+        out.append(contour)
+    if not out:
+        raise shapes.ShapeError(
+            f"Tệp '{os.path.basename(path)}' không có đường cắt nào dùng được."
+        )
+    if notes:
+        out[0].meta["notes"] = notes
+    return out
+
+
+def build_contours(op: Operation, section, tolerance: float,
+                   base_dir: str = "") -> List[Contour]:
+    """Dựng mọi biên dạng của một nguyên công (tệp nhập vào có thể nhiều đường)."""
+    if op.type == "pattern":
+        return build_imported(op, section, tolerance, base_dir)
+    return [build_contour(op, section, tolerance, base_dir)]
+
+
 def build_contour(op: Operation, section, tolerance: float,
                   base_dir: str = "") -> Contour:
     """Gọi hàm sinh biên dạng tương ứng với kiểu nguyên công."""
@@ -264,15 +342,9 @@ def build_contour(op: Operation, section, tolerance: float,
         return shapes.weld_prep(section, float(gp("x")), float(gp("angle")),
                                 tolerance=tolerance, name=op.label())
     if t == "pattern":
-        path = str(gp("file"))
-        if base_dir and path and not os.path.isabs(path):
-            path = os.path.join(base_dir, path)
-        pts = load_pattern_points(path)
-        return shapes.flat_pattern(section, pts, closed=bool(gp("closed")),
-                                   x_offset=float(gp("x_offset")),
-                                   theta_offset_deg=float(gp("theta_offset")),
-                                   scale=float(gp("scale")), tolerance=tolerance,
-                                   corner_radius=float(gp("corner")), name=op.label())
+        # Tệp có thể chứa nhiều đường; hàm này chỉ trả về đường dài nhất.
+        # Dùng build_contours nếu muốn lấy hết.
+        return build_imported(op, section, tolerance, base_dir)[0]
     raise shapes.ShapeError(f"Nguyên công '{t}' chưa được hỗ trợ.")
 
 
@@ -310,11 +382,14 @@ class Job:
             if not op.enabled:
                 continue
             try:
-                contour = build_contour(op, section, tol, base_dir)
+                contours = build_contours(op, section, tol, base_dir)
             except Exception as exc:
                 warnings.append(f"Nguyên công {i} ({op.label()}): {exc}")
                 continue
-            tp.add(contour)
+            for contour in contours:
+                for note in contour.meta.pop("notes", []):
+                    warnings.append(f"Nguyên công {i} ({op.label()}): {note}")
+                tp.add(contour)
         if self.optimize_order and len(tp.contours) > 2:
             tp.contours = order_contours(tp.contours)
         else:

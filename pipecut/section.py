@@ -221,6 +221,18 @@ class Section:
         """
         return []
 
+    def signed_distance(self, cx: float, cy: float) -> float:
+        """Khoảng cách có dấu từ một điểm tới biên tiết diện.
+
+        Âm là nằm trong lòng phôi, dương là ở ngoài, 0 là đúng trên bề mặt.
+        Dùng để nhận ra phần bề mặt của mô hình 3D nào còn nằm trên phôi gốc.
+        """
+        raise NotImplementedError
+
+    def s_of_point(self, cx: float, cy: float) -> float:
+        """Vị trí cung của điểm trên biên nằm theo hướng ``(cx, cy)`` từ tâm."""
+        return self.s_of_theta(math.degrees(math.atan2(cx, cy)))
+
     def surface_height(self, theta_deg: float, cross: float = 0.0) -> float:
         """Chiều cao bề mặt phôi ngay dưới mũi cắt, đo từ tâm phôi.
 
@@ -284,6 +296,9 @@ class RoundSection(Section):
         # tia thẳng đứng lệch ngang một đoạn e chạm mặt trụ ở góc asin(e/R)
         t = max(-1.0, min(1.0, cross / self.radius))
         return (math.radians(theta_deg) + math.asin(t)) * self.radius
+
+    def signed_distance(self, cx: float, cy: float) -> float:
+        return math.hypot(cx, cy) - self.radius
 
     def describe(self) -> str:
         return f"ống tròn ⌀{self.diameter:g}"
@@ -384,6 +399,18 @@ class BoxSection(Section):
     def arc_spans(self) -> List[Tuple[float, float]]:
         return [(self._starts[i], self._starts[i] + seg[1])
                 for i, seg in enumerate(self._segs) if seg[0] == "arc"]
+
+    def signed_distance(self, cx: float, cy: float) -> float:
+        """Khoảng cách có dấu tới biên hộp bo góc.
+
+        Công thức chuẩn cho hình chữ nhật bo góc: đưa về góc phần tư thứ nhất,
+        đo tới hình chữ nhật thu nhỏ (đã trừ bán kính góc) rồi trừ đi bán kính.
+        """
+        qx = abs(cx) - (self.hx - self.rc)
+        qy = abs(cy) - (self.hy - self.rc)
+        outside = math.hypot(max(qx, 0.0), max(qy, 0.0))
+        inside = min(max(qx, qy), 0.0)
+        return outside + inside - self.rc
 
     def corner_arcs(self) -> List[Dict[str, float]]:
         out: List[Dict[str, float]] = []

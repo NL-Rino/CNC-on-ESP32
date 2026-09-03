@@ -3,10 +3,14 @@
 Ví dụ::
 
     python -m pipecut ports                       # liệt kê cổng COM
+    python -m pipecut scan                        # dò ESP32 trong mạng LAN
     python -m pipecut ops                         # xem danh mục nguyên công
+    python -m pipecut import ban_ve.dxf           # xem thử một tệp nhập vào
     python -m pipecut gen examples/ong_T.json -o ra.nc --svg xem.svg
     python -m pipecut sim ra.nc                   # chạy thử trên máy ảo
+    python -m pipecut sim ra.nc --serve 2323      # máy ảo mở cổng mạng
     python -m pipecut send ra.nc --port COM5      # nạp xuống máy thật
+    python -m pipecut send ra.nc --port 192.168.1.50   # nạp qua WiFi/LAN
     python -m pipecut run examples/ong_T.json --port COM5
     python -m pipecut ui                          # mở giao diện đồ hoạ
 """
@@ -24,7 +28,7 @@ from . import __version__
 from .config import MachineProfile, find_profile
 from .gcode import build_program
 from .jobs import OP_CATALOG, Job
-from .transport import list_ports
+from .transport import discover_lan, list_ports
 
 
 # --------------------------------------------------------------------------
@@ -45,6 +49,52 @@ def cmd_ports(args: argparse.Namespace) -> int:
     print("Cổng nối tiếp khả dụng:")
     for port, desc in list_ports():
         print(f"  {port:<14} {desc}")
+    return 0
+
+
+def cmd_scan(args: argparse.Namespace) -> int:
+    print(f"Đang dò FluidNC trong mạng LAN (cổng {args.tcp_port}, "
+          f"chờ tối đa {args.timeout:g}s mỗi địa chỉ)...")
+    found = discover_lan(port=args.tcp_port, timeout=args.timeout)
+    if not found:
+        print("  Không thấy máy nào. Kiểm tra ESP32 đã nối cùng mạng WiFi và "
+              "đã bật Telnet trong FluidNC chưa.")
+        return 1
+    for addr, desc in found:
+        print(f"  {addr:<22} {desc}")
+    return 0
+
+
+def cmd_import(args: argparse.Namespace) -> int:
+    """Xem thử một tệp nhập vào trước khi đưa vào công việc."""
+    from .importers import ImportError_, describe_file, detect_format, load_curves
+
+    profile = _load_profile(args.profile)
+    section = profile.pipe.section()
+    notes: List[str] = []
+    try:
+        fmt = detect_format(args.file)
+        curves = load_curves(args.file, section=section,
+                             tolerance=profile.motion.chord_tolerance,
+                             layers=args.layers.split(",") if args.layers else None,
+                             mesh_axis=args.mesh_axis, mesh_roll=args.mesh_roll,
+                             mesh_tolerance=args.mesh_tol, notes=notes)
+    except ImportError_ as exc:
+        print(f"  [!] {exc}", file=sys.stderr)
+        return 2
+    print(f"{args.file}\n  định dạng : {fmt}\n  phôi      : {section.describe()}")
+    for note in notes:
+        print(f"  [!] {note}")
+    print(f"\n  {'#':<4}{'tên':<14}{'điểm':>7}{'dài (mm)':>11}  {'kiểu':<10}"
+          f"{'khổ u × v (mm)':>22}")
+    for i, c in enumerate(curves, 1):
+        x0, y0, x1, y1 = c.bounds()
+        kind = "quấn vòng" if c.wrap else ("khép kín" if c.closed else "hở")
+        print(f"  {i:<4}{(c.layer or c.name)[:13]:<14}{len(c.points):>7}"
+              f"{c.length:>11.2f}  {kind:<10}{f'{x1-x0:.1f} × {y1-y0:.1f}':>22}")
+    total = sum(c.length for c in curves)
+    print(f"\n  Tổng: {len(curves)} đường, {total:.1f} mm đường cắt.")
+    print(f"  Dùng trong tệp công việc: nguyên công 'pattern' với file=\"{args.file}\".")
     return 0
 
 
@@ -211,7 +261,40 @@ def cmd_sim(args: argparse.Namespace) -> int:
     lines = [l for l in (strip_gcode_comment(x) for x in raw) if l]
     print(f"Chạy thử {len(lines)} dòng trên máy ảo "
           f"(tốc độ x{profile.connection.simulator_speed:g})")
+    if getattr(args, "serve", None):
+        return _serve_sim(profile, args.serve)
     return _stream(profile, lines, "GIA-LAP", None, args.quiet)
+
+
+def _serve_sim(profile: MachineProfile, port: int) -> int:
+    """Mở máy ảo ra mạng LAN: thử toàn bộ đường kết nối WiFi mà không cần ESP32."""
+    import socket
+
+    from .simulator import FluidNCServer, FluidNCSimulator
+
+    sim = FluidNCSimulator(
+        axes="".join(a.letter for a in profile.axes),
+        rx_buffer=profile.connection.rx_buffer,
+        time_scale=profile.connection.simulator_speed,
+    )
+    # 0.0.0.0 để máy khác trong mạng LAN cũng nối tới thử được
+    server = FluidNCServer(sim, host="0.0.0.0", port=port)
+    actual = server.start()
+    try:
+        host = socket.gethostbyname(socket.gethostname())
+    except OSError:
+        host = "127.0.0.1"
+    print(f"Máy ảo đang lắng nghe tại {host}:{actual} (và 127.0.0.1:{actual}).")
+    print(f"Nạp thử bằng:  python -m pipecut send <tep.nc> --port {host}:{actual}")
+    print("Nhấn Ctrl+C để dừng.")
+    try:
+        while True:
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        print("\nĐã dừng máy ảo.")
+    finally:
+        server.stop()
+    return 0
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -281,6 +364,23 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("ports", help="liệt kê cổng COM").set_defaults(func=cmd_ports)
     sub.add_parser("ops", help="xem danh mục nguyên công").set_defaults(func=cmd_ops)
 
+    sc = sub.add_parser("scan", help="dò tìm ESP32 trong mạng LAN")
+    sc.add_argument("--tcp-port", type=int, default=23, help="cổng Telnet của FluidNC")
+    sc.add_argument("--timeout", type=float, default=0.25, help="chờ mỗi địa chỉ (giây)")
+    sc.set_defaults(func=cmd_scan)
+
+    si = sub.add_parser("import", help="xem thử tệp DXF/SVG/G-code/STL trước khi dùng")
+    si.add_argument("file")
+    si.add_argument("--layers", default="", help="chỉ lấy các lớp DXF này, cách nhau bằng dấu phẩy")
+    si.add_argument("--mesh-axis", default="auto", choices=["auto", "x", "y", "z"],
+                    help="trục phôi trong mô hình 3D")
+    si.add_argument("--mesh-roll", type=float, default=0.0,
+                    help="mô hình 3D đang bị xoay quanh trục bao nhiêu độ")
+    si.add_argument("--mesh-tol", type=float, default=0.4,
+                    help="dung sai coi một mảnh lưới là còn nằm trên mặt phôi (mm)")
+    _add_profile_arg(si)
+    si.set_defaults(func=cmd_import)
+
     sp = sub.add_parser("profile", help="xem hoặc tạo hồ sơ máy")
     sp.add_argument("--init", metavar="TỆP", help="tạo hồ sơ mặc định")
     _add_profile_arg(sp)
@@ -331,6 +431,9 @@ def build_parser() -> argparse.ArgumentParser:
     sm.add_argument("file")
     sm.add_argument("--speed", type=float, default=None,
                     help="hệ số tăng tốc máy ảo (1 = thời gian thực)")
+    sm.add_argument("--serve", type=int, nargs="?", const=2323, default=None,
+                    metavar="CONG",
+                    help="mở máy ảo ra mạng LAN ở cổng này để thử phần kết nối WiFi")
     sm.add_argument("-q", "--quiet", action="store_true")
     _add_profile_arg(sm)
     sm.set_defaults(func=cmd_sim)

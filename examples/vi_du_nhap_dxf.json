@@ -1,0 +1,47 @@
+{
+  "name": "nhap-ban-ve-dxf",
+  "notes": "Ví dụ nạp biên dạng từ tệp ngoài: một cửa sổ chữ nhật bo góc kèm hai lỗ bắt vít, vẽ sẵn trong bien_dang_cua_so.dxf. Đổi 'file' sang bien_dang_trang_tri.svg hay bien_dang_cam.nc để thử hai định dạng còn lại.",
+  "optimize_order": false,
+  "pipe": {
+    "shape": "square",
+    "width": 50.0,
+    "height": 50.0,
+    "corner_radius": 4.0,
+    "wall_thickness": 3.0,
+    "length": 1000.0,
+    "material": "thep-hop"
+  },
+  "operations": [
+    {
+      "type": "axial",
+      "name": "Vạch dấu đường tâm",
+      "enabled": true,
+      "params": {"x_start": 60.0, "x_end": 260.0, "theta": 0.0, "mark": true}
+    },
+    {
+      "type": "pattern",
+      "name": "Cửa sổ + lỗ bắt vít (DXF)",
+      "enabled": true,
+      "params": {
+        "file": "bien_dang_cua_so.dxf",
+        "x_offset": 100.0,
+        "theta_offset": 0.0,
+        "scale": 1.0,
+        "rotate": 0.0,
+        "mirror": "none",
+        "closed": "auto",
+        "corner": 0.0,
+        "layers": "",
+        "mesh_axis": "auto",
+        "mesh_roll": 0.0,
+        "mesh_tol": 0.4
+      }
+    },
+    {
+      "type": "cutoff",
+      "name": "Cắt đứt sau cùng",
+      "enabled": true,
+      "params": {"x": 260.0, "angle": 0.0, "roll": 0.0, "bevel_axis": false}
+    }
+  ]
+}

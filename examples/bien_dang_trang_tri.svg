@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PipeCut Studio - hinh mau. width="150mm" + viewBox 150 don vi => 1 don vi = 1 mm -->
+<svg xmlns="http://www.w3.org/2000/svg" width="150mm" height="60mm" viewBox="0 0 150 60">
+  <rect x="5" y="5" width="140" height="50" rx="10" ry="10" fill="none" stroke="#000"/>
+  <circle cx="30" cy="30" r="9" fill="none" stroke="#000"/>
+  <circle cx="120" cy="30" r="9" fill="none" stroke="#000"/>
+  <path d="M 55 30 L 70 15 L 95 30 L 70 45 Z" fill="none" stroke="#000"/>
+</svg>

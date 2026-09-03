@@ -9,4 +9,5 @@ venv/
 !examples/*.nc
 *.svg
 !docs/*.svg
+!examples/*.svg
 .pipecut/

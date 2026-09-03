@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import tkinter as tk
-from tkinter import ttk
+from tkinter import filedialog, ttk
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 PAD = 6
@@ -45,6 +46,18 @@ class ParamForm(ttk.Frame):
                                  values=list(spec.get("choices") or []), width=14)
                 w.grid(row=row, column=1, sticky="ew", pady=2)
                 w.bind("<<ComboboxSelected>>", lambda _e: self._changed())
+            elif kind == "file":
+                var = tk.StringVar(value=str(value))
+                box = ttk.Frame(self)
+                box.grid(row=row, column=1, sticky="ew", pady=2)
+                box.columnconfigure(0, weight=1)
+                w = ttk.Entry(box, textvariable=var, width=14)
+                w.grid(row=0, column=0, sticky="ew")
+                w.bind("<FocusOut>", lambda _e: self._changed())
+                w.bind("<Return>", lambda _e: self._changed())
+                ttk.Button(box, text="Chọn...", width=8,
+                           command=lambda v=var: self._pick_file(v)).grid(row=0, column=1,
+                                                                          padx=(4, 0))
             else:
                 var = tk.StringVar(value=_fmt_value(value))
                 w = ttk.Entry(self, textvariable=var, width=14)
@@ -56,6 +69,24 @@ class ParamForm(ttk.Frame):
                 ttk.Label(self, text=spec["hint"], foreground="#5a646e",
                           font=("TkDefaultFont", 8)).grid(row=row, column=2, sticky="w",
                                                           padx=(PAD, 0))
+
+    def _pick_file(self, var: tk.StringVar) -> None:
+        """Hộp thoại chọn tệp biên dạng, lọc sẵn theo các định dạng đọc được."""
+        try:
+            from ..importers import FILE_TYPES
+            types = list(FILE_TYPES)
+        except Exception:                              # pragma: no cover
+            types = [("Mọi tệp", "*.*")]
+        types.append(("Mọi tệp", "*.*"))
+        current = var.get()
+        path = filedialog.askopenfilename(
+            title="Chọn tệp biên dạng",
+            filetypes=types,
+            initialdir=os.path.dirname(current) if current else None,
+        )
+        if path:
+            var.set(path)
+            self._changed()
 
     def _changed(self) -> None:
         if self.on_change:

@@ -148,9 +148,97 @@ rồi cắt hết cung góc ở tốc độ chuẩn:
 | `axial` | Đường cắt hoặc vạch dấu dọc thân ống |
 | `ring_mark` | Vạch dấu vòng quanh ống |
 | `weld_prep` | Vát mép hàn chữ V ở đầu ống |
-| `pattern` | Cuốn một **biên dạng phẳng bất kỳ** (từ DXF/SVG/CSV) lên mặt ống |
+| `pattern` | **Nhập biên dạng từ tệp ngoài** — DXF, SVG, G-code phẳng, STL/OBJ, CSV/JSON |
 
 Hỗ trợ tiến trình: **plasma, laser, oxy-gas, phay, bút vạch dấu**.
+
+---
+
+## Nhập biên dạng từ phần mềm khác
+
+Không phải vẽ lại: hình đã có ở đâu thì nạp thẳng từ đó vào.
+
+| Định dạng | Nguồn thường gặp | Phần mềm hiểu như thế nào |
+|---|---|---|
+| `.dxf` | AutoCAD, LibreCAD, DraftSight, Fusion | Bản vẽ 2D — đọc LINE, CIRCLE, ARC, ELLIPSE, LWPOLYLINE (kể cả cung *bulge*), POLYLINE, SPLINE; lọc được theo lớp |
+| `.svg` | Inkscape, Illustrator, Figma, Corel | Hình vector — đọc `path` (đủ M L H V C S Q T A Z), `rect` (kể cả bo góc `rx`/`ry`), `circle`, `ellipse`, `polyline`, `polygon`, `line`, kèm `transform` lồng nhau |
+| `.nc` `.gcode` `.tap` `.ngc` | **CAM bất kỳ** — Fusion, SheetCam, Inkscape, LibreCAD | G-code **phẳng hai trục** như cắt tôn tấm: G0/G1/G2/G3, I/J và R, G90/G91, G20/G21 |
+| `.stl` `.obj` | SolidWorks, Inventor, Fusion, Blender... | **Mô hình 3D chi tiết đã cắt** — phần mềm tự dò ra đường cắt trên mặt phôi |
+| `.csv` `.json` | Bảng tính, mã tự viết | Danh sách điểm `(u, v)` tính bằng mm trên tấm trải phẳng |
+
+Xem thử một tệp trước khi đưa vào công việc:
+
+```bash
+python -m pipecut import examples/bien_dang_cua_so.dxf
+python -m pipecut import chi_tiet.stl --mesh-tol 0.3
+```
+
+Trong giao diện: thẻ **Công việc** → thêm nguyên công `pattern` → nút **Chọn...**.
+Phần mềm đọc thử ngay và cho biết trong tệp có mấy đường, dài bao nhiêu.
+
+**Quan trọng:** biên dạng nhập vào đi đúng dây chuyền xử lý của biên dạng tự
+sinh — bù bề rộng mạch cắt, vào/ra dao, bo góc, xoay góc ống hộp, bù tốc độ
+tổng hợp bốn trục. Nạp vào rồi thì không còn phân biệt "hình tự vẽ" hay "hình
+nhập" nữa.
+
+### Nhận mô hình 3D thì phần mềm tự chỉnh những gì
+
+Nạp STL không phải là "chỉ nhận dạng rồi để đấy". Trình tự tự động:
+
+1. **Dò trục phôi** — cạnh dài nhất của khối bao, ghi đè được bằng `--mesh-axis`.
+2. **Dò tâm tiết diện** và bù góc xoay quanh trục (`--mesh-roll`).
+3. **Tách mặt phôi gốc khỏi mặt cắt mới** bằng khoảng cách có dấu tới tiết diện
+   đã khai báo; ranh giới giữa hai phần **chính là đường cắt**.
+4. **Trải phẳng** đường đó về toạ độ `(dọc phôi, chu vi)` và gỡ cuộn qua mốc 0.
+5. **Soát lại** xem tiết diện khai báo có khớp mô hình không — sai kích thước,
+   quên bán kính bo góc hay nhầm đơn vị inch đều bị cảnh báo, chứ không lặng lẽ
+   cho ra đường cắt sai.
+6. Từ đó trở đi là **đúng dây chuyền chung**: bù kerf, vào/ra dao, chiến lược
+   góc, bù tốc độ.
+
+> **STEP và IGES chưa đọc được.** Đó là định dạng B-rep, muốn dựng lại phải kèm
+> cả một nhân hình học rất nặng. Mọi phần mềm CAD đều xuất được STL — hãy xuất
+> STL với sai số lưới 0,01–0,05 mm rồi nạp vào đây.
+
+---
+
+## Kết nối qua WiFi / mạng LAN
+
+Ngoài cổng COM, phần mềm nói chuyện được với ESP32 **qua WiFi trong mạng LAN**
+bằng đúng giao thức Telnet mà FluidNC mở sẵn (cổng 23).
+
+Trong FluidNC, bật WiFi và Telnet:
+
+```
+$Sta/SSID=ten-wifi-nha-ban
+$Sta/Password=mat-khau
+$Telnet/Enable=ON
+$Telnet/Port=23
+$Sta/IPMode=DHCP
+```
+
+Rồi trỏ phần mềm tới máy:
+
+```bash
+python -m pipecut scan                            # dò cả dải mạng, tìm FluidNC
+python -m pipecut send ra.nc --port 192.168.1.50  # nạp qua WiFi
+python -m pipecut run cong_viec.json --port fluidnc.local
+```
+
+Trong giao diện: ô **Cổng / địa chỉ** gõ thẳng địa chỉ IP được, hoặc bấm
+**Dò trong mạng LAN** để phần mềm tự tìm (quét chạy ở luồng riêng nên giao diện
+không đứng).
+
+Muốn thử toàn bộ đường truyền mạng mà chưa có bo mạch:
+
+```bash
+python -m pipecut sim ra.nc --serve 2323          # máy ảo mở cổng mạng
+python -m pipecut send ra.nc --port 127.0.0.1:2323
+```
+
+> **Nên dùng dây khi cắt thật.** WiFi tiện cho việc nạp chương trình, theo dõi và
+> chỉnh máy; nhưng gặp nhiễu hay mất sóng giữa chừng thì nhát cắt hỏng. Xưởng có
+> máy hàn, biến tần, nguồn plasma là môi trường nhiễu nặng.
 
 ---
 
@@ -193,7 +281,9 @@ Khi đã có máy thật:
 
 ```bash
 python -m pipecut ports                    # tìm cổng COM của ESP32
+python -m pipecut scan                     # hoặc dò ESP32 trong mạng WiFi/LAN
 python -m pipecut run examples/vi_du_ong_T.json --port COM5
+python -m pipecut run examples/vi_du_ong_T.json --port 192.168.1.50
 ```
 
 Trên Windows có thể nháy đúp `chay_gui.py` để mở giao diện.
@@ -296,7 +386,8 @@ pipecut/
   machinescene.py dựng hình mô phỏng máy (dùng chung cho giao diện và SVG)
   jobs.py        mô tả công việc bằng JSON + danh mục nguyên công
   protocol.py    phân tích phản hồi Grbl/FluidNC, mã lỗi tiếng Việt
-  transport.py   cổng COM (pyserial) hoặc máy ảo
+  transport.py   cổng COM (pyserial), mạng LAN/WiFi (Telnet) hoặc máy ảo
+  importers/     nhập biên dạng: DXF, SVG, G-code phẳng, STL/OBJ, CSV/JSON
   simulator.py   máy ảo FluidNC để thử khi chưa có phần cứng
   controller.py  nạp lệnh đếm ký tự, jog, tạm dừng, dừng khẩn
   svgview.py     xuất bản vẽ xem trước SVG
@@ -304,9 +395,9 @@ pipecut/
   ui/            giao diện đồ hoạ Tkinter (kèm khung mô phỏng máy 3D)
 config/          hồ sơ máy mẫu (ống tròn, ống hộp, xoay góc, trục vát, laser)
 firmware/        cấu hình FluidNC cho ESP32
-examples/        tệp công việc mẫu
+examples/        tệp công việc mẫu + bản vẽ mẫu (DXF, SVG, G-code phẳng)
 docs/            hướng dẫn sử dụng và tài liệu kỹ thuật
-tests/           117 bài kiểm thử (chạy bằng thư viện chuẩn)
+tests/           160 bài kiểm thử (chạy bằng thư viện chuẩn)
 ```
 
 Chạy kiểm thử:

@@ -11,7 +11,9 @@
 7. [Tạo công việc](#7-tạo-công-việc)
 8. [Chạy chương trình](#8-chạy-chương-trình)
 9. [Định dạng tệp công việc](#9-định-dạng-tệp-công-việc)
-10. [Xử lý sự cố](#10-xử-lý-sự-cố)
+10. [Nhập biên dạng từ tệp ngoài](#10-nhập-biên-dạng-từ-tệp-ngoài)
+11. [Kết nối qua WiFi / mạng LAN](#11-kết-nối-qua-wifi--mạng-lan)
+12. [Xử lý sự cố](#12-xử-lý-sự-cố)
 
 ---
 
@@ -307,7 +309,133 @@ for i, (chieu_dai, goc) in enumerate([(300, 30), (450, 45), (600, 22.5)]):
 
 ---
 
-## 10. Xử lý sự cố
+## 10. Nhập biên dạng từ tệp ngoài
+
+Hình đã vẽ ở phần mềm khác thì nạp thẳng vào, không phải vẽ lại.
+
+### Nạp bằng giao diện
+
+1. Thẻ **Công việc** → **Thêm** → chọn nguyên công **Nhập biên dạng từ tệp**.
+2. Bấm **Chọn...** rồi trỏ tới tệp. Phần mềm đọc thử ngay và hiện ngay dưới ô
+   mô tả: *"bản vẽ CAD 2D (DXF) · 3 đường (3 khép kín) · tổng 330.0 mm"*.
+3. Chỉnh **Dịch dọc ống** và **Dịch theo góc** để đặt hình vào đúng chỗ trên phôi.
+4. Sang thẻ **Xem trước** kiểm tra, rồi **Mô phỏng** chạy thử.
+
+Một tệp chứa nhiều đường thì tất cả đều được nạp, đánh số `#1`, `#2`... theo thứ
+tự từ đường dài nhất trở xuống.
+
+### Nạp bằng dòng lệnh
+
+```bash
+python -m pipecut import ban_ve.dxf                  # xem trong tệp có gì
+python -m pipecut import ban_ve.dxf --layers CAT,LO  # chỉ lấy hai lớp này
+python -m pipecut import chi_tiet.stl --mesh-tol 0.3
+```
+
+### Hiểu từng ô thông số
+
+| Ô | Ý nghĩa |
+|---|---|
+| **Tệp biên dạng** | Đường dẫn tệp. Ghi đường dẫn tương đối thì tính từ chỗ để tệp công việc |
+| **Dịch dọc ống** | Đẩy cả hình chạy dọc phôi, tính bằng mm |
+| **Dịch theo góc** | Xoay cả hình quanh phôi, tính bằng độ |
+| **Tỉ lệ** | Phóng to / thu nhỏ. Sai đơn vị (bản vẽ vẽ theo cm) thì sửa ở đây |
+| **Xoay biên dạng** | Xoay hình **trên tấm trải phẳng** trước khi cuốn lên phôi |
+| **Lật** | `u` lật theo chiều dọc ống, `v` lật theo chiều chu vi — dùng khi hình bị ngược |
+| **Khép kín** | `auto` là theo đúng tệp gốc; ép `yes`/`no` khi tệp vẽ thiếu nét cuối |
+| **Bo góc** | Bo tròn các góc nhọn của hình nhập vào, giúp đường cắt mượt hơn |
+| **Lớp cần lấy** | Chỉ dùng với DXF — nhiều lớp cách nhau bằng dấu phẩy, để trống là lấy hết |
+| **Trục phôi trong mô hình** | Chỉ dùng với STL/OBJ — để `auto` cho phần mềm tự dò |
+| **Xoay mô hình quanh trục** | Chỉ dùng với STL/OBJ — mô hình đang bị xoay bao nhiêu độ thì điền bấy nhiêu |
+| **Dung sai bề mặt** | Chỉ dùng với STL/OBJ — sai lệch cho phép để coi một mảnh lưới là còn nằm trên mặt phôi. Lưới thô thì tăng lên |
+
+### Vẽ ở CAM nào cũng được
+
+Cách nhanh nhất nếu đã quen một phần mềm CAM: vẽ biên dạng **trên mặt phẳng**
+như cắt tôn tấm rồi xuất G-code hai trục. Quy ước: **X là chiều dọc phôi**,
+**Y là chiều theo chu vi**. Phần mềm đọc lại, cuốn lên ống, rồi tự lo phần bốn
+trục — CAM không cần biết gì về máy cắt ống.
+
+Chiều dài một vòng chu vi để vẽ cho khớp: ống tròn là `π × đường kính`; ống hộp
+là `2×(rộng + cao) − 8×R + 2πR` với `R` là bán kính bo góc. Phần mềm in sẵn số
+này khi chạy `python -m pipecut profile`.
+
+### Nạp mô hình 3D (STL/OBJ)
+
+Đưa vào **chi tiết đã cắt xong**, không phải phôi nguyên. Phần mềm so bề mặt mô
+hình với tiết diện phôi đã khai báo, phần nào còn nằm trên mặt phôi gốc thì giữ,
+ranh giới của phần đó chính là đường cắt.
+
+Nhờ vậy nó không chỉ "nhận dạng rồi để đấy": trục phôi, tâm tiết diện, đường cắt
+và toạ độ trải phẳng đều tự tính, rồi đi tiếp đúng dây chuyền bù kerf – vào/ra
+dao – chiến lược góc – bù tốc độ như mọi biên dạng khác.
+
+Khai báo phôi phải **đúng với mô hình**, nhất là **bán kính bo góc** của ống hộp.
+Khai sai thì phần mềm cảnh báo ngay chứ không lặng lẽ cho ra đường cắt sai:
+
+* *"... mảnh lưới nằm hẳn ngoài mặt phôi đã khai báo"* → phôi khai nhỏ hơn thực
+  tế, hoặc mô hình đang tính theo inch (đặt **Tỉ lệ** = 25.4).
+* *"... % chu vi tiết diện không có mảnh lưới nào bám vào"* → sai hình dạng tiết
+  diện, hay gặp nhất là quên khai bán kính bo góc.
+* *"Không thấy phần bề mặt nào ... nằm trên mặt phôi"* → sai kích thước, sai trục
+  hoặc lưới quá thô; kiểm tra lại rồi tăng **Dung sai bề mặt**.
+
+> **STEP và IGES chưa đọc được** — đó là định dạng B-rep, dựng lại được phải kèm
+> cả một nhân hình học rất nặng. Xuất STL với sai số lưới 0,01–0,05 mm rồi nạp.
+
+---
+
+## 11. Kết nối qua WiFi / mạng LAN
+
+FluidNC có sẵn máy chủ Telnet; phần mềm nói chuyện qua đó y như qua cổng COM.
+
+### Bật WiFi trên ESP32
+
+Nối cổng COM một lần rồi gõ vào ô lệnh ở thẻ **Điều khiển**:
+
+```
+$Sta/SSID=ten-wifi-nha-ban
+$Sta/Password=mat-khau
+$Sta/IPMode=DHCP
+$Telnet/Enable=ON
+$Telnet/Port=23
+$WiFi/Mode=STA
+```
+
+Khởi động lại bo, rồi gõ `$Sta/Status` để xem địa chỉ IP máy nhận được.
+
+**Nên đặt IP tĩnh** cho máy (`$Sta/IPMode=Static`, `$Sta/IP=192.168.1.50`,
+`$Sta/Gateway=192.168.1.1`, `$Sta/Netmask=255.255.255.0`) để địa chỉ không đổi
+sau mỗi lần khởi động.
+
+### Nối từ phần mềm
+
+* **Giao diện:** ô **Cổng / địa chỉ** gõ thẳng `192.168.1.50`, hoặc bấm
+  **Dò trong mạng LAN** để phần mềm quét cả dải mạng tìm máy. Ô này gõ được cả
+  `192.168.1.50:23` và `fluidnc.local`.
+* **Dòng lệnh:**
+
+```bash
+python -m pipecut scan                             # dò trong mạng
+python -m pipecut send ra.nc --port 192.168.1.50
+python -m pipecut run cong_viec.json --port fluidnc.local
+```
+
+Thử đường truyền mạng khi chưa có bo mạch:
+
+```bash
+python -m pipecut sim ra.nc --serve 2323
+python -m pipecut send ra.nc --port 127.0.0.1:2323
+```
+
+> **Cắt thật thì nên dùng dây.** WiFi rất tiện để nạp chương trình, theo dõi và
+> chỉnh máy. Nhưng xưởng có máy hàn, biến tần, nguồn plasma là môi trường nhiễu
+> nặng — mất sóng giữa nhát cắt là hỏng phôi. Dùng WiFi cho khâu chuẩn bị, cắm
+> dây cho khâu cắt.
+
+---
+
+## 12. Xử lý sự cố
 
 | Hiện tượng | Nguyên nhân thường gặp | Cách xử lý |
 |---|---|---|
@@ -317,6 +445,12 @@ for i, (chieu_dai, goc) in enumerate([(300, 30), (450, 45), (600, 22.5)]):
 | Cắt ống hộp báo **vượt hành trình trục X** | Trục ngang không đủ dài để chạy hết bề rộng mặt | Cần hành trình ít nhất ±(nửa cạnh − góc lượn); đặt gốc X đúng đường tâm phôi |
 | Nguyên công *miệng cá* / *lỗ xuyên* bị bỏ qua | Hai biên dạng này chỉ có nghĩa với ống tròn | Với ống hộp dùng *rãnh*, *tròn trên bề mặt* hoặc *biên dạng trải phẳng* |
 | Không thấy cổng COM | Thiếu driver CP2102/CH340 | Cài driver USB-UART của chip trên bo |
+| **Dò mạng LAN không thấy máy nào** | ESP32 chưa vào WiFi, khác dải mạng, hoặc chưa bật Telnet | Cắm dây kiểm tra `$Sta/Status`; máy tính và ESP32 phải cùng dải mạng; bật `$Telnet/Enable=ON` |
+| **Nối qua WiFi bị đứt giữa chừng** | Sóng yếu hoặc nhiễu từ nguồn plasma/máy hàn | Nạp chương trình qua WiFi thì được, nhưng **lúc cắt hãy cắm dây** |
+| **Nhập tệp báo "không nhận ra đuôi tệp"** | Định dạng chưa hỗ trợ (hay gặp: STEP/IGES) | Xuất lại sang DXF (2D) hoặc STL (3D) từ phần mềm CAD |
+| **Nạp DXF ra hình quá to hoặc quá nhỏ** | Bản vẽ không khai `$INSUNITS`, hoặc vẽ theo cm/inch | Sửa ô **Tỉ lệ** (cm → 10, inch → 25.4) |
+| **Nạp STL báo sai tiết diện** | Khai phôi không khớp mô hình, hay quên bán kính bo góc | Đọc kỹ nội dung cảnh báo — nó chỉ đúng chỗ sai; xem mục 10 |
+| **Nạp STL thiếu mất đường cắt** | Lưới quá thô so với dung sai bề mặt | Tăng **Dung sai bề mặt** lên 0,5–1 mm, hoặc xuất lại STL mịn hơn |
 | Kết nối được nhưng không phản hồi | Sai baud, hoặc ESP32 đang khởi động | Đặt 115200; chờ 2 giây sau khi mở cổng |
 | `Lỗi 9` khi bắt đầu chạy | Máy đang khoá do báo động | Bấm **Mở khoá ($X)**, tìm nguyên nhân báo động |
 | `BÁO ĐỘNG 2` | Toạ độ vượt hành trình mềm | Kiểm tra dòng "Giới hạn trục" sau khi sinh G-code |

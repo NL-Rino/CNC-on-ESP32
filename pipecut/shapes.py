@@ -399,25 +399,42 @@ def flat_pattern(
     tolerance: float = 0.05,
     corner_radius: float = 0.0,
     name: str = "bien-dang",
+    wrap: bool = False,
+    rotate_deg: float = 0.0,
+    mirror: str = "none",
 ) -> Contour:
     """Cuốn một biên dạng phẳng bất kỳ lên mặt ống.
 
     ``points`` là toạ độ (u, v) tính bằng mm trên tấm trải phẳng: u dọc ống,
-    v theo chu vi.  Đây là cửa ngõ để nạp DXF/SVG/CSV vào máy.
+    v theo chu vi.  Đây là cửa ngõ để nạp DXF/SVG/G-code/CSV vào máy.
+
+    Thứ tự biến hình: lật -> xoay trong mặt phẳng -> phóng tỉ lệ -> dịch.  Đặt
+    ``wrap=True`` cho biên dạng chạy trọn một vòng quanh phôi (cắt đứt, vát
+    đầu ống) - khi đó hai đầu tự gặp nhau qua mốc chu vi nên không nối thẳng.
     """
     if len(points) < 2:
         raise ShapeError("Biên dạng cần ít nhất 2 điểm.")
+    pts = [(float(p[0]), float(p[1])) for p in points]
+    if mirror in ("u", "x"):
+        pts = [(-u, v) for u, v in pts]
+    elif mirror in ("v", "y"):
+        pts = [(u, -v) for u, v in pts]
+    if abs(rotate_deg) > 1e-9:
+        a = math.radians(rotate_deg)
+        ca, sa = math.cos(a), math.sin(a)
+        pts = [(u * ca - v * sa, u * sa + v * ca) for u, v in pts]
     v_off = section.s_of_theta(theta_offset_deg)
-    pts = [(p[0] * scale + x_offset, p[1] * scale + v_off) for p in points]
+    pts = [(u * scale + x_offset, v * scale + v_off) for u, v in pts]
     pts = g.dedupe(pts)
-    if closed:
+    if closed and not wrap:
         pts = g.close_loop(pts)
     if corner_radius > 0:
-        pts = g.round_corners(pts, corner_radius, closed=closed, tolerance=tolerance)
+        pts = g.round_corners(pts, corner_radius, closed=closed and not wrap,
+                              tolerance=tolerance)
     return Contour(
         points=pts,
-        closed=closed,
-        wrap=False,
+        closed=closed and not wrap,
+        wrap=wrap,
         name=name,
         meta={"shape": "flat_pattern"},
     )

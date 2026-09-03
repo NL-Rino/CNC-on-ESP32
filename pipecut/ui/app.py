@@ -140,24 +140,29 @@ class MainWindow:
         t = self.tab_machine
         conn = ttk.LabelFrame(t, text="Kết nối", padding=PAD)
         conn.pack(side="top", fill="x")
-        ttk.Label(conn, text="Cổng COM").grid(row=0, column=0, sticky="w")
-        self.cmb_port = ttk.Combobox(conn, width=26, state="readonly")
+        ttk.Label(conn, text="Cổng / địa chỉ").grid(row=0, column=0, sticky="w")
+        # Không khoá ô này: ngoài cổng COM còn gõ được địa chỉ WiFi/LAN
+        # (192.168.1.50, fluidnc.local, hoặc kèm cổng 192.168.1.50:23).
+        self.cmb_port = ttk.Combobox(conn, width=26)
         self.cmb_port.grid(row=0, column=1, padx=4)
         ttk.Button(conn, text="Làm mới", command=self.refresh_ports, width=9).grid(row=0, column=2)
-        ttk.Label(conn, text="Baud").grid(row=0, column=3, padx=(14, 2))
+        self.btn_scan = ttk.Button(conn, text="Dò trong mạng LAN", width=18,
+                                   command=self.scan_lan)
+        self.btn_scan.grid(row=0, column=3, padx=(6, 0))
+        ttk.Label(conn, text="Baud").grid(row=0, column=4, padx=(14, 2))
         self.cmb_baud = ttk.Combobox(conn, width=9, state="readonly",
                                      values=["115200", "230400", "921600", "57600"])
         self.cmb_baud.set(str(self.profile.connection.baudrate))
-        self.cmb_baud.grid(row=0, column=4)
-        ttk.Label(conn, text="Tốc độ máy ảo").grid(row=0, column=5, padx=(14, 2))
+        self.cmb_baud.grid(row=0, column=5)
+        ttk.Label(conn, text="Tốc độ máy ảo").grid(row=0, column=6, padx=(14, 2))
         self.cmb_simspeed = ttk.Combobox(conn, width=6, state="readonly",
                                          values=["1", "5", "20", "100"])
         self.cmb_simspeed.set(f"{self.profile.connection.simulator_speed:g}")
-        self.cmb_simspeed.grid(row=0, column=6)
+        self.cmb_simspeed.grid(row=0, column=7)
         self.btn_connect = ttk.Button(conn, text="Kết nối", command=self.toggle_connection, width=12)
-        self.btn_connect.grid(row=0, column=7, padx=10)
+        self.btn_connect.grid(row=0, column=8, padx=10)
         self.lbl_fw = ttk.Label(conn, text="", foreground="#5a646e")
-        self.lbl_fw.grid(row=1, column=0, columnspan=8, sticky="w", pady=(6, 0))
+        self.lbl_fw.grid(row=1, column=0, columnspan=9, sticky="w", pady=(6, 0))
 
         body = ttk.Frame(t)
         body.pack(side="top", fill="both", expand=True, pady=(PAD, 0))
@@ -602,6 +607,47 @@ class MainWindow:
         if ports and not self.cmb_port.get():
             self.cmb_port.current(0)
 
+    def scan_lan(self) -> None:
+        """Dò FluidNC trong mạng LAN.
+
+        Quét cả dải /24 nên mất vài giây - chạy ở luồng riêng để giao diện
+        không bị treo, xong việc mới đẩy kết quả về luồng chính.
+        """
+        if getattr(self, "_scanning", False):
+            return
+        self._scanning = True
+        self.btn_scan.configure(text="Đang dò...", state="disabled")
+        self.status_var.set("Đang dò tìm máy trong mạng LAN...")
+
+        def work() -> None:
+            try:
+                from ..transport import discover_lan
+                found = discover_lan()
+            except Exception as exc:                 # pragma: no cover
+                found, err = [], str(exc)
+            else:
+                err = ""
+            self.events.put(("lan", found, err))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_lan_result(self, found, err: str) -> None:
+        self._scanning = False
+        self.btn_scan.configure(text="Dò trong mạng LAN", state="normal")
+        if err:
+            self.status_var.set(f"Dò mạng LAN lỗi: {err}")
+            return
+        if not found:
+            self.status_var.set(
+                "Không thấy máy nào trong mạng LAN. Kiểm tra ESP32 đã vào cùng "
+                "mạng WiFi và đã bật Telnet trong FluidNC chưa."
+            )
+            return
+        values = list(self.cmb_port["values"]) + [f"{a} - {d}" for a, d in found]
+        self.cmb_port["values"] = values
+        self.cmb_port.set(f"{found[0][0]} - {found[0][1]}")
+        self.status_var.set(f"Thấy {len(found)} máy trong mạng LAN.")
+
     def toggle_connection(self) -> None:
         if self.controller.is_connected:
             self.controller.disconnect()
@@ -612,7 +658,11 @@ class MainWindow:
         raw = self.cmb_port.get()
         port = raw.split(" - ")[0].strip() if raw else ""
         if not port:
-            messagebox.showwarning("Chưa chọn cổng", "Hãy chọn cổng COM trước khi kết nối.")
+            messagebox.showwarning(
+                "Chưa chọn cổng",
+                "Hãy chọn cổng COM, hoặc gõ địa chỉ WiFi/LAN của máy "
+                "(ví dụ 192.168.1.50) trước khi kết nối."
+            )
             return
         self.apply_profile(silent=True)
         try:
@@ -620,8 +670,10 @@ class MainWindow:
         except Exception as exc:
             messagebox.showerror("Lỗi kết nối", str(exc))
             return
+        from ..transport import parse_address
+        how = "qua mạng LAN" if parse_address(port) else "qua cổng COM"
         self.btn_connect.configure(text="Ngắt kết nối")
-        self.lbl_conn.configure(text=f"Đã kết nối {port}")
+        self.lbl_conn.configure(text=f"Đã kết nối {port} ({how})")
         self.root.after(400, self.controller.query_firmware)
 
     def send_manual(self, text: str) -> None:
@@ -657,6 +709,8 @@ class MainWindow:
                         self.console.log(prefix + text, tag)
                     if direction == "rx" and text.strip().lower() != "ok":
                         self.run_console.log(text, tag)
+                elif kind == "lan":
+                    self._on_lan_result(item[1], item[2])
                 elif kind == "status":
                     self._on_status(item[1])
                 elif kind == "progress":
@@ -940,6 +994,30 @@ class MainWindow:
         spec = OP_CATALOG.get(op.type, {})
         self.lbl_op_desc.configure(text=spec.get("desc", ""))
         self.form.build(spec.get("params", []), op.params)
+        self._describe_source(op)
+
+    def _describe_source(self, op: Operation) -> None:
+        """Với nguyên công nhập tệp: đọc thử và cho biết trong tệp có những gì."""
+        if op.type != "pattern":
+            return
+        path = str(op.get("file", ""))
+        if self.job.source_path and path and not os.path.isabs(path):
+            path = os.path.join(os.path.dirname(self.job.source_path), path)
+        if not path:
+            return
+        spec = OP_CATALOG.get(op.type, {})
+        try:
+            from ..importers import describe_file
+            text = describe_file(
+                path, section=self.profile.pipe.section(),
+                tolerance=self.profile.motion.chord_tolerance,
+                mesh_axis=str(op.get("mesh_axis", "auto")),
+                mesh_roll=float(op.get("mesh_roll", 0.0)),
+                mesh_tolerance=float(op.get("mesh_tol", 0.4)),
+            )
+        except Exception as exc:
+            text = f"Lỗi: {exc}"
+        self.lbl_op_desc.configure(text=f"{spec.get('desc', '')}\n→ {text}")
 
     def apply_operation_params(self) -> None:
         idx = self._selected_index()
@@ -948,6 +1026,7 @@ class MainWindow:
         self.job.operations[idx].params.update(self.form.values())
         self.tree_ops.item(str(idx), values=(idx + 1, self.job.operations[idx].label(),
                                              _summary(self.job.operations[idx])))
+        self._describe_source(self.job.operations[idx])
         self.generate()
 
     def _refresh_op_choices(self) -> None:
@@ -1215,7 +1294,12 @@ def _summary(op: Operation) -> str:
     if t == "weld_prep":
         return f"X={p.get('x', 0):g}  vát {p.get('angle', 0):g}°"
     if t == "pattern":
-        return os.path.basename(str(p.get("file", ""))) or "(chưa chọn tệp)"
+        name = os.path.basename(str(p.get("file", "")))
+        if not name:
+            return "(chưa chọn tệp)"
+        scale = float(p.get("scale", 1.0) or 1.0)
+        extra = f"  ×{scale:g}" if abs(scale - 1.0) > 1e-9 else ""
+        return f"{name}{extra}"
     return ""
 
 

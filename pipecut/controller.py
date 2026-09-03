@@ -26,7 +26,8 @@ from typing import Callable, Deque, Dict, List, Optional, Sequence, Tuple
 from . import protocol as proto
 from .config import MachineProfile
 from .protocol import MachineStatus, Response
-from .transport import LoopbackTransport, SerialTransport, Transport, TransportError
+from .transport import (LoopbackTransport, SerialTransport, TcpTransport,
+                        Transport, TransportError, parse_address)
 
 Listener = Callable[..., None]
 
@@ -121,8 +122,12 @@ class DeviceController:
             self.transport = LoopbackTransport(simulator)
         else:
             if not port:
-                raise TransportError("Chưa chọn cổng COM.")
-            self.transport = SerialTransport(port, baudrate, conn.timeout)
+                raise TransportError("Chưa chọn cổng COM hoặc địa chỉ mạng.")
+            address = parse_address(port)
+            if address:
+                self.transport = TcpTransport(address[0], address[1], conn.timeout)
+            else:
+                self.transport = SerialTransport(port, baudrate, conn.timeout)
         self.transport.open()
         self._connected = True
         self._reset_buffers()

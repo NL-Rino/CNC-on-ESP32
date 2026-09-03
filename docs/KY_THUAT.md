@@ -12,7 +12,8 @@ Tài liệu này giải thích **tại sao** phần mềm làm như đang làm. 
 5. [Bài toán tốc độ tổng hợp bốn trục](#5-bài-toán-tốc-độ-tổng-hợp-bốn-trục)
 6. [Điều tiết mật độ điểm](#6-điều-tiết-mật-độ-điểm)
 7. [Nạp lệnh và giao thức](#7-nạp-lệnh-và-giao-thức)
-8. [Hạn chế đã biết](#8-hạn-chế-đã-biết)
+8. [Nhập biên dạng từ tệp ngoài](#8-nhập-biên-dạng-từ-tệp-ngoài)
+9. [Hạn chế đã biết](#9-hạn-chế-đã-biết)
 
 ---
 
@@ -420,7 +421,158 @@ trước nên đường chạy tự cắt nhau cũng không làm hình nhảy lu
 
 ---
 
-## 8. Hạn chế đã biết
+## 8. Nhập biên dạng từ tệp ngoài
+
+### 8.1 Một cửa duy nhất
+
+Mọi định dạng đều quy về cùng một thứ: danh sách **đường cong phẳng** `Curve2D`.
+Sau đó `shapes.flat_pattern` cuốn chúng lên mặt phôi, và từ đó trở đi chúng đi
+**đúng dây chuyền của biên dạng tự sinh**:
+
+```
+tệp ─► bộ đọc ─► Curve2D(u, v) ─► flat_pattern ─► Contour
+                                                    │
+        bù kerf ─► vào/ra dao ─► điều tiết điểm ─► chèn điểm gãy ─► làm mịn
+        theo tiết diện ─► chiến lược góc ─► động học 4 trục ─► bù tốc độ ─► G-code
+```
+
+Nhờ tách bạch như vậy, thêm một định dạng mới chỉ cần viết một hàm trả về
+`List[Curve2D]` — không đụng gì tới phần hình học hay động học.
+
+### 8.2 DXF
+
+Đọc thẳng theo cặp *mã nhóm – giá trị* của DXF ASCII, không cần thư viện ngoài.
+
+Cung **bulge** trong `LWPOLYLINE` là chỗ hay bị làm sai nhất: `b = tan(θ/4)` với
+`θ` là góc chắn cung. Từ hai đỉnh liên tiếp và `b`:
+
+```
+θ  = 4·atan(b)
+d  = |P₁ − P₀| / 2
+r  = d / sin(θ/2)
+h  = d / tan(θ/2)          (khoảng cách từ trung điểm dây tới tâm)
+```
+
+`SPLINE` được tính bằng **thuật toán De Boor** trên đúng vector nút mà tệp khai
+báo. Nối các điểm điều khiển lại làm đường gấp khúc là sai — chỉ với spline bậc 3
+bốn điểm, sai lệch đã tới vài milimét.
+
+`$INSUNITS` được đọc để tự quy về mm (1 = inch, 4 = mm, 5 = cm...).
+
+### 8.3 SVG
+
+Khác biệt so với bản vẽ cơ khí, đã xử lý sẵn:
+
+* **Trục Y hướng xuống** → lật lại cho đúng chiều bản vẽ.
+* **Đơn vị là "user unit"**. Nếu thẻ `svg` có `width` kèm đơn vị thật và có
+  `viewBox` thì tỉ lệ suy ra chính xác từ hai số đó; không thì lấy 96 dpi.
+* `transform` **lồng nhau** qua các nhóm `g` được nhân ma trận đúng thứ tự
+  (translate, scale, rotate, matrix, skewX/skewY).
+* `rect` có `rx`/`ry` là **bo góc ellipse**, kể cả khi chỉ khai một trong hai
+  (chuẩn SVG quy định lấy cái còn lại) và khi khai lớn quá nửa cạnh (bị kẹp lại,
+  hình thành ellipse).
+
+### 8.4 G-code phẳng hai trục
+
+Cửa ngõ để dùng **CAM bất kỳ**: vẽ trên mặt phẳng như cắt tôn tấm, xuất G-code
+hai trục, phần mềm cuốn lên ống. Quy ước `X` là dọc phôi, `Y` là theo chu vi.
+
+Điểm cần chú ý ở `G2/G3`:
+
+* Kiểu **I/J**: tâm là *offset tương đối* so với điểm đầu, và khi điểm đầu trùng
+  điểm cuối thì đó là **cả vòng tròn**, không phải cung 0°.
+* Kiểu **R**: có hai tâm thoả mãn. Theo chuẩn, `R > 0` lấy cung **nhỏ** (≤180°),
+  `R < 0` lấy cung **lớn**. Tâm chọn theo:
+
+```
+sign = +1 nếu (R > 0) trùng với chiều ngược kim đồng hồ, ngược lại −1
+tâm  = trung_điểm ± sign · h · pháp_tuyến_đơn_vị,   h = √(R² − d²)
+```
+
+`G0` không được coi là đường cắt — nó **tách biên dạng**, đúng như ý đồ của CAM.
+
+### 8.5 Mô hình 3D (STL/OBJ)
+
+Mô hình đưa vào là **chi tiết đã cắt xong**. Bề mặt của nó gồm hai phần: phần
+còn nằm trên mặt phôi gốc, và phần mặt cắt mới do dao tạo ra. **Đường cắt chính
+là ranh giới giữa hai phần đó.**
+
+Thuật toán không cần thư viện hình học nào:
+
+1. **Khoảng cách có dấu** từ mỗi đỉnh tới biên tiết diện. Ống tròn thì đơn giản
+   là `√(x²+y²) − R`. Hộp bo góc dùng công thức SDF chuẩn của hình chữ nhật bo góc:
+
+   ```
+   qx = |x| − (hx − rc),   qy = |y| − (hy − rc)
+   d  = ‖(max(qx,0), max(qy,0))‖ + min(max(qx,qy), 0) − rc
+   ```
+
+   Một biểu thức lo trọn cả ba vùng: ngoài góc, ngoài cạnh, và bên trong.
+
+2. **Tam giác "còn nguyên"** là tam giác có cả ba đỉnh cách mặt phôi không quá
+   dung sai bề mặt.
+
+3. **Cạnh biên** là cạnh chỉ thuộc **một** tam giác còn nguyên. Đỉnh được hàn
+   theo lưới 0,05 mm trước khi so, nên lưới có bị tách đỉnh cũng không sao.
+
+4. **Nối cạnh biên thành vòng**, rồi đổi mỗi đỉnh sang toạ độ trải phẳng `(u, v)`
+   và **gỡ cuộn** `v` để đường cắt không nhảy một vòng chu vi ở mốc 0.
+
+5. Đường nào có điểm đầu và điểm cuối lệch nhau **đúng một chu vi** thì đó là
+   đường **quấn trọn vòng** (cắt đứt, vát đầu ống) — đánh dấu `wrap`, khác với
+   vòng kín tại chỗ (lỗ, rãnh).
+
+Cách này chịu được lưới thô hay mịn, và **kiểm chứng được**: dựng lưới của một
+nhát cắt lượn sóng đã biết trước phương trình rồi cho thuật toán đọc lại, sai
+lệch so với phương trình gốc **dưới 1e-6 mm** (xem `tests/test_import.py`).
+
+#### Soát lại việc khai báo phôi
+
+Khai sai tiết diện thì thuật toán vẫn chạy và vẫn ra đường cong — nhưng là đường
+sai. Hai phép soát bắt được gần hết các nhầm lẫn thường gặp:
+
+* **Vật liệu nằm hẳn ngoài mặt phôi khai báo** → phôi khai nhỏ hơn thực tế, hoặc
+  mô hình đang tính theo inch.
+* **Dải chu vi không chỗ nào bám được mặt phôi** (chia chu vi thành 180 ô, đếm ô
+  trống) → sai hình dạng tiết diện, hay gặp nhất là quên khai bán kính bo góc
+  của ống hộp.
+
+Cả hai đều báo dưới dạng **cảnh báo** chứ không chặn, vì vẫn có trường hợp hợp lệ
+(ví dụ một rãnh dài chạy hết thân ống làm trống hẳn một dải chu vi).
+
+#### Vì sao không đọc STEP/IGES
+
+STEP và IGES là **B-rep**: mô tả vật thể bằng các mặt tham số cắt xén lẫn nhau
+(NURBS, mặt trụ, mặt xuyến) kèm cây tô-pô cạnh–vòng–mặt. Đọc được chúng nghĩa là
+phải mang theo cả một nhân hình học cỡ OpenCASCADE — vài trăm MB, biên dịch nặng,
+và vẫn phải giải giao tuyến mặt–mặt. Trong khi đó **mọi phần mềm CAD đều xuất
+được STL**, và với sai số lưới 0,01–0,05 mm thì kết quả đủ chính xác hơn hẳn dung
+sai của chính máy cắt.
+
+### 8.6 Truyền qua mạng LAN
+
+FluidNC mở sẵn máy chủ **Telnet** ở cổng 23, dùng đúng dòng lệnh và đúng giao
+thức `ok`/`error` như cổng nối tiếp. Nhờ vậy `TcpTransport` chỉ cần thay chỗ đọc
+ghi byte, còn toàn bộ phần đếm ký tự, phân tích trạng thái và lệnh thời gian thực
+giữ nguyên không đổi.
+
+Hai chi tiết phải xử lý:
+
+* **Lệnh thương lượng Telnet (IAC)** — máy chủ có thể gửi các chuỗi bắt đầu bằng
+  byte `0xFF`. Phải lọc bỏ, nếu không chúng lẫn vào dòng phản hồi.
+* **Gói tin bị chia nhỏ** — TCP không giữ ranh giới dòng, nên phải gom đệm rồi
+  mới tách theo `\n`, y như với cổng nối tiếp.
+
+Việc dò máy trong mạng LAN quét cả dải `/24` của địa chỉ máy tính, mỗi địa chỉ
+mở kết nối thử với thời gian chờ rất ngắn, chạy song song nhiều luồng.
+
+> **Độ tin cậy.** WiFi rất tiện cho việc nạp chương trình và theo dõi, nhưng
+> xưởng cắt là môi trường nhiễu nặng. Mất sóng giữa nhát cắt là hỏng phôi — nên
+> dùng WiFi cho khâu chuẩn bị, cắm dây cho khâu cắt.
+
+---
+
+## 9. Hạn chế đã biết
 
 * **Chỉ xuất G1/G0**, không dùng cung tròn G2/G3. Cung tròn không biểu diễn được
   đường giao tuyến ống trong không gian 4 trục, và với dung sai dây cung đã dùng
@@ -443,3 +595,13 @@ trước nên đường chạy tự cắt nhau cũng không làm hình nhảy lu
   phần mềm mặc định lấy 2 lần chiều dày thành.
 * **Bù kerf cho biên dạng tự cắt nhau nhiều lần** (biên dạng rất phức tạp, kerf
   lớn) có thể còn sót vòng lặp; hãy xem kỹ bản xem trước trước khi cắt.
+* **Không đọc được STEP/IGES** — xem mục 8.5 để biết vì sao và cách thay thế.
+* **DXF chỉ đọc bản ASCII**, không đọc DXF nhị phân. Mọi phần mềm CAD đều xuất
+  được DXF ASCII (thường là lựa chọn mặc định).
+* **Không đọc chữ (TEXT/MTEXT) trong DXF và SVG** — chữ phải được chuyển thành
+  đường nét (*convert to path* / *explode text*) trước khi xuất.
+* **Nhập mô hình 3D cần khai đúng tiết diện phôi** — phần mềm cảnh báo khi thấy
+  không khớp, nhưng không tự suy ra kích thước phôi thay người dùng.
+* **Kết nối WiFi không có cơ chế nối lại giữa chừng**: mất kết nối là chương
+  trình dừng. Đây là lựa chọn có chủ ý — nối lại rồi chạy tiếp một nhát cắt dở
+  còn nguy hiểm hơn là dừng hẳn.

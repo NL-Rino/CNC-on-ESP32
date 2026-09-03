@@ -341,7 +341,8 @@ class PostProcessor:
                 elif torch_off_now:
                     # Hoàn tất vòng quay **ở độ cao đang nhấc** rồi mới hạ xuống:
                     # nếu hạ trước khi quay xong, mỏ cắt sẽ cắm vào thành phôi.
-                    if use_z and prev.z_axis is not None:
+                    if use_z and prev.z_axis is not None and self.motion.corner_lift > 0 \
+                            and self.motion.corner_mode == "index":
                         # giữ đúng độ cao bám góc tại điểm kết thúc vòng quay
                         lift_z = (z_cut + cur.surface_z + self.motion.corner_lift)
                         vals = kin.axis_values(cur, None)
@@ -354,9 +355,11 @@ class PostProcessor:
                                 self._index_feed(kin.axis_values(prev, z_now),
                                                  vals, step), 1e-6) * 60.0
                     # xoay xong: hạ xuống, mồi lại rồi cắt tiếp
+                    target_cut_z = (cur.z_axis if cur.z_axis is not None
+                                    else z_cut + cur.surface_z)
                     if use_z:
                         b.move({z_letter: pf.axis(ROLE_RADIAL).apply(
-                            z_pierce + cur.surface_z)}, None)
+                            target_cut_z + (z_pierce - z_cut))}, None)
                     on_line = pr.on_command
                     if power and ("S" not in on_line.upper()):
                         on_line = f"{on_line} S{fmt(power, 0)}"
@@ -365,8 +368,8 @@ class PostProcessor:
                     stats.pierces += 1
                     stats.estimated_time += pr.pierce_delay
                     if use_z:
-                        b.move({z_letter: pf.axis(ROLE_RADIAL).apply(
-                            z_cut + cur.surface_z)}, pr.plunge_feed)
+                        b.move({z_letter: pf.axis(ROLE_RADIAL).apply(target_cut_z)},
+                               pr.plunge_feed)
                     torch_off_now = False
                     if self.motion.corner_dwell > 0:
                         b.dwell(self.motion.corner_dwell)
@@ -389,7 +392,8 @@ class PostProcessor:
             stats.estimated_time += l_mach / max(feed, 1e-6) * 60.0
             prev = cur
 
-        if indexed and self.motion.corner_torch_off and ps.meta.get("wrap"):
+        if (indexed and self.motion.corner_mode == "index"
+                and self.motion.corner_torch_off and ps.meta.get("wrap")):
             stats.warnings.append(
                 f"{ps.name}: xoay góc có tắt mỏ nên {indexed} cung góc lượn "
                 f"KHÔNG được cắt - phôi sẽ chưa rời hẳn. Tắt 'corner_torch_off' "

@@ -382,41 +382,131 @@ def refine_for_section(
     return g.dedupe(out)
 
 
-def mark_corner_indexing(
+def _arc_index(arcs, v: float, per: float) -> Optional[int]:
+    vm = v % per
+    for i, a in enumerate(arcs):
+        if a["v0"] + 1e-9 < vm < a["v1"] - 1e-9:
+            return i
+    return None
+
+
+def _corner_pose(section: Section, arc, v: float, a_deg: float,
+                 lap: int) -> Tuple[float, float]:
+    """Vị trí trục ngang và chiều cao bề mặt khi phôi quay ``a_deg`` mà tia cắt
+    thẳng đứng rơi đúng vào điểm vật liệu ``v`` trên cung góc.
+
+    Điểm nằm trên cung tâm K bán kính rc, nên sau khi quay thì nó vẫn cách tâm
+    K (đã quay) đúng rc, lệch khỏi phương thẳng đứng một góc bằng chênh lệch
+    giữa pháp tuyến tại đó và góc quay hiện tại.
+    """
+    per = section.perimeter
+    psi = section.normal_angle(v % per) + 360.0 * lap
+    delta = math.radians(psi - a_deg)
+    kwx, kwz = section.rotate_point(arc["cx"], arc["cy"], a_deg)
+    return (kwx + arc["rc"] * math.sin(delta),
+            kwz + arc["rc"] * math.cos(delta))
+
+
+def _pivot_corner(
+    hold_in: CutPoint,
+    run: List[CutPoint],
+    hold_out: CutPoint,
+    arc,
+    section: Section,
+    motion: MotionSpec,
+    process: ProcessSpec,
+) -> List[CutPoint]:
+    """Dựng một lượt vượt góc kiểu **xoay 45 độ đưa góc bo lên đỉnh**.
+
+    Trình tự đúng như thợ làm bằng tay::
+
+        cắt hết mặt phẳng  ->  dừng, xoay ~45 độ (mỏ vẫn đứng đúng chỗ vừa cắt,
+        trục ngang và trục Z bám theo)  ->  cả cung góc bây giờ nằm gọn quanh
+        đỉnh, cắt hết cung ở TỐC ĐỘ CHUẨN (trục A đứng yên, chỉ X-Y-Z chạy)
+        ->  dừng, xoay nốt 45 độ về mặt phẳng kế tiếp  ->  cắt tiếp
+
+    Vì sao giữ được tốc độ chuẩn: khi góc bo đã nằm ở đỉnh, cắt hết cung 9,4 mm
+    chỉ cần trục ngang chạy khoảng 8,5 mm - trục A không phải quay tí nào.  So
+    với kiểu cắt liền mạch (trục A phải quay 90 độ trong 9,4 mm cung, tức
+    ~15 000 độ/phút) thì đây là trời với vực.
+
+    Đánh đổi: ở hai đầu cung, mỏ cắt nghiêng tới 45 độ so với pháp tuyến bề mặt
+    nên mặt cắt chỗ đó không vuông góc.
+    """
+    per = section.perimeter
+    ref = section.reference_height
+    zc = process.cut_height
+    lap = int(round((hold_in.theta - section.normal_angle(hold_in.v % per)) / 360.0))
+    psi_mid = (arc["psi0"] + arc["psi1"]) / 2.0 + 360.0 * lap
+    steps = max(2, int(motion.corner_pivot_steps))
+
+    def make(v: float, x: float, a_deg: float, kind: str) -> CutPoint:
+        cross, surf = _corner_pose(section, arc, v, a_deg, lap)
+        return CutPoint(x=x, v=v, theta=a_deg, cross=cross,
+                        surface_z=surf - ref, bevel=0.0, kind=kind,
+                        z_axis=surf - ref + zc)
+
+    out: List[CutPoint] = []
+    # 1) xoay tới góc giữa cung, mỏ vẫn bám đúng điểm vừa cắt xong
+    for k in range(1, steps + 1):
+        a = hold_in.theta + (psi_mid - hold_in.theta) * k / steps
+        out.append(make(hold_in.v, hold_in.x, a, "index"))
+    # 2) cắt hết cung góc ở tốc độ chuẩn, trục A đứng yên
+    for p in run:
+        out.append(make(p.v, p.x, psi_mid, "cut"))
+    out.append(make(hold_out.v, hold_out.x, psi_mid, "cut"))
+    # 3) xoay nốt về mặt phẳng kế tiếp, mỏ bám điểm vừa cắt xong
+    for k in range(1, steps):
+        a = psi_mid + (hold_out.theta - psi_mid) * k / steps
+        out.append(make(hold_out.v, hold_out.x, a, "index"))
+    return out
+
+
+def apply_corner_strategy(
     points: List[CutPoint],
     section: Section,
     motion: MotionSpec,
     process: ProcessSpec,
 ) -> List[CutPoint]:
-    """Đánh dấu các điểm nằm trong cung góc lượn là **pha xoay góc**.
+    """Xử lý các cung góc lượn theo chế độ đã chọn.
 
-    Ở chế độ ``corner_mode = "index"``, khi đường cắt tới mép mặt phẳng thì
-    dừng cắt: mâm cặp quay hết góc lượn (90 độ với ống hộp) trong khi trục
-    ngang và trục Z phối hợp giữ mỏ cắt luôn bám đúng chỗ góc đó trên phôi;
-    quay xong mới hạ xuống cắt tiếp mặt kế bên.
-
-    Nhờ vậy không còn phải ép trục xoay chạy ~15 000 độ/phút để giữ tốc độ cắt
-    qua góc - pha xoay không cắt nên chạy ở tốc độ nào cũng được.
-
-    Nếu tắt mỏ trong lúc xoay (mặc định) thì mỏ được nhấc thêm ``corner_lift``
-    mm cho an toàn; **đổi lại phần cung góc sẽ không được cắt**.
+    * ``follow`` - giữ nguyên, cắt liền mạch (tốc độ bị trục xoay kéo tụt);
+    * ``index``  - dừng cắt, nhấc mỏ, xoay hết 90 độ rồi mồi lại cắt tiếp
+      (cung góc **không** được cắt nếu tắt mỏ);
+    * ``pivot``  - xoay 45 độ đưa cung góc lên đỉnh rồi cắt hết cung ở tốc độ
+      chuẩn, xong xoay nốt 45 độ (cắt đủ cả cung, giữ được tốc độ).
     """
-    spans = section.arc_spans()
-    if not spans or motion.corner_mode != "index" or not points:
+    arcs = section.corner_arcs()
+    if not arcs or motion.corner_mode not in ("index", "pivot") or not points:
         return points
     per = section.perimeter
     lift = motion.corner_lift if motion.corner_torch_off else 0.0
     out: List[CutPoint] = []
-    for p in points:
-        v = p.v % per
-        inside = any(v0 + 1e-9 < v < v1 - 1e-9 for v0, v1 in spans)
-        if inside and p.kind == "cut":
-            z_axis = (process.cut_height + p.surface_z + lift) if lift else None
-            out.append(CutPoint(x=p.x, v=p.v, theta=p.theta, cross=p.cross,
-                                surface_z=p.surface_z, bevel=p.bevel,
-                                kind="index", z_axis=z_axis))
-        else:
+    i, n = 0, len(points)
+    while i < n:
+        p = points[i]
+        idx = _arc_index(arcs, p.v, per) if p.kind == "cut" else None
+        if idx is None:
             out.append(p)
+            i += 1
+            continue
+        j = i
+        while j < n and _arc_index(arcs, points[j].v, per) == idx:
+            j += 1
+        run = points[i:j]
+        if motion.corner_mode == "index":
+            for q in run:
+                out.append(CutPoint(x=q.x, v=q.v, theta=q.theta, cross=q.cross,
+                                    surface_z=q.surface_z, bevel=q.bevel,
+                                    kind="index",
+                                    z_axis=(process.cut_height + q.surface_z + lift)
+                                    if lift else None))
+        else:
+            hold_in = out[-1] if out else run[0]
+            hold_out = points[j] if j < n else run[-1]
+            out.extend(_pivot_corner(hold_in, run, hold_out, arcs[idx],
+                                     section, motion, process))
+        i = j
     return out
 
 
@@ -595,7 +685,7 @@ def process_contour(
                                    surface_z=ct.height - ref,
                                    bevel=all_bevels[i]))
     if contour.kind != "mark":
-        cut_points = mark_corner_indexing(cut_points, section, motion, process)
+        cut_points = apply_corner_strategy(cut_points, section, motion, process)
     meta = dict(contour.meta)
     meta["wrap"] = contour.wrap
     meta["closed"] = contour.closed

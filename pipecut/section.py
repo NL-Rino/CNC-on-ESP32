@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 Vec2 = Tuple[float, float]
 
@@ -203,6 +203,16 @@ class Section:
         """
         return []
 
+    def corner_arcs(self) -> List[Dict[str, float]]:
+        """Mô tả đầy đủ từng cung góc: vị trí, tâm, bán kính, khoảng pháp tuyến."""
+        return []
+
+    def rotate_point(self, cx: float, cy: float, theta_deg: float) -> Tuple[float, float]:
+        """Quay một điểm của tiết diện theo góc trục A (cùng quy ước contact_at)."""
+        a = math.radians(theta_deg)
+        return (cx * math.cos(a) - cy * math.sin(a),
+                cx * math.sin(a) + cy * math.cos(a))
+
     def breakpoints(self) -> List[float]:
         """Các vị trí cung mà biên đổi kiểu hình (mặt phẳng <-> góc lượn).
 
@@ -374,6 +384,22 @@ class BoxSection(Section):
     def arc_spans(self) -> List[Tuple[float, float]]:
         return [(self._starts[i], self._starts[i] + seg[1])
                 for i, seg in enumerate(self._segs) if seg[0] == "arc"]
+
+    def corner_arcs(self) -> List[Dict[str, float]]:
+        out: List[Dict[str, float]] = []
+        for i, (kind, length, data) in enumerate(self._segs):
+            if kind != "arc":
+                continue
+            center, psi0 = data
+            out.append({
+                "v0": self._starts[i],
+                "v1": self._starts[i] + length,
+                "cx": center[0], "cy": center[1],
+                "rc": self.rc,
+                "psi0": psi0,
+                "psi1": psi0 + math.degrees(length / self.rc),
+            })
+        return out
 
     def describe(self) -> str:
         if self.kind == SHAPE_SQUARE:

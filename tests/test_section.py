@@ -481,3 +481,141 @@ class TestJobOrderAndLeads(unittest.TestCase):
             got[side] = ps.points[0].x - ps.points[ps.lead_in_count].x
         self.assertGreater(got["auto"], 0.0)     # mồi lệch về đầu tự do
         self.assertLess(got["minus"], 0.0)       # mồi lệch về phía mâm cặp
+
+
+class TestPivotCorner(unittest.TestCase):
+    """Chế độ xoay 45 độ đưa góc bo lên đỉnh rồi cắt ở tốc độ chuẩn."""
+
+    def setUp(self):
+        self.p = MachineProfile()
+        self.p.pipe.shape = "square"
+        self.p.pipe.width = 50.0
+        self.p.pipe.wall_thickness = 3.0
+        cross = self.p.axis(ROLE_CROSS)
+        cross.min_travel, cross.max_travel = -100.0, 100.0
+        self.p.motion.corner_mode = "pivot"
+        self.section = self.p.pipe.section()
+
+    def _pass(self):
+        from pipecut.pathops import process_contour
+        c = shapes.plane_cut(self.section, 250.0, 0.0)
+        return process_contour(c, self.section, self.p.motion, self.p.process)
+
+    def test_cat_ca_cung_goc_o_toc_do_chuan(self):
+        from pipecut.kinematics import Kinematics
+        kin = Kinematics(self.p)
+        ps = self._pass()
+        z = self.p.process.cut_height
+        target = self.p.process.cut_feed
+        speeds = [kin.achievable_surface_speed(a, b, target, z, z)
+                  for a, b in zip(ps.points, ps.points[1:])
+                  if a.kind == "cut" and b.kind == "cut"]
+        self.assertTrue(speeds)
+        for sp in speeds:
+            self.assertAlmostEqual(sp, target, delta=2.0)
+
+    def test_khi_cat_cung_goc_thi_truc_xoay_dung_yen(self):
+        """Đưa góc bo lên đỉnh rồi mới cắt, nên trục A không phải quay tí nào."""
+        ps = self._pass()
+        arcs = self.section.arc_spans()
+        per = self.section.perimeter
+        checked = 0
+        for a, b in zip(ps.points, ps.points[1:]):
+            if a.kind != "cut" or b.kind != "cut":
+                continue
+            mid = ((a.v + b.v) / 2) % per
+            if any(v0 + 1e-6 < mid < v1 - 1e-6 for v0, v1 in arcs):
+                checked += 1
+                self.assertAlmostEqual(b.theta, a.theta, places=9)
+        self.assertGreater(checked, 20)
+
+    def test_hai_lan_xoay_moi_lan_khoang_45_do(self):
+        pts = self._pass().points
+        sweeps = []
+        i = 0
+        while i < len(pts):
+            if pts[i].kind != "index":
+                i += 1
+                continue
+            j = i
+            while j < len(pts) and pts[j].kind == "index":
+                j += 1
+            before = pts[i - 1].theta if i > 0 else pts[i].theta
+            after = pts[j].theta if j < len(pts) else pts[j - 1].theta
+            sweeps.append(abs(after - before))
+            i = j
+        self.assertGreaterEqual(len(sweeps), 8)        # 4 góc x 2 lần xoay
+        for sweep in sweeps:
+            self.assertAlmostEqual(sweep, 45.0, delta=2.0)
+
+    def test_trong_luc_xoay_mo_cat_dung_yen_tai_mot_diem_tren_phoi(self):
+        """Đúng ý: xoay nhưng đầu cắt vẫn ở nguyên chỗ đó trên phôi."""
+        ps = self._pass()
+        run_v = None
+        checked = 0
+        for a, b in zip(ps.points, ps.points[1:]):
+            if a.kind == "index" and b.kind == "index":
+                self.assertAlmostEqual(b.v, a.v, places=9)
+                self.assertAlmostEqual(b.x, a.x, places=9)
+                checked += 1
+        self.assertGreater(checked, 30)
+
+    def test_khe_ho_mo_cat_giu_dung_suot_ca_pha_xoay_va_pha_cat(self):
+        from pipecut.jobs import Job
+        job = Job()
+        job.add("cutoff", x=250.0, angle=0.0)
+        tp, _w = job.build_toolpath(self.p)
+        prog = build_program(self.p, tp)
+        sec = self.section
+        ref = sec.reference_height
+        zc = self.p.process.cut_height
+        cur = {"X": 0.0, "Z": 0.0, "A": 0.0}
+        torch = False
+        worst, checked = 0.0, 0
+        for line in prog.stream_lines():
+            if line.startswith(("M3", "M4")):
+                torch = True
+                continue
+            if line.startswith("M5"):
+                torch = False
+                continue
+            for axis in ("X", "Z", "A"):
+                m = re.search(axis + r"(-?[\d.]+)", line)
+                if m:
+                    cur[axis] = float(m.group(1))
+            # chỉ soát các lệnh **chạy theo đường cắt** (có dịch X hoặc A) khi
+            # nguồn cắt đang bật; lệnh nâng/hạ Z riêng lẻ không phải đường cắt
+            if not torch or not re.search(r"[XA]-?[\d.]", line):
+                continue
+            gap = (ref + cur["Z"]) - sec.surface_height(cur["A"], cur["X"])
+            worst = max(worst, abs(gap - zc))
+            checked += 1
+        self.assertGreater(checked, 50)
+        self.assertLess(worst, 0.15, f"khe hở lệch tới {worst:.3f} mm")
+
+    def test_cat_du_chieu_dai_khong_bo_sot_cung_goc(self):
+        from pipecut.jobs import Job
+        job = Job()
+        job.add("cutoff", x=250.0, angle=0.0)
+        tp, _w = job.build_toolpath(self.p)
+        prog = build_program(self.p, tp)
+        want = (self.section.perimeter + self.p.process.lead_in
+                + self.p.process.overcut)
+        self.assertAlmostEqual(prog.stats.cut_length, want, delta=1.0)
+        self.assertFalse([w for w in prog.stats.warnings if "KHÔNG được cắt" in w])
+
+    def test_moi_goc_ton_them_hai_lan_moi(self):
+        from pipecut.jobs import Job
+        job = Job()
+        job.add("cutoff", x=250.0, angle=0.0)
+        tp, _w = job.build_toolpath(self.p)
+        prog = build_program(self.p, tp)
+        self.assertEqual(prog.stats.pierces, 9)     # 1 + 2 lần mỗi góc x 4 góc
+
+    def test_ong_tron_khong_bi_anh_huong(self):
+        self.p.pipe.shape = "round"
+        self.p.pipe.outer_diameter = 60.0
+        self.section = self.p.pipe.section()
+        ps = self._pass()
+        self.assertTrue(all(q.kind == "cut" for q in ps.points))
+        self.assertTrue(all(abs(q.cross) < 1e-9 for q in ps.points))

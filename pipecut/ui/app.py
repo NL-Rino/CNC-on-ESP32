@@ -49,7 +49,8 @@ LABEL_SHAPE = {v: k for k, v in SHAPE_LABEL.items()}
 
 # Cách vượt qua góc lượn của ống hộp
 CORNER_LABEL = {"follow": "Cắt liền mạch qua góc",
-                "index": "Dừng cắt, xoay 90° rồi cắt tiếp"}
+                "pivot": "Xoay 45° đưa góc lên đỉnh rồi cắt",
+                "index": "Dừng cắt, xoay 90° bỏ qua góc"}
 LABEL_CORNER = {v: k for k, v in CORNER_LABEL.items()}
 
 

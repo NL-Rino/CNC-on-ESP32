@@ -1,5 +1,47 @@
 # Nhật ký thay đổi
 
+## v1.3.0 — 2026-09-03
+
+### Vượt góc ống hộp kiểu "xoay 45 độ" (`corner_mode = "pivot"`) — mặc định mới
+
+Trình tự đúng như thợ làm bằng tay:
+
+1. cắt hết mặt phẳng ở tốc độ chuẩn, trục A đứng yên;
+2. **dừng, xoay 45°** đưa góc bo lên đỉnh — mỏ cắt vẫn đứng đúng chỗ vừa cắt
+   xong trên phôi, trục ngang và trục Z phối hợp bám theo;
+3. cả cung góc giờ nằm gọn quanh đỉnh nên **cắt hết cung ở tốc độ chuẩn với
+   trục A đứng yên**;
+4. **xoay nốt 45°** về mặt phẳng kế tiếp, mỏ vẫn bám điểm vừa cắt xong;
+5. cắt tiếp.
+
+Vì sao giữ được tốc độ: khi góc bo đã ở đỉnh, cắt hết cung 9,4 mm chỉ cần trục
+ngang chạy 8,5 mm — trục A không phải quay tí nào. So với cắt liền mạch (trục A
+phải quay 90° trong 9,4 mm cung, tức ~15 000 độ/phút) thì đây là trời với vực.
+
+Đo trên cùng một nhát cắt đứt ống 50×50×3, góc lượn R6, đặt 1600 mm/phút:
+
+| `corner_mode` | Tốc độ cắt | Dài cắt | Điểm mồi | Thời gian |
+|---|---|---|---|---|
+| `follow` | 377 – 1600 *(tụt ở góc)* | 194,7 mm *(đủ)* | 1 | 18 s |
+| `index` | 1600 đều | 159,1 mm *(thiếu 4 cung góc)* | 5 | 23 s |
+| **`pivot`** | **1600 đều** | **194,7 mm (đủ)** | 9 | 29 s |
+
+Đánh đổi của `pivot`: ở hai đầu cung, mỏ nghiêng tới 45° so với pháp tuyến nên
+mặt cắt chỗ đó không vuông góc; và tốn thêm 2 điểm mồi mỗi góc.
+
+Khe hở mỏ–phôi được kiểm chứng giữ đúng 1,600 ± 0,001 mm trên toàn bộ đường
+chạy của cả ba chế độ.
+
+### Khác
+
+* Sửa cách tính chiều dài cắt: không cộng phần trục Z nhấp nhô theo mặt phôi
+  nữa — đó là chuyển động của mỏ trong không gian, còn vết cắt chỉ tiến theo bề
+  mặt. Trước đây chiều dài cắt ống hộp bị thổi phồng ~20%.
+* Hồ sơ máy mặc định chuyển sang `pivot`; thêm `config/machine_box_pivot.json`.
+* Kiểm thử tăng từ 109 lên **117 bài**, trong đó có bài kiểm tra trục A đứng yên
+  suốt pha cắt cung, mỗi lần xoay đúng 45°, và mỏ giữ nguyên một điểm trên phôi
+  trong lúc xoay.
+
 ## v1.2.0 — 2026-09-03
 
 ### Thứ tự cắt: giữ đúng như người dùng xếp

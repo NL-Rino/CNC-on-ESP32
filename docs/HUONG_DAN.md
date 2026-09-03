@@ -148,7 +148,7 @@ thiết** — đối chiếu với hành trình thật của máy trước khi c
 | Góc vát tối đa | Giới hạn cơ khí của trục vát | Đặt đúng khả năng máy |
 | Tâm xoay tới mũi cắt | Khoảng cách từ tâm nghiêng tới mũi cắt | Để phần mềm bù toạ độ khi nghiêng |
 | Tốc độ đều cả đường | Cả đường cắt chạy một tốc độ bề mặt duy nhất | Bật khi cắt ống hộp muốn vết cắt đồng đều |
-| Qua góc ống hộp | `follow` cắt liền mạch, `index` dừng cắt rồi xoay 90° | Xem mục dưới |
+| Qua góc ống hộp | `follow` cắt liền mạch · `pivot` xoay 45° rồi cắt · `index` bỏ qua góc | Xem mục dưới |
 | Tắt mỏ khi xoay góc | Chỉ có tác dụng ở chế độ `index` | Tắt thì góc lượn không được cắt |
 | Nhấc mỏ khi xoay góc | Nhấc thêm bao nhiêu mm cho an toàn khi xoay | 5-10 mm là đủ |
 
@@ -159,12 +159,17 @@ tốc độ cắt 1600 mm/phút, không mâm cặp thường nào làm nổi. Ha
 * **`follow`** — cắt liền mạch qua góc, phần mềm tự hạ tốc độ xuống mức máy chạy
   được và báo con số cụ thể. Phôi **đứt hẳn**. Đổi lại vết cắt ở góc chậm hơn ở
   mặt phẳng (bật *Tốc độ đều* để đồng đều lại).
+* **`pivot`** *(mặc định)* — cắt hết mặt phẳng rồi **dừng, xoay 45° đưa góc bo
+  lên đỉnh** (mỏ vẫn đứng đúng chỗ vừa cắt, X và Z bám theo), lúc này cả cung góc
+  nằm gọn quanh đỉnh nên **cắt hết cung ở tốc độ chuẩn với trục A đứng yên**, xong
+  **xoay nốt 45°** về mặt kế tiếp rồi cắt tiếp. Cắt đủ cả cung góc *và* giữ được
+  tốc độ. Đổi lại: hai đầu cung mỏ nghiêng tới 45° nên mặt cắt chỗ đó không vuông
+  góc, và tốn thêm 2 điểm mồi mỗi góc (tổng 9 thay vì 1 cho một nhát cắt đứt).
 * **`index`** — cắt hết mặt phẳng rồi **dừng cắt: tắt mỏ, nhấc lên, ba trục phối
   hợp giữ mỏ bám đúng góc đó trên phôi trong lúc mâm quay 90°, quay xong hạ
-  xuống mồi lại và cắt mặt kế tiếp**. Tốc độ trên mặt phẳng luôn đúng như đặt.
-  Đổi lại **bốn cung góc lượn không được cắt** nên phôi chưa rời hẳn — dùng khi
-  cắt cửa sổ/rãnh trên các mặt, hoặc khi chấp nhận bẻ/mài nốt góc.
-  Muốn vừa dừng-xoay vừa cắt cả góc thì đặt *Tắt mỏ khi xoay góc* = không.
+  xuống mồi lại và cắt mặt kế tiếp**. Nhanh gọn nhưng **bốn cung góc lượn không
+  được cắt** nên phôi chưa rời hẳn — dùng khi cắt cửa sổ/rãnh trên các mặt, hoặc
+  khi chấp nhận bẻ/mài nốt góc.
 
 Bấm **Áp dụng thông số** rồi **Lưu hồ sơ máy...** để dùng lại lần sau.
 

@@ -1,5 +1,5 @@
 {
-  "name": "Máy cắt ống hộp ESP32 - 4 trục (mặc định)",
+  "name": "Máy cắt ống hộp - xoay 45 độ qua góc",
   "description": "Y: ống ra vào · A: mâm cặp xoay · X: mỏ cắt chạy ngang · Z: lên xuống. Qua góc lượn dùng kiểu 'pivot': xoay 45 độ đưa góc bo lên đỉnh rồi cắt hết cung ở tốc độ chuẩn, xong xoay nốt 45 độ - cắt đủ cả góc mà không bị tụt tốc.",
   "axes": [
     {

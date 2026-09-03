@@ -64,18 +64,53 @@ Góc lượn để 0 thì phần mềm tự lấy 2 lần chiều dày thành (s
 nhọn tuyệt đối không cắt được: tại đó pháp tuyến đổi hướng đột ngột 90°, máy sẽ
 phải xoay tại chỗ.
 
-### Hai cách vượt qua góc ống hộp
+### Ba cách vượt qua góc ống hộp
 
-| `corner_mode` | Máy làm gì | Khi nào dùng |
-|---|---|---|
-| `follow` *(mặc định)* | Cắt liền mạch qua cung góc, ba trục phối hợp bám mặt. Tốc độ cắt bị tụt vì trục xoay chạm trần | Cần **cắt đứt hẳn** phôi |
-| `index` | **Cắt hết mặt phẳng → tắt mỏ → nhấc lên → ba trục phối hợp giữ mỏ bám đúng góc đó trong lúc mâm quay 90° → hạ xuống, mồi lại → cắt mặt kế tiếp** | Cần tốc độ cắt đều trên mặt phẳng, chấp nhận góc lượn để lại |
+Qua cung góc lượn, mâm cặp phải quay 90° trong đoạn cung rất ngắn — ống 50×50 góc
+lượn R6 cần ~15 000 độ/phút để giữ tốc độ cắt 1600 mm/phút, không mâm cặp nào làm
+nổi. Ba lối ra, đo trên cùng một nhát cắt đứt ống 50×50×3:
 
-Ở chế độ `index`, đặt `corner_torch_off = false` thì mỏ vẫn cháy suốt lúc xoay nên
-cung góc vẫn được cắt (khi đó tương đương `follow`). Nếu tắt mỏ, phần mềm **cảnh
-báo rõ là bốn cung góc không được cắt và phôi chưa rời hẳn**.
+| `corner_mode` | Tốc độ cắt | Dài cắt | Điểm mồi | Thời gian |
+|---|---|---|---|---|
+| `follow` | 377 – 1600 *(tụt ở góc)* | 194,7 mm *(đủ)* | 1 | 18 s |
+| `index` | **1600 đều** | 159,1 mm *(**thiếu 4 cung góc**)* | 5 | 23 s |
+| **`pivot`** *(mặc định)* | **1600 đều** | **194,7 mm *(đủ)*** | 9 | 29 s |
 
-Một chu kỳ xoay góc trong G-code thật:
+* **`follow`** — cắt liền mạch, ba trục bám mặt. Đơn giản nhất, chỉ một điểm mồi,
+  nhưng tốc độ tụt còn ~1/4 ở góc (bật `uniform_feed` để đều lại, cả đường cùng chậm).
+* **`pivot`** — *cắt hết mặt phẳng → dừng, xoay 45° đưa góc bo lên đỉnh (mỏ vẫn
+  đứng đúng chỗ vừa cắt, X và Z bám theo) → cả cung góc giờ nằm quanh đỉnh nên cắt
+  hết cung ở **tốc độ chuẩn** với trục A đứng yên → xoay nốt 45° về mặt kế tiếp →
+  cắt tiếp*. Vì sao nhanh được: cắt hết cung 9,4 mm chỉ cần trục ngang chạy 8,5 mm,
+  trục A không phải quay. Đánh đổi: hai đầu cung mỏ nghiêng tới 45° so với pháp
+  tuyến nên mặt cắt chỗ đó không vuông góc, và tốn thêm 2 điểm mồi mỗi góc.
+* **`index`** — dừng cắt, tắt mỏ, nhấc lên, xoay hết 90° rồi mồi lại. Nhanh gọn
+  nhưng **bốn cung góc không được cắt** nên phôi chưa rời hẳn (phần mềm cảnh báo rõ).
+  Đặt `corner_torch_off = false` thì mỏ cháy suốt lúc xoay, khi đó tương đương `follow`.
+
+Một chu kỳ `pivot` trong G-code thật (ống 50×50, góc lượn R6):
+
+```gcode
+X19                          ; cắt hết mặt phẳng, A đứng yên
+M5                           ; tắt mỏ
+X17.324 Z2.789  A3.75        ; xoay 45 độ, mỏ vẫn bám đúng điểm v=19 trên phôi
+X13.758 Z4.826  A11.25       ; (X và Z phối hợp giữ mỏ đứng yên tại chỗ đó)
+...
+X-4.243 Z7.713  A45          ; góc bo đã lên đỉnh
+G0 Z9.913 / M3 / G4 / G1 Z7.713   ; mồi lại
+X-3.794 Z8.118 F1600         ; CẮT HẾT CUNG GÓC Ở TỐC ĐỘ CHUẨN, A đứng yên
+X-2.787 Z8.784
+X0.125  Z9.469               ; qua đỉnh cung
+X4.243  Z7.713               ; hết cung
+M5                           ; tắt mỏ, xoay nốt 45 độ
+X2.199  Z7.924  A48.75
+...
+X-19 A90                     ; về mặt phẳng kế tiếp
+G0 Z3.8 / M3 / G4 / G1 Z1.6  ; mồi lại
+X-15.642 F1600               ; cắt tiếp
+```
+
+Một chu kỳ `index` trong G-code thật:
 
 ```gcode
 X15.892                      ; đang cắt trên mặt phẳng, A đứng yên
@@ -94,6 +129,11 @@ X-15.642 F1600               ; cắt tiếp mặt kế bên
 ```
 
 ![Mô phỏng cắt ống hộp](docs/mo_phong_ong_hop.svg)
+
+Ba khoảnh khắc của chế độ `pivot` — cắt mặt phẳng, xoay 45° (mỏ bám đúng chỗ),
+rồi cắt hết cung góc ở tốc độ chuẩn:
+
+![Xoay 45 độ qua góc](docs/mo_phong_xoay_goc.svg)
 
 ## Làm được những gì
 
@@ -266,7 +306,7 @@ config/          hồ sơ máy mẫu (ống tròn, ống hộp, xoay góc, trụ
 firmware/        cấu hình FluidNC cho ESP32
 examples/        tệp công việc mẫu
 docs/            hướng dẫn sử dụng và tài liệu kỹ thuật
-tests/           109 bài kiểm thử (chạy bằng thư viện chuẩn)
+tests/           117 bài kiểm thử (chạy bằng thư viện chuẩn)
 ```
 
 Chạy kiểm thử:

@@ -121,10 +121,12 @@ class Kinematics:
                          za: Optional[float] = None, zb: Optional[float] = None) -> float:
         """Quãng đường thật mũi cắt đi trên bề mặt ống giữa hai điểm."""
         dx = b.x - a.x
-        # quãng đường thật đo trên bề mặt phôi, lấy thẳng từ toạ độ trải phẳng
+        # Quãng đường thật đo **trên bề mặt phôi**, lấy thẳng từ toạ độ trải
+        # phẳng.  Không cộng phần trục Z nhấp nhô theo mặt phôi: đó là chuyển
+        # động của mỏ cắt trong không gian, còn vết cắt chỉ tiến theo bề mặt -
+        # tốc độ cắt phải đo theo mức tiến của vết cắt trên vật liệu.
         dv = (b.v - a.v) * self.feed_scale
         dz = 0.0 if (za is None or zb is None) else (zb - za)
-        dz += b.surface_z - a.surface_z
         db = 0.0
         if self.ax_bevel and abs(self.motion.bevel_pivot) > 1e-9:
             db = math.radians(b.bevel - a.bevel) * self.motion.bevel_pivot

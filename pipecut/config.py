@@ -212,6 +212,9 @@ class MotionSpec:
     # --- cách vượt qua góc lượn của ống hộp ---
     corner_mode: str = "follow"       # follow = cắt liền mạch qua góc
                                       # index  = dừng cắt, xoay 90 độ tại chỗ rồi cắt tiếp
+                                      # pivot  = xoay 45 độ đưa góc bo lên đỉnh, cắt hết
+                                      #          cung ở tốc độ chuẩn, rồi xoay nốt 45 độ
+    corner_pivot_steps: int = 12      # số bước chia cho mỗi lần xoay 45 độ
     corner_torch_off: bool = True     # tắt nguồn cắt trong lúc xoay góc (chế độ index)
     corner_lift: float = 6.0          # nhấc thêm bao nhiêu mm khi xoay góc (nếu tắt mỏ)
     corner_rotate_rate: float = 0.0   # tốc độ xoay khi index (độ/phút, 0 = tối đa của trục)

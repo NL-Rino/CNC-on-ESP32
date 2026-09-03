@@ -1,0 +1,29 @@
+{
+  "name": "ong-co-45-do",
+  "notes": "Cắt hai nửa ống vát 22.5 độ, ghép lại thành co 45 độ.",
+  "optimize_order": true,
+  "operations": [
+    {
+      "type": "cutoff",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "x": 120,
+        "angle": 22.5,
+        "roll": 0,
+        "bevel_axis": true
+      }
+    },
+    {
+      "type": "cutoff",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "x": 260,
+        "angle": 22.5,
+        "roll": 180,
+        "bevel_axis": true
+      }
+    }
+  ]
+}

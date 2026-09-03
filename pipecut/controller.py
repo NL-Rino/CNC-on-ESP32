@@ -116,7 +116,8 @@ class DeviceController:
             if simulator is None:
                 from .simulator import FluidNCSimulator
                 simulator = FluidNCSimulator(axes="".join(self.profile.letters),
-                                             rx_buffer=conn.rx_buffer)
+                                             rx_buffer=conn.rx_buffer,
+                                             time_scale=max(0.01, conn.simulator_speed))
             self.transport = LoopbackTransport(simulator)
         else:
             if not port:

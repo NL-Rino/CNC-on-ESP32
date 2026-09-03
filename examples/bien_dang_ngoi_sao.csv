@@ -1,0 +1,13 @@
+# Biên dạng trải phẳng: cột 1 = u (dọc ống, mm), cột 2 = v (theo chu vi, mm)
+# Dùng với nguyên công 'pattern'.  Xuất từ DXF/SVG cũng theo định dạng này.
+0.00,25.00
+-6.47,8.90
+-23.78,7.73
+-10.46,-3.40
+-14.69,-20.23
+-0.00,-11.00
+14.69,-20.23
+10.46,-3.40
+23.78,7.73
+6.47,8.90
+0.00,25.00

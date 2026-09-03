@@ -1,0 +1,2 @@
+# Bắt buộc khi nối cổng COM thật (phần sinh G-code và máy ảo không cần gì cả)
+pyserial>=3.5

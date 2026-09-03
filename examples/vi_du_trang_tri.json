@@ -1,0 +1,99 @@
+{
+  "name": "ong-trang-tri",
+  "notes": "Dãy lỗ quanh chu vi, một đường xoắn và vát mép hàn ở đầu.",
+  "optimize_order": true,
+  "operations": [
+    {
+      "type": "hole",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "diameter": 14,
+        "x": 80,
+        "theta": 0,
+        "angle": 90.0,
+        "offset": 0.0
+      }
+    },
+    {
+      "type": "hole",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "diameter": 14,
+        "x": 80,
+        "theta": 60,
+        "angle": 90.0,
+        "offset": 0.0
+      }
+    },
+    {
+      "type": "hole",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "diameter": 14,
+        "x": 80,
+        "theta": 120,
+        "angle": 90.0,
+        "offset": 0.0
+      }
+    },
+    {
+      "type": "hole",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "diameter": 14,
+        "x": 80,
+        "theta": 180,
+        "angle": 90.0,
+        "offset": 0.0
+      }
+    },
+    {
+      "type": "hole",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "diameter": 14,
+        "x": 80,
+        "theta": 240,
+        "angle": 90.0,
+        "offset": 0.0
+      }
+    },
+    {
+      "type": "hole",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "diameter": 14,
+        "x": 80,
+        "theta": 300,
+        "angle": 90.0,
+        "offset": 0.0
+      }
+    },
+    {
+      "type": "helix",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "x_start": 120,
+        "x_end": 220,
+        "turns": 3,
+        "theta_start": 0
+      }
+    },
+    {
+      "type": "weld_prep",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "x": 280,
+        "angle": 37.5
+      }
+    }
+  ]
+}

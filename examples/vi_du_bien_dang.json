@@ -1,0 +1,20 @@
+{
+  "name": "cat-ngoi-sao",
+  "notes": "Cuốn một biên dạng phẳng (ngôi sao 5 cánh) lên mặt ống.",
+  "optimize_order": true,
+  "operations": [
+    {
+      "type": "pattern",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "file": "bien_dang_ngoi_sao.csv",
+        "x_offset": 150,
+        "theta_offset": 0,
+        "scale": 1.0,
+        "closed": true,
+        "corner": 1.5
+      }
+    }
+  ]
+}

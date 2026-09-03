@@ -118,7 +118,7 @@ def cmd_preview(args: argparse.Namespace) -> int:
 
 def _stream(profile: MachineProfile, lines: Sequence[str], port: str,
             baud: Optional[int] = None, quiet: bool = False,
-            time_scale: float = 50.0) -> int:
+            time_scale: Optional[float] = None) -> int:
     from .controller import DeviceController
 
     controller = DeviceController(profile)
@@ -127,7 +127,7 @@ def _stream(profile: MachineProfile, lines: Sequence[str], port: str,
         from .simulator import FluidNCSimulator
         simulator = FluidNCSimulator(axes="".join(profile.letters),
                                      rx_buffer=profile.connection.rx_buffer,
-                                     time_scale=time_scale)
+                                     time_scale=time_scale or profile.connection.simulator_speed)
     errors: List[str] = []
     controller.on_event = lambda kind, text: (
         errors.append(text) if kind in ("error", "alarm") else None,
@@ -184,9 +184,16 @@ def cmd_send(args: argparse.Namespace) -> int:
 
 
 def cmd_sim(args: argparse.Namespace) -> int:
-    args.port = "GIA-LAP"
-    args.baud = None
-    return cmd_send(args)
+    profile = _load_profile(args.profile)
+    if getattr(args, "speed", None):
+        profile.connection.simulator_speed = args.speed
+    with open(args.file, "r", encoding="utf-8") as fh:
+        raw = fh.read().splitlines()
+    from .gcode import strip_gcode_comment
+    lines = [l for l in (strip_gcode_comment(x) for x in raw) if l]
+    print(f"Chạy thử {len(lines)} dòng trên máy ảo "
+          f"(tốc độ x{profile.connection.simulator_speed:g})")
+    return _stream(profile, lines, "GIA-LAP", None, args.quiet)
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -279,6 +286,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sm = sub.add_parser("sim", help="chạy thử tệp G-code trên máy ảo")
     sm.add_argument("file")
+    sm.add_argument("--speed", type=float, default=None,
+                    help="hệ số tăng tốc máy ảo (1 = thời gian thực)")
     sm.add_argument("-q", "--quiet", action="store_true")
     sm.set_defaults(func=cmd_sim)
 

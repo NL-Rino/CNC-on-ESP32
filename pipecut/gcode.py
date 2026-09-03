@@ -81,7 +81,7 @@ def strip_gcode_comment(line: str) -> str:
             if ch == ";":
                 break
             out.append(ch)
-    return "".join(out).strip()
+    return " ".join("".join(out).split())
 
 
 def fmt(value: float, decimals: int = 3) -> str:
@@ -148,7 +148,7 @@ class GCodeBuilder:
                 need_feed = True
         if not words:
             if need_feed and mode == "G1":
-                self.raw(f"F{fmt(feed, 1)}")
+                self.raw(f"F{fmt(feed, 0)}")
                 self.feed = feed
             return False
         parts: List[str] = []
@@ -157,7 +157,7 @@ class GCodeBuilder:
             self.mode = mode
         parts.extend(words)
         if need_feed:
-            parts.append(f"F{fmt(feed, 1)}")
+            parts.append(f"F{fmt(feed, 0)}")
             self.feed = feed
         line = " ".join(parts)
         if comment:
@@ -297,6 +297,15 @@ class PostProcessor:
         b.raw(pr.off_command)
         b.dwell(pr.off_delay)
         stats.estimated_time += pr.off_delay
+
+        # 6) tuỳ chọn: đặt lại góc trục xoay về 0..360 để số không cộng dồn mãi
+        if rot and self.motion.rotary_rewind:
+            cur = b.position.get(rot.letter)
+            if cur is not None:
+                folded = cur % 360.0
+                if abs(folded - cur) > 1e-6:
+                    b.raw(f"G10 L20 P1 {rot.letter}{fmt(folded, pf.motion.decimals)}")
+                    b.position[rot.letter] = folded
         stats.cut_length += cut_len
         stats.contours.append({
             "name": ps.name,
@@ -328,7 +337,7 @@ class PostProcessor:
                 for letter, value in self.kin.axis_values(p, None).items():
                     lo, hi = out.get(letter, (value, value))
                     out[letter] = (min(lo, value), max(hi, value))
-        return {k: (round(v[0], 3), round(v[1], 3)) for k, v in out.items()}
+        return {k: (round(v[0], 3) + 0.0, round(v[1], 3) + 0.0) for k, v in out.items()}
 
     def _limit_warnings(self, passes: Sequence[Pass], z_safe: float, z_cut: float) -> List[str]:
         msgs: List[str] = []

@@ -1,0 +1,173 @@
+# =====================================================================
+#  FluidNC - cấu hình máy cắt ống 4 trục chạy trên ESP32
+#  Nạp bằng WebUI (Files -> Upload) rồi đặt làm cấu hình đang dùng,
+#  hoặc gõ trong terminal:  $Config/Filename=fluidnc_pipe4axis.yaml
+#
+#  Vai trò trục (khớp với config/machine_default.json của PipeCut Studio):
+#    X = chạy dọc theo ống          (đơn vị mm)
+#    Y = bàn ngang / hoặc trục vát  (mm hoặc độ, xem ghi chú cuối tệp)
+#    Z = nâng hạ mỏ cắt             (mm)
+#    A = mâm cặp xoay ống           (ĐỘ - xem cách tính steps_per_mm bên dưới)
+#
+#  !! Chân GPIO bên dưới lấy theo bo MKS DLC32 / ESP32 DevKit thông dụng.
+#     Hãy đối chiếu với bo mạch thực tế của bạn trước khi nạp !!
+# =====================================================================
+
+name: "May cat ong 4 truc"
+board: "ESP32 DevKit / MKS DLC32"
+
+stepping:
+  engine: RMT          # RMT cho xung sạch nhất trên ESP32
+  idle_ms: 250         # giữ dòng 250 ms sau khi dừng rồi mới nhả
+  pulse_us: 4
+  dir_delay_us: 1
+  disable_delay_us: 0
+
+# Bộ đệm và tốc độ nạp lệnh -------------------------------------------
+# PipeCut Studio nạp lệnh theo kiểu đếm ký tự, luôn giữ bộ đệm gần đầy
+# nên planner của FluidNC lúc nào cũng có nhiều block để nhìn trước.
+planner_blocks: 32
+
+axes:
+  shared_stepper_disable_pin: NO_PIN
+
+  # --- X: chạy dọc ống -------------------------------------------------
+  x:
+    steps_per_mm: 80.000          # vitme 5 mm/vòng, 1/16 vi bước: 200*16/5*... hãy tự tính
+    max_rate_mm_per_min: 4000.000
+    acceleration_mm_per_sec2: 250.000
+    max_travel_mm: 1200.000
+    soft_limits: true
+    homing:
+      cycle: 2
+      positive_direction: false
+      mpos_mm: 0.000
+      feed_mm_per_min: 300.000
+      seek_mm_per_min: 1500.000
+      settle_ms: 250
+      pulloff_mm: 3.000
+    motor0:
+      limit_neg_pin: gpio.36:low:pu
+      hard_limits: false
+      pulloff_mm: 3.000
+      stepstick:
+        step_pin: gpio.12
+        direction_pin: gpio.14
+        disable_pin: gpio.26
+
+  # --- Y: bàn ngang (hoặc trục vát, xem ghi chú) ------------------------
+  y:
+    steps_per_mm: 80.000
+    max_rate_mm_per_min: 3000.000
+    acceleration_mm_per_sec2: 200.000
+    max_travel_mm: 200.000
+    soft_limits: true
+    homing:
+      cycle: 2
+      positive_direction: false
+      mpos_mm: 0.000
+      feed_mm_per_min: 300.000
+      seek_mm_per_min: 1000.000
+      settle_ms: 250
+    motor0:
+      limit_neg_pin: gpio.35:low:pu
+      hard_limits: false
+      pulloff_mm: 2.000
+      stepstick:
+        step_pin: gpio.27
+        direction_pin: gpio.25
+        disable_pin: gpio.26
+
+  # --- Z: nâng hạ mỏ cắt ----------------------------------------------
+  z:
+    steps_per_mm: 400.000
+    max_rate_mm_per_min: 2000.000
+    acceleration_mm_per_sec2: 200.000
+    max_travel_mm: 150.000
+    soft_limits: true
+    homing:
+      cycle: 1                    # Z về gốc trước để mỏ cắt không vướng phôi
+      positive_direction: true
+      mpos_mm: 150.000
+      feed_mm_per_min: 300.000
+      seek_mm_per_min: 1000.000
+      settle_ms: 250
+    motor0:
+      limit_pos_pin: gpio.34:low:pu
+      hard_limits: false
+      pulloff_mm: 2.000
+      stepstick:
+        step_pin: gpio.15
+        direction_pin: gpio.13
+        disable_pin: gpio.26
+
+  # --- A: mâm cặp xoay ống (ĐƠN VỊ = ĐỘ) --------------------------------
+  #
+  #  steps_per_mm của trục A chính là "số xung cho mỗi ĐỘ quay":
+  #
+  #      steps_per_deg = (bước_động_cơ * vi_bước * tỉ_số_truyền) / 360
+  #
+  #  Ví dụ: động cơ 1.8 độ (200 xung/vòng), vi bước 1/8, hộp giảm tốc 6:1
+  #      = (200 * 8 * 6) / 360 = 26.667 xung/độ
+  #
+  #  Không đặt max_travel/soft_limits cho trục xoay: nó quay vô hạn, và
+  #  PipeCut Studio quay dồn góc liên tục để đường cắt không bị đứt đoạn.
+  a:
+    steps_per_mm: 26.667
+    max_rate_mm_per_min: 3600.000   # 3600 độ/phút = 10 vòng/phút
+    acceleration_mm_per_sec2: 400.000
+    max_travel_mm: 0.000
+    soft_limits: false
+    homing:
+      cycle: 0                      # 0 = không về gốc (mâm cặp không cần)
+    motor0:
+      hard_limits: false
+      stepstick:
+        step_pin: gpio.33
+        direction_pin: gpio.32
+        disable_pin: gpio.26
+
+# --- Nguồn cắt --------------------------------------------------------
+# Plasma / oxy-gas: dùng rơ-le, M3 bật - M5 tắt.
+spindle:
+  relay:
+    output_pin: gpio.2
+    enable_pin: NO_PIN
+    disable_with_s0: true
+    s0_with_disable: true
+    spinup_ms: 0
+    spindown_ms: 0
+    tool_num: 0
+    speed_map: 0=0% 1=100%
+
+# Nếu dùng LASER thì thay khối trên bằng:
+# spindle:
+#   PWM:
+#     pwm_hz: 5000
+#     output_pin: gpio.2
+#     enable_pin: NO_PIN
+#     disable_with_s0: false
+#     s0_with_disable: true
+#     tool_num: 0
+#     speed_map: 0=0.000% 1000=100.000%
+# và bật chế độ laser:  $GCode/LaserMode=true
+
+# --- Cổng vào ra khác --------------------------------------------------
+control:
+  feed_hold_pin: NO_PIN
+  cycle_start_pin: NO_PIN
+  reset_pin: NO_PIN
+  safety_door_pin: NO_PIN
+
+probe:
+  pin: gpio.22:low:pu       # dò chạm bề mặt ống để đặt gốc Z
+  check_mode_start: true
+
+start:
+  must_home: false          # đặt true nếu máy có đủ công tắc hành trình
+
+# --- Ghi chú cấu hình có trục vát -------------------------------------
+# Nếu dùng trục Y làm TRỤC VÁT (nghiêng mỏ cắt) thay cho bàn ngang:
+#   1. Đổi steps_per_mm của Y sang "xung mỗi độ" (công thức như trục A)
+#   2. Đặt max_travel_mm theo góc nghiêng cơ khí cho phép, ví dụ 50 độ
+#   3. Bên PipeCut Studio dùng tệp config/machine_bevel.json

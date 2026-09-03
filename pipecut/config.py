@@ -146,13 +146,14 @@ class MotionSpec:
     max_feed: float = 4000.0          # trần tốc độ tổng hợp (mm/phút)
     min_feed: float = 30.0
     feed_radius_mode: str = "outer"   # outer | mid | inner
-    feed_change_threshold: float = 0.02  # chỉ ghi lại F khi lệch > 2%
+    feed_change_threshold: float = 0.04  # chỉ ghi lại F khi lệch > 4%
     max_bevel: float = 45.0           # giới hạn góc trục vát (độ)
     bevel_pivot: float = 0.0          # khoảng cách tâm xoay -> mũi cắt (mm), để bù toạ độ
     bevel_invert: bool = False
     bevel_max_rate: float = 1800.0    # độ/phút, dùng để kẹp F khi trục vát chạy nhanh
     rotary_shortest_path: bool = True # khi chạy không: xoay theo đường ngắn nhất
     rotary_unwrap: bool = True        # khi cắt: quay liên tục, không nhảy +-180
+    rotary_rewind: bool = False       # sau mỗi biên dạng, đặt lại góc A về 0..360
     decimals: int = 3
     corner_radius: float = 0.0        # bo góc mặc định cho đường có góc nhọn (mm)
 
@@ -172,6 +173,7 @@ class ConnectionSpec:
     connect_delay: float = 1.5    # chờ ESP32 khởi động sau khi mở cổng
     strip_comments: bool = True   # bỏ chú thích khi gửi để tiết kiệm bộ đệm
     timeout: float = 0.1
+    simulator_speed: float = 1.0  # hệ số tăng tốc máy ảo (1 = thời gian thực)
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "ConnectionSpec":

@@ -59,6 +59,81 @@ là điều kiện cần để đường cắt không bị khựng.
 
 ---
 
+## 1b. Tiết diện phôi và động học cắt vuông góc
+
+Ống tròn là trường hợp đặc biệt dễ chịu: khoảng cách từ tâm tới bề mặt không đổi,
+pháp tuyến luôn hướng ra ngoài theo phương bán kính, nên cứ quay trục A là điểm
+cần cắt tự nằm đúng dưới mỏ cắt.
+
+Ống hộp thì khác hẳn:
+
+* khoảng cách tâm → bề mặt thay đổi (nửa cạnh ở giữa mặt, lớn hơn ở góc lượn);
+* **hướng pháp tuyến cũng thay đổi**: giữ nguyên suốt một mặt phẳng rồi quay
+  90° trong một đoạn cung ngắn.
+
+### Điều kiện cắt vuông góc
+
+Muốn mỏ cắt vuông góc với bề mặt tại điểm ``s``, phải xoay phôi sao cho pháp
+tuyến tại đó hướng thẳng lên. Gọi ``ψ(s)`` là góc pháp tuyến và ``C(s)`` là điểm
+trên biên tiết diện, ta được **phép ánh xạ động học tổng quát**:
+
+```
+A(s) = ψ(s)                        (góc trục xoay)
+X(s) = thành phần ngang của R(−ψ)·C(s)     (trục ngang)
+Z(s) = thành phần cao của R(−ψ)·C(s)       (chiều cao bề mặt)
+```
+
+Kiểm chứng ba trường hợp:
+
+| Vị trí | A | X | Z |
+|---|---|---|---|
+| Ống tròn, mọi nơi | ``s/R`` | **0** | ``R`` (không đổi) |
+| Ống hộp, trên mặt phẳng | không đổi | **chạy dọc mặt** | nửa cạnh (không đổi) |
+| Ống hộp, qua góc lượn | quay 90° | chạy từ mép này sang mép kia | nhô lên rồi hạ xuống |
+
+Với góc lượn tâm ``K`` bán kính ``r_c``: ``R(−ψ)·C = R(−ψ)·K + r_c·(0,1)``, nghĩa
+là mũi cắt vạch một **cung tròn bán kính |K|** trong mặt phẳng (X, Z) - đó là lý
+do cả ba trục phải phối hợp qua góc.
+
+Vì ống tròn cho ``X ≡ 0`` và ``Z`` không đổi, cùng một bộ mã chạy đúng cho cả hai
+loại phôi mà không cần rẽ nhánh.
+
+### Hệ quả: không được rút gọn điểm một cách ngây thơ
+
+Trên mặt trải phẳng, nhát cắt vuông góc quanh ống hộp là một **đường thẳng**.
+Nhưng trong không gian bốn trục nó không hề thẳng. Nếu để bước rút gọn
+Douglas–Peucker gộp cả đường thành hai điểm rồi nội suy thẳng, mỏ cắt sẽ đi
+xuyên qua góc lượn và **cắm vào phôi**.
+
+Vì vậy sau khi rút gọn, phần mềm còn hai bước bắt buộc với tiết diện không tròn:
+
+1. **Chèn đỉnh tại mọi chỗ đổi hình** (mặt phẳng ↔ góc lượn). Đó chính là nơi độ
+   cong nhảy bậc và trục X đạt cực trị.
+2. **Chia nhỏ theo sai lệch trong không gian trục**: đo khoảng cách giữa đường đi
+   thật của mũi cắt và dây cung nối hai điểm, chia đôi cho tới khi nhỏ hơn dung
+   sai. Trên mặt phẳng và với ống tròn, sai lệch bằng 0 nên **không thêm điểm nào**
+   - số dòng G-code không tăng vô ích.
+
+Bài kiểm thử ``test_khe_ho_mo_cat_luon_dung_bang_cao_do_cat`` dựng lại vị trí mũi
+cắt từ chính G-code, kể cả các điểm **giữa hai lệnh**, rồi đo khe hở tới bề mặt
+phôi - đây là bằng chứng máy không cắm vào phôi ở bất cứ đâu.
+
+### Giới hạn cơ khí ở góc lượn
+
+Qua góc lượn, trục A phải quay 90° trong đoạn cung ``π·r_c/2``. Với ống 50×50 góc
+lượn R6, đoạn cung chỉ 9,4 mm: giữ tốc độ cắt 1600 mm/phút đòi hỏi trục xoay chạy
+**~15 000 độ/phút**, vượt xa khả năng của mọi mâm cặp thông thường.
+
+Đây là giới hạn vật lý, không phải lỗi phần mềm. Phần mềm kẹp tốc độ theo khả
+năng thật của từng trục rồi **cảnh báo bằng con số cụ thể**. Hai cách xử lý:
+
+* bật ``uniform_feed`` - cả đường chạy ở một tốc độ bề mặt duy nhất (bằng tốc độ
+  chậm nhất), vết cắt đồng đều từ mặt phẳng sang góc lượn, đổi lại lâu hơn;
+* hoặc tăng khả năng của trục xoay: giảm tỉ số truyền, tăng điện áp driver, dùng
+  động cơ mô-men lớn hơn.
+
+---
+
 ## 2. Công thức các biên dạng cắt
 
 ### 2.1 Mặt phẳng cắt (cắt đứt / cắt vát)
@@ -116,12 +191,19 @@ Cả hai công thức được kiểm chứng bằng cách dựng lại điểm 
 
 ### 2.4 Các biên dạng khác
 
-| Biên dạng | Trên mặt phẳng trải |
-|---|---|
-| Rãnh chữ nhật | hình chữ nhật `L × (R·Δθ)`, bo góc bằng cung tròn |
-| Tròn trên bề mặt | đường tròn thật (khác lỗ khoan!) |
-| Xoắn ốc | đường **thẳng** — đó là lý do xoắn ốc cắt rất mượt |
-| Biên dạng tự do | chép nguyên xi từ tệp CSV/DXF |
+| Biên dạng | Trên mặt phẳng trải | Ống hộp |
+|---|---|---|
+| Rãnh chữ nhật | hình chữ nhật, bo góc bằng cung tròn | ✔ |
+| Tròn trên bề mặt | đường tròn thật (khác lỗ khoan!) | ✔ |
+| Xoắn ốc | đường **thẳng** — đó là lý do xoắn ốc cắt rất mượt | ✔ |
+| Biên dạng tự do | chép nguyên xi từ tệp CSV/DXF | ✔ |
+| Cắt đứt / cắt vát | ``u = x0 + tanα · (hình chiếu của điểm lên phương nghiêng)`` | ✔ |
+| Miệng cá, lỗ xuyên | công thức giao hai mặt trụ | ✘ chỉ ống tròn |
+
+Công thức cắt vát ở dạng tổng quát đúng cho mọi tiết diện: với ống tròn, hình
+chiếu là ``R·cos(θ−roll)`` nên đường cắt trải phẳng là hình sin; với ống hộp, hình
+chiếu tuyến tính theo toạ độ điểm nên đường cắt là **thẳng vuông góc trục trên mặt
+trên/dưới và chéo trên hai mặt bên** - đúng như nhát cắt vát ống hộp làm bằng tay.
 
 ---
 
@@ -353,5 +435,11 @@ trước nên đường chạy tự cắt nhau cũng không làm hình nhảy lu
   góc tối ưu trong khả năng của bốn trục.
 * **Không có điều khiển chiều cao tự động (THC)** — phần mềm đặt Z theo giá trị
   cố định. Nếu phôi cong hoặc ô van nhiều, nên dùng THC phần cứng.
+* **Ống hộp không cắt được biên dạng miệng cá và lỗ xuyên** - hai bài toán này
+  là giao của hai mặt trụ nên chỉ có nghĩa với ống tròn. Với ống hộp hãy dùng
+  rãnh, tròn trên bề mặt hoặc biên dạng trải phẳng.
+* **Góc nhọn tuyệt đối (bán kính góc lượn = 0) không cắt được**: pháp tuyến đổi
+  hướng đột ngột 90°, máy phải xoay tại chỗ. Ống hộp thật luôn có góc lượn nên
+  phần mềm mặc định lấy 2 lần chiều dày thành.
 * **Bù kerf cho biên dạng tự cắt nhau nhiều lần** (biên dạng rất phức tạp, kerf
   lớn) có thể còn sót vòng lặp; hãy xem kỹ bản xem trước trước khi cắt.

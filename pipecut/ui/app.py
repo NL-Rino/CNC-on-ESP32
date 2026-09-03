@@ -42,6 +42,11 @@ from .widgets import PAD, Console, DRO, FieldGrid, ParamForm, StatusBadge
 
 APP_TITLE = "PipeCut Studio - Máy cắt ống 4 trục (ESP32 / FluidNC)"
 
+# Nhãn hiển thị cho từng dạng tiết diện phôi
+SHAPE_LABEL = {"round": "Ống tròn", "square": "Ống hộp vuông",
+               "rect": "Ống hộp chữ nhật"}
+LABEL_SHAPE = {v: k for k, v in SHAPE_LABEL.items()}
+
 
 class MainWindow:
     """Toàn bộ giao diện."""
@@ -154,16 +159,29 @@ class MainWindow:
         body.columnconfigure(1, weight=1)
         body.columnconfigure(2, weight=1)
 
-        pipe = ttk.LabelFrame(body, text="Phôi ống", padding=PAD)
+        pipe = ttk.LabelFrame(body, text="Phôi", padding=PAD)
         pipe.grid(row=0, column=0, sticky="nsew", padx=(0, PAD))
         p = self.profile.pipe
         self.f_pipe = FieldGrid(pipe, [
+            ("shape", "Hình dạng", SHAPE_LABEL.get(p.shape, SHAPE_LABEL["round"]),
+             "choice", list(SHAPE_LABEL.values())),
             ("outer_diameter", "Đường kính ngoài [mm]", p.outer_diameter),
-            ("wall_thickness", "Chiều dày [mm]", p.wall_thickness),
+            ("width", "Cạnh ngang [mm]", p.width),
+            ("height", "Cạnh dọc [mm]", p.height),
+            ("corner_radius", "Bán kính góc lượn [mm]", p.corner_radius),
+            ("wall_thickness", "Chiều dày thành [mm]", p.wall_thickness),
             ("length", "Chiều dài phôi [mm]", p.length),
             ("material", "Vật liệu", p.material, "str"),
         ], columns=1)
         self.f_pipe.pack(fill="x")
+        self.lbl_pipe = ttk.Label(pipe, text="", foreground="#5a646e", wraplength=250,
+                                  justify="left")
+        self.lbl_pipe.pack(fill="x", pady=(6, 0))
+        ttk.Label(pipe, foreground="#8a949e", wraplength=250, justify="left",
+                  font=("TkDefaultFont", 8),
+                  text=("Ống tròn dùng ô đường kính; ống hộp dùng hai ô cạnh "
+                        "(hộp vuông chỉ cần cạnh ngang). Góc lượn để 0 thì phần "
+                        "mềm tự lấy 2 lần chiều dày thành.")).pack(fill="x", pady=(4, 0))
 
         proc = ttk.LabelFrame(body, text="Tiến trình cắt", padding=PAD)
         proc.grid(row=0, column=1, sticky="nsew", padx=(0, PAD))
@@ -647,11 +665,15 @@ class MainWindow:
             if along and rot and along.letter in pos and rot.letter in pos:
                 x = _undo(pos[along.letter], along)
                 a = _undo(pos[rot.letter], rot)
-                self.preview.set_tool_position(x, a)
-                self._mirror_machine(st, pos, x, a)
+                cross_ax = self.profile.axis(ROLE_CROSS)
+                xc = (_undo(pos[cross_ax.letter], cross_ax)
+                      if cross_ax and cross_ax.letter in pos else 0.0)
+                v = self.profile.pipe.section().s_of_contact(a, xc)
+                self.preview.set_tool_position(x, v)
+                self._mirror_machine(st, pos, x, v)
 
     def _mirror_machine(self, st: MachineStatus, pos: Dict[str, float],
-                        x: float, a: float) -> None:
+                        x: float, v: float) -> None:
         """Chiếu trạng thái máy thật lên khung mô phỏng.
 
         FluidNC báo phụ kiện đang bật trong trường ``A:`` của báo cáo trạng
@@ -682,16 +704,10 @@ class MainWindow:
             if torch and not self._live_torch:
                 self._live_pen_up = True
             if torch:
-                cross = self.profile.axis(ROLE_CROSS)
-                phi = 0.0
-                if cross and cross.letter in pos:
-                    r = max(self.profile.pipe.radius, 1e-6)
-                    xc = _undo(pos[cross.letter], cross)
-                    phi = math.degrees(math.asin(max(-1.0, min(1.0, xc / r))))
                 if (not self._live_trace
                         or abs(self._live_trace[-1].x - x) > 0.3
-                        or abs(self._live_trace[-1].theta - (a + phi)) > 0.3):
-                    self._live_trace.append(TracePoint(0.0, x, a + phi,
+                        or abs(self._live_trace[-1].v - v) > 0.3):
+                    self._live_trace.append(TracePoint(0.0, x, v,
                                                        start=self._live_pen_up))
                     self._live_pen_up = False
                     if len(self._live_trace) > 20000:
@@ -776,7 +792,12 @@ class MainWindow:
     # ==================================================================
     def apply_profile(self, silent: bool = False) -> None:
         p = self.profile
+        label = self.f_pipe.get("shape", SHAPE_LABEL[p.pipe.shape])
+        p.pipe.shape = LABEL_SHAPE.get(str(label), p.pipe.shape)
         p.pipe.outer_diameter = self.f_pipe.get("outer_diameter", p.pipe.outer_diameter)
+        p.pipe.width = self.f_pipe.get("width", p.pipe.width)
+        p.pipe.height = self.f_pipe.get("height", p.pipe.height)
+        p.pipe.corner_radius = self.f_pipe.get("corner_radius", p.pipe.corner_radius)
         p.pipe.wall_thickness = self.f_pipe.get("wall_thickness", p.pipe.wall_thickness)
         p.pipe.length = self.f_pipe.get("length", p.pipe.length)
         p.pipe.material = self.f_pipe.get("material", p.pipe.material)
@@ -800,6 +821,15 @@ class MainWindow:
         if not silent:
             self.status_var.set("Đã áp dụng thông số máy.")
         self._refresh_axes_table()
+        try:
+            sec = p.pipe.section()
+            note = f"{sec.describe()} · chu vi {sec.perimeter:.1f} mm"
+            if not p.pipe.is_round:
+                note += (f" · góc lượn R{getattr(sec, 'rc', 0):.1f}"
+                         f" · trục ngang cần chạy ±{sec.hx - sec.rc:.0f} mm")
+            self.lbl_pipe.configure(text=note)
+        except Exception as exc:
+            self.lbl_pipe.configure(text=f"Tiết diện không hợp lệ: {exc}")
 
     def save_profile(self) -> None:
         self.apply_profile(silent=True)

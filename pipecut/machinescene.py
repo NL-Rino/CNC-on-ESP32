@@ -121,7 +121,8 @@ class MachinePose:
     def __init__(self, profile: MachineProfile, state: SimState):
         self.profile = profile
         self.state = state
-        self.radius = max(profile.pipe.radius, 1.0)
+        self.section = profile.pipe.section()
+        self.radius = max(profile.pipe.radius, 1.0)   # bán kính bao ngoài
         self.length = max(profile.pipe.length, 10.0)
         self.along = self.axis(ROLE_ALONG)
         self.rotary = self.axis(ROLE_ROTARY)
@@ -143,18 +144,32 @@ class MachinePose:
         v -= ax.offset
         return -v if ax.invert else v
 
-    def surface(self, theta_world_deg: float, y: float, scale: float = 1.0) -> Vec3:
-        a = math.radians(theta_world_deg)
-        r = self.radius * scale
-        return (r * math.sin(a), y, r * math.cos(a))
+    def _rotate(self, cx: float, cy: float) -> Tuple[float, float]:
+        """Quay một điểm của tiết diện theo góc trục A hiện tại."""
+        a = math.radians(self.rotary)
+        return (cx * math.cos(a) - cy * math.sin(a),
+                cx * math.sin(a) + cy * math.cos(a))
 
-    def material_point(self, x: float, theta: float, scale: float = 1.0) -> Vec3:
+    def surface(self, v: float, y: float, scale: float = 1.0) -> Vec3:
+        """Điểm trên bề mặt phôi (vị trí cung ``v``) -> toạ độ thế giới."""
+        cx, cy = self.section.point_at(v % self.section.perimeter)
+        rx, rz = self._rotate(cx * scale, cy * scale)
+        return (rx, y, rz)
+
+    def material_point(self, x: float, v: float, scale: float = 1.0) -> Vec3:
         """Điểm gắn trên phôi -> toạ độ thế giới (đã tính tịnh tiến và quay)."""
-        return self.surface(theta - self.rotary, x + self.y_head, scale)
+        return self.surface(v, x + self.y_head, scale)
 
-    def normal(self, theta_world_deg: float) -> Vec3:
-        a = math.radians(theta_world_deg)
-        return (math.sin(a), 0.0, math.cos(a))
+    def normal(self, v: float) -> Vec3:
+        """Pháp tuyến ngoài tại vị trí ``v``, trong hệ thế giới."""
+        psi = math.radians(self.section.normal_angle(v % self.section.perimeter)
+                           - self.rotary)
+        return (math.sin(psi), 0.0, math.cos(psi))
+
+    @property
+    def top_height(self) -> float:
+        """Chiều cao bề mặt tại điểm mốc - chính là gốc Z khi rà dao."""
+        return self.section.reference_height
 
 
 # ----------------------------------------------------------------------
@@ -207,32 +222,50 @@ def _frame(pose: MachinePose, P) -> List[Prim]:
 
 
 def _ring(pose: MachinePose, radius_scale: float, y: float, step: int = 6) -> List[Vec3]:
+    """Vành tròn (dùng cho mâm cặp) - luôn tròn dù phôi hình gì."""
     r = pose.radius * radius_scale
     return [(r * math.sin(math.radians(k)), y, r * math.cos(math.radians(k)))
             for k in range(0, 360, step)]
 
 
+def _section_ring(pose: MachinePose, y: float, steps: int = 72) -> List[Vec3]:
+    """Đường bao tiết diện phôi tại một mặt cắt ngang."""
+    per = pose.section.perimeter
+    return [pose.surface(per * i / steps, y) for i in range(steps)]
+
+
 def _pipe(pose: MachinePose, cam: Camera, P) -> List[Prim]:
     out: List[Prim] = []
     r = pose.radius
-    # 1) thân ống tô đặc -> che hết những gì nằm phía sau
-    hull = convex_hull([P(p) for p in _ring(pose, 1.0, pose.y_head)
-                        + _ring(pose, 1.0, pose.y_tail)])
+    # 1) thân phôi tô đặc -> che hết những gì nằm phía sau
+    hull = convex_hull([P(p) for p in _section_ring(pose, pose.y_head)
+                        + _section_ring(pose, pose.y_tail)])
     if len(hull) >= 3:
         out.append(Prim("fill", hull, COLOR_PIPE_EDGE, 1.4, fill=COLOR_PIPE_FILL))
-    # 2) hai vành đầu ống, chỉ nửa hướng về người xem
+    # 2) hai vành đầu phôi, chỉ nửa hướng về người xem
+    per = pose.section.perimeter
+    steps = 96
     for y in (pose.y_head, pose.y_tail):
         out.extend(_visible_runs(
-            [(k, P(pose.surface(k, y))) for k in range(0, 365, 5)],
+            [(per * i / steps, P(pose.surface(per * i / steps, y)))
+             for i in range(steps + 1)],
             cam, pose, COLOR_PIPE_EDGE, 1.2))
-    # 3) đường sinh - quay theo trục A nên nhìn thấy ống đang xoay
-    for k in range(0, 360, 30):
-        theta_w = k - pose.rotary
-        if not cam.faces_viewer(pose.normal(theta_w)):
+    # 3) đường sinh - quay theo trục A nên nhìn thấy phôi đang xoay.
+    #    Với ống hộp, thêm hẳn đường sinh ở các cạnh để thấy rõ hình hộp.
+    marks = [per * k / 12 for k in range(12)]
+    edges = [b for b in pose.section.breakpoints() if b < per - 1e-9]
+    for v in sorted(set(marks + edges)):
+        if not cam.faces_viewer(pose.normal(v)):
             continue
-        color, width = (COLOR_SEAM, 2.2) if k == 0 else (COLOR_PIPE_LINE, 1.0)
-        out.append(Prim("poly", [P(pose.surface(theta_w, pose.y_head)),
-                                 P(pose.surface(theta_w, pose.y_tail))], color, width))
+        is_edge = any(abs(v - b) < 1e-6 for b in edges)
+        if abs(v) < 1e-9:
+            color, width = COLOR_SEAM, 2.2          # vạch mốc 0 độ
+        elif is_edge:
+            color, width = COLOR_PIPE_EDGE, 1.4     # cạnh ống hộp
+        else:
+            color, width = COLOR_PIPE_LINE, 1.0
+        out.append(Prim("poly", [P(pose.surface(v, pose.y_head)),
+                                 P(pose.surface(v, pose.y_tail))], color, width))
     return out
 
 
@@ -241,8 +274,8 @@ def _visible_runs(samples, cam: Camera, pose: MachinePose, color: str,
     """Gom các điểm liền nhau còn nhìn thấy thành từng nét."""
     out: List[Prim] = []
     run: List[Vec2] = []
-    for theta_w, pt in samples:
-        if cam.faces_viewer(pose.normal(theta_w)):
+    for v, pt in samples:
+        if cam.faces_viewer(pose.normal(v)):
             run.append(pt)
         elif len(run) >= 2:
             out.append(Prim("poly", run, color, width))
@@ -264,11 +297,14 @@ def _chuck(pose: MachinePose, cam: Camera, P) -> List[Prim]:
     if len(hull) >= 3:
         out.append(Prim("fill", hull, COLOR_CHUCK, 1.4, fill=COLOR_CHUCK_FILL))
     for k in range(0, 360, 120):        # ba vấu kẹp cho thấy mâm đang quay
-        theta_w = k - pose.rotary
-        if not cam.faces_viewer(pose.normal(theta_w)):
+        a = math.radians(k - pose.rotary)
+        n = (math.sin(a), 0.0, math.cos(a))
+        if not cam.faces_viewer(n):
             continue
-        out.append(Prim("poly", [P(pose.surface(theta_w, y0, 1.55)),
-                                 P(pose.surface(theta_w, y0, 0.98))], COLOR_CHUCK, 3.0))
+        rc = pose.radius
+        out.append(Prim("poly", [P((rc * 1.55 * n[0], y0, rc * 1.55 * n[2])),
+                                 P((rc * 0.98 * n[0], y0, rc * 0.98 * n[2]))],
+                        COLOR_CHUCK, 3.0))
     return out
 
 
@@ -305,11 +341,10 @@ def _trace(pose: MachinePose, cam: Camera, P, trace: Sequence[TracePoint],
         if tp.start:            # nhấc dao: không nối sang lượt cắt kế tiếp
             flush()
             prev_ok = False
-        theta_w = tp.theta - pose.rotary
-        if cam.faces_viewer(pose.normal(theta_w)):
-            if not prev_ok:     # vừa vòng ra sau lưng ống rồi quay lại
+        if cam.faces_viewer(pose.normal(tp.v)):
+            if not prev_ok:     # vừa vòng ra sau lưng phôi rồi quay lại
                 flush()
-            run.append(P(pose.material_point(tp.x, tp.theta, 1.002)))
+            run.append(P(pose.material_point(tp.x, tp.v, 1.004)))
             prev_ok = True
         else:
             flush()
@@ -323,7 +358,7 @@ def _torch(pose: MachinePose, P) -> List[Prim]:
     out: List[Prim] = []
     r = pose.radius
     x = pose.cross
-    tip = r + pose.lift          # Z0 = mũi cắt chạm đỉnh ống
+    tip = pose.top_height + pose.lift   # Z0 = mũi cắt chạm bề mặt ở vị trí mốc
     nozzle = tip + r * 0.32
     body_top = tip + r * 1.5
     out.append(Prim("poly", [P((-r * 1.6, 0.0, body_top)), P((r * 1.6, 0.0, body_top))],
@@ -333,7 +368,8 @@ def _torch(pose: MachinePose, P) -> List[Prim]:
     out.append(Prim("fill", [P((x - w, 0.0, nozzle)), P((x + w, 0.0, nozzle)),
                              P((x, 0.0, tip))], COLOR_TORCH, 1.0, fill=COLOR_TORCH))
     if pose.state.torch:
-        hit = math.sqrt(max(0.0, r * r - x * x)) if abs(x) < r else -r
+        # điểm chạm thật của tia cắt ở đúng tư thế hiện tại
+        hit = pose.section.surface_height(pose.rotary, x)
         out.append(Prim("poly", [P((x, 0.0, tip)), P((x, 0.0, hit))], COLOR_TORCH_HOT, 3.0))
         out.append(Prim("dot", [P((x, 0.0, hit))], COLOR_TORCH_HOT, 1.0,
                         fill=COLOR_TORCH_HOT, radius=4.0))
@@ -361,9 +397,10 @@ def scene_bounds(profile: MachineProfile, cam: Camera,
     y0 -= pad
     y1 += pad
     pts: List[Vec2] = []
+    per = pose.section.perimeter
     for y in (y0, y1):
-        for k in range(0, 360, 15):
-            pts.append(cam.project(pose.surface(k, y)))
+        for i in range(24):
+            pts.append(cam.project(pose.surface(per * i / 24, y)))
         for x in (-pose.radius * 1.75, pose.radius * 1.75):   # bệ máy
             pts.append(cam.project((x, y, -pose.radius * 1.95)))
     for x in (-pose.radius * 1.75, pose.radius * 1.75):       # cột mang mỏ cắt

@@ -48,9 +48,9 @@ class _Camera:
         return (sum(a * b for a, b in zip(p, self.right)),
                 -sum(a * b for a, b in zip(p, self.up)))
 
-    def visible(self, theta_deg: float) -> bool:
-        a = math.radians(theta_deg)
-        n = (0.0, math.sin(a), math.cos(a))
+    def visible(self, section, v: float) -> bool:
+        psi = math.radians(section.normal_angle(v % section.perimeter))
+        n = (0.0, math.sin(psi), math.cos(psi))
         return sum(x * y for x, y in zip(n, self.dir)) > -0.02
 
 
@@ -60,6 +60,7 @@ class PreviewCanvas(ttk.Frame):
     def __init__(self, master, **kw):
         super().__init__(master, **kw)
         self.profile: Optional[MachineProfile] = None
+        self.section = None
         self.passes: List[Pass] = []
         self.mode = tk.StringVar(value="flat")
         self.show_rapids = tk.BooleanVar(value=True)
@@ -96,35 +97,37 @@ class PreviewCanvas(ttk.Frame):
     # ------------------------------------------------------------------
     def set_data(self, profile: MachineProfile, passes: Sequence[Pass]) -> None:
         self.profile = profile
+        self.section = profile.pipe.section()
         self.passes = list(passes)
         self._tool = None
         self.refit()
 
-    def set_tool_position(self, x: float, theta: float) -> None:
-        self._tool = (x, theta)
+    def set_tool_position(self, x: float, v: float) -> None:
+        """Vị trí mũi cắt, ``v`` là vị trí cung trên bề mặt phôi."""
+        self._tool = (x, v)
         self._draw_tool()
 
     # ------------------------------------------------------------------
     def _world_points(self) -> List[Tuple[float, float]]:
         """Toàn bộ điểm ở toạ độ thế giới của chế độ đang xem."""
         pts: List[Tuple[float, float]] = []
-        if not self.profile:
+        if not self.profile or not self.section:
             return pts
-        r = self.profile.pipe.radius
+        sec = self.section
+        per = sec.perimeter
         length = max(self.profile.pipe.length, 1.0)
         if self.mode.get() == "flat":
-            circ = 2 * math.pi * r
-            pts.extend([(0.0, 0.0), (length, circ)])
+            pts.extend([(0.0, 0.0), (length, per)])
             for ps in self.passes:
                 for p in ps.points:
-                    pts.append((p.x, math.radians(p.theta % 360.0) * r))
+                    pts.append((p.x, p.v % per))
         else:
             for xx in (0.0, length):
-                for k in range(0, 360, 10):
-                    pts.append(self.cam.project(_surface(xx, k, r)))
+                for i in range(36):
+                    pts.append(self.cam.project(_surface(sec, xx, per * i / 36)))
             for ps in self.passes:
                 for p in ps.points:
-                    pts.append(self.cam.project(_surface(p.x, p.theta, r)))
+                    pts.append(self.cam.project(_surface(sec, p.x, p.v)))
         return pts
 
     def refit(self) -> None:
@@ -194,17 +197,22 @@ class PreviewCanvas(ttk.Frame):
     def _draw_flat(self) -> None:
         c = self.canvas
         pf = self.profile
-        r = pf.pipe.radius
-        circ = 2 * math.pi * r
+        sec = self.section
+        circ = sec.perimeter
         length = max(pf.pipe.length, 1.0)
         a = self._to_screen(0, 0)
         b = self._to_screen(length, circ)
         c.create_rectangle(a[0], a[1], b[0], b[1], outline=COLOR_PIPE, fill="#fbfcfd")
         for k in range(1, 4):
-            y = self._to_screen(0, circ * k / 4)[1]
+            vk = sec.s_of_theta(90.0 * k)
+            y = self._to_screen(0, vk)[1]
             c.create_line(a[0], y, b[0], y, fill=COLOR_GRID)
             c.create_text(a[0] - 4, y, anchor="e", text=f"{90 * k}°", fill=COLOR_TEXT,
                           font=("TkDefaultFont", 7))
+        for br in sec.breakpoints():      # cạnh của ống hộp
+            if 0 < br < circ:
+                y = self._to_screen(0, br)[1]
+                c.create_line(a[0], y, b[0], y, fill=COLOR_PIPE, dash=(3, 3))
         step = _nice_step(length)
         x = 0.0
         while x <= length + 1e-6:
@@ -218,46 +226,49 @@ class PreviewCanvas(ttk.Frame):
         for ps in self.passes:
             color = COLOR_MARK if ps.kind == "mark" else COLOR_CUT
             if self.show_rapids.get() and prev_end is not None:
-                p0 = self._to_screen(prev_end[0], math.radians(prev_end[1] % 360.0) * r)
-                p1 = self._to_screen(ps.points[0].x, math.radians(ps.points[0].theta % 360.0) * r)
+                p0 = self._to_screen(prev_end[0], prev_end[1] % circ)
+                p1 = self._to_screen(ps.points[0].x, ps.points[0].v % circ)
                 c.create_line(p0[0], p0[1], p1[0], p1[1], fill=COLOR_RAPID, dash=(4, 3))
             seg: List[float] = []
             prev_v = None
-            for i, p in enumerate(ps.points):
-                v = p.theta % 360.0
-                if prev_v is not None and abs(v - prev_v) > 180.0:
-                    self._flush(seg, color, 2 if i > ps.lead_in_count else 2)
+            for p in ps.points:
+                v = p.v % circ
+                if prev_v is not None and abs(v - prev_v) > circ / 2:
+                    self._flush(seg, color, 2)   # chỗ vòng qua mốc 0
                     seg = []
                 prev_v = v
-                sx, sy = self._to_screen(p.x, math.radians(v) * r)
+                sx, sy = self._to_screen(p.x, v)
                 seg.extend([sx, sy])
             self._flush(seg, color, 2)
             if ps.lead_in_count:
                 lead: List[float] = []
                 for p in ps.points[:ps.lead_in_count + 1]:
-                    sx, sy = self._to_screen(p.x, math.radians(p.theta % 360.0) * r)
+                    sx, sy = self._to_screen(p.x, p.v % circ)
                     lead.extend([sx, sy])
                 self._flush(lead, COLOR_LEAD, 2)
             p0 = ps.points[0]
-            s = self._to_screen(p0.x, math.radians(p0.theta % 360.0) * r)
+            s = self._to_screen(p0.x, p0.v % circ)
             c.create_oval(s[0] - 3, s[1] - 3, s[0] + 3, s[1] + 3, fill=COLOR_LEAD, outline="")
-            prev_end = (ps.points[-1].x, ps.points[-1].theta)
+            prev_end = (ps.points[-1].x, ps.points[-1].v)
 
     def _draw_iso(self) -> None:
         c = self.canvas
         pf = self.profile
-        r = pf.pipe.radius
+        sec = self.section
+        per = sec.perimeter
         length = max(pf.pipe.length, 1.0)
-        for k in range(0, 360, 15):
-            if not self.cam.visible(k):
+        marks = sorted(set([per * k / 24 for k in range(24)]
+                           + [b for b in sec.breakpoints() if b < per]))
+        for v in marks:
+            if not self.cam.visible(sec, v):
                 continue
-            p0 = self._to_screen(*self.cam.project(_surface(0.0, k, r)))
-            p1 = self._to_screen(*self.cam.project(_surface(length, k, r)))
+            p0 = self._to_screen(*self.cam.project(_surface(sec, 0.0, v)))
+            p1 = self._to_screen(*self.cam.project(_surface(sec, length, v)))
             c.create_line(p0[0], p0[1], p1[0], p1[1], fill=COLOR_PIPE)
         for xx in (0.0, length):
             pts: List[float] = []
-            for k in range(0, 361, 5):
-                s = self._to_screen(*self.cam.project(_surface(xx, k, r)))
+            for i in range(97):
+                s = self._to_screen(*self.cam.project(_surface(sec, xx, per * i / 96)))
                 pts.extend(s)
             c.create_line(*pts, fill=COLOR_PIPE)
 
@@ -266,18 +277,18 @@ class PreviewCanvas(ttk.Frame):
             color = COLOR_MARK if ps.kind == "mark" else COLOR_CUT
             seg: List[float] = []
             for p in ps.points:
-                if self.cam.visible(p.theta):
-                    s = self._to_screen(*self.cam.project(_surface(p.x, p.theta, r)))
+                if self.cam.visible(sec, p.v):
+                    s = self._to_screen(*self.cam.project(_surface(sec, p.x, p.v)))
                     seg.extend(s)
                 else:
                     self._flush(seg, color, 2)
                     seg = []
             self._flush(seg, color, 2)
             if self.show_rapids.get() and prev_end is not None:
-                p0 = self._to_screen(*self.cam.project(_surface(prev_end[0], prev_end[1], r)))
-                p1 = self._to_screen(*self.cam.project(_surface(ps.points[0].x, ps.points[0].theta, r)))
+                p0 = self._to_screen(*self.cam.project(_surface(sec, prev_end[0], prev_end[1])))
+                p1 = self._to_screen(*self.cam.project(_surface(sec, ps.points[0].x, ps.points[0].v)))
                 c.create_line(p0[0], p0[1], p1[0], p1[1], fill=COLOR_RAPID, dash=(4, 3))
-            prev_end = (ps.points[-1].x, ps.points[-1].theta)
+            prev_end = (ps.points[-1].x, ps.points[-1].v)
 
     def _flush(self, coords: List[float], color: str, width: int) -> None:
         if len(coords) >= 4:
@@ -288,21 +299,23 @@ class PreviewCanvas(ttk.Frame):
         self.canvas.delete("tool")
         if not self._tool or not self.profile:
             return
-        x, theta = self._tool
-        r = self.profile.pipe.radius
+        x, v = self._tool
+        if not self.section:
+            return
         if self.mode.get() == "flat":
-            s = self._to_screen(x, math.radians(theta % 360.0) * r)
+            s = self._to_screen(x, v % self.section.perimeter)
         else:
-            s = self._to_screen(*self.cam.project(_surface(x, theta, r)))
+            s = self._to_screen(*self.cam.project(_surface(self.section, x, v)))
         self.canvas.create_oval(s[0] - 5, s[1] - 5, s[0] + 5, s[1] + 5,
                                 outline=COLOR_TOOL, width=2, tags="tool")
         self.canvas.create_line(s[0] - 9, s[1], s[0] + 9, s[1], fill=COLOR_TOOL, tags="tool")
         self.canvas.create_line(s[0], s[1] - 9, s[0], s[1] + 9, fill=COLOR_TOOL, tags="tool")
 
 
-def _surface(x: float, theta_deg: float, radius: float) -> Tuple[float, float, float]:
-    a = math.radians(theta_deg)
-    return (x, radius * math.sin(a), radius * math.cos(a))
+def _surface(section, x: float, v: float) -> Tuple[float, float, float]:
+    """Điểm trên bề mặt phôi ở toạ độ trải phẳng (x, v) -> toạ độ 3D."""
+    cx, cy = section.point_at(v % section.perimeter)
+    return (x, cx, cy)
 
 
 def _nice_step(span: float) -> float:

@@ -76,8 +76,14 @@ def cmd_profile(args: argparse.Namespace) -> int:
 def cmd_gen(args: argparse.Namespace) -> int:
     profile = _load_profile(args.profile)
     job = Job.load(args.job)
+    if getattr(args, "shape", None):
+        profile.pipe.shape = args.shape
     if args.diameter:
         profile.pipe.outer_diameter = args.diameter
+    if getattr(args, "width", None):
+        profile.pipe.width = args.width
+    if getattr(args, "height", None):
+        profile.pipe.height = args.height
     if args.feed:
         profile.process.cut_feed = args.feed
     if args.kerf is not None:
@@ -94,7 +100,8 @@ def cmd_gen(args: argparse.Namespace) -> int:
 
     s = program.stats
     print(f"Công việc      : {job.name}")
-    print(f"Ống            : D{profile.pipe.outer_diameter:.1f} x {profile.pipe.wall_thickness:.1f} mm")
+    print(f"Phôi           : {profile.pipe.section().describe()} "
+          f"x dày {profile.pipe.wall_thickness:.1f} mm")
     print(f"Số biên dạng   : {len(toolpath.contours)}")
     print(f"Chiều dài cắt  : {s.cut_length:.1f} mm  ({s.pierces} điểm mồi)")
     print(f"Số dòng G-code : {s.lines}  ({s.moves} lệnh dịch chuyển)")
@@ -253,6 +260,15 @@ def cmd_demo(args: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------------------------------
+def _add_profile_arg(sp: argparse.ArgumentParser) -> None:
+    """Cho phép đặt --profile ở cả trước lẫn sau tên lệnh con.
+
+    ``SUPPRESS`` để khi không gõ thì không ghi đè giá trị đã đặt ở mức trên.
+    """
+    sp.add_argument("-p", "--profile", default=argparse.SUPPRESS,
+                    help="tệp hồ sơ máy (.json)")
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="pipecut",
@@ -267,6 +283,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("profile", help="xem hoặc tạo hồ sơ máy")
     sp.add_argument("--init", metavar="TỆP", help="tạo hồ sơ mặc định")
+    _add_profile_arg(sp)
     sp.set_defaults(func=cmd_profile)
 
     sg = sub.add_parser("gen", help="sinh G-code từ tệp công việc")
@@ -277,9 +294,14 @@ def build_parser() -> argparse.ArgumentParser:
                     help="xuất ảnh mô phỏng máy (SVG) tại một thời điểm")
     sg.add_argument("--at", type=float,
                     help="thời điểm chụp ảnh mô phỏng, tính theo %% chương trình (mặc định 60)")
-    sg.add_argument("--diameter", type=float, help="ghi đè đường kính ống")
+    sg.add_argument("--diameter", type=float, help="ghi đè đường kính ống tròn")
+    sg.add_argument("--shape", choices=["round", "square", "rect"],
+                    help="ghi đè hình dạng phôi")
+    sg.add_argument("--width", type=float, help="ghi đè cạnh ngang ống hộp")
+    sg.add_argument("--height", type=float, help="ghi đè cạnh dọc ống hộp")
     sg.add_argument("--feed", type=float, help="ghi đè tốc độ cắt")
     sg.add_argument("--kerf", type=float, help="ghi đè bề rộng mạch cắt")
+    _add_profile_arg(sg)
     sg.set_defaults(func=cmd_gen)
 
     spv = sub.add_parser("preview", help="chỉ xuất bản vẽ xem trước")
@@ -289,8 +311,12 @@ def build_parser() -> argparse.ArgumentParser:
                      help="xuất thêm ảnh mô phỏng máy")
     spv.add_argument("--at", type=float, help="thời điểm chụp, %% chương trình")
     spv.add_argument("--diameter", type=float)
+    spv.add_argument("--shape", choices=["round", "square", "rect"])
+    spv.add_argument("--width", type=float)
+    spv.add_argument("--height", type=float)
     spv.add_argument("--feed", type=float)
     spv.add_argument("--kerf", type=float)
+    _add_profile_arg(spv)
     spv.set_defaults(func=cmd_preview)
 
     ss = sub.add_parser("send", help="nạp tệp G-code xuống máy")
@@ -298,6 +324,7 @@ def build_parser() -> argparse.ArgumentParser:
     ss.add_argument("--port", required=True, help="ví dụ COM5, /dev/ttyUSB0 hoặc GIA-LAP")
     ss.add_argument("--baud", type=int)
     ss.add_argument("-q", "--quiet", action="store_true")
+    _add_profile_arg(ss)
     ss.set_defaults(func=cmd_send)
 
     sm = sub.add_parser("sim", help="chạy thử tệp G-code trên máy ảo")
@@ -305,6 +332,7 @@ def build_parser() -> argparse.ArgumentParser:
     sm.add_argument("--speed", type=float, default=None,
                     help="hệ số tăng tốc máy ảo (1 = thời gian thực)")
     sm.add_argument("-q", "--quiet", action="store_true")
+    _add_profile_arg(sm)
     sm.set_defaults(func=cmd_sim)
 
     sr = sub.add_parser("run", help="sinh G-code rồi nạp thẳng xuống máy")
@@ -313,10 +341,12 @@ def build_parser() -> argparse.ArgumentParser:
     sr.add_argument("--baud", type=int)
     sr.add_argument("-y", "--yes", action="store_true", help="không hỏi xác nhận")
     sr.add_argument("-q", "--quiet", action="store_true")
+    _add_profile_arg(sr)
     sr.set_defaults(func=cmd_run)
 
     su = sub.add_parser("ui", help="mở giao diện đồ hoạ")
     su.add_argument("--job", help="mở sẵn một tệp công việc")
+    _add_profile_arg(su)
     su.set_defaults(func=cmd_ui)
 
     sd = sub.add_parser("demo", help="tạo tệp cấu hình và công việc mẫu")
@@ -328,6 +358,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = build_parser()
     args = ap.parse_args(argv)
+    if not hasattr(args, "profile"):
+        args.profile = None
     if not getattr(args, "command", None):
         ap.print_help()
         return 0

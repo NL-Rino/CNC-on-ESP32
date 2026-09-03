@@ -58,11 +58,16 @@ class SimState:
 
 @dataclass
 class TracePoint:
-    """Một điểm vết cắt, ghi theo **toạ độ trên phôi** nên nằm yên khi ống xoay."""
+    """Một điểm vết cắt, ghi theo **toạ độ trên phôi** nên nằm yên khi phôi
+    trượt và xoay.
+
+    ``v`` là vị trí tính theo chu vi tiết diện (mm) - dùng được cho cả ống tròn
+    lẫn ống hộp, khác với góc quay của máy.
+    """
 
     time: float
-    x: float          # mm dọc theo ống, tính từ gốc chi tiết
-    theta: float      # độ, góc trên phôi
+    x: float          # mm dọc theo phôi, tính từ gốc chi tiết
+    v: float          # mm theo chu vi tiết diện
     start: bool = False   # True = mở đầu một lượt cắt mới (nhấc dao trước đó)
 
 
@@ -90,7 +95,7 @@ class Playback:
         torch = False
         t = 0.0
         cutting = False          # lượt cắt trước có liền mạch với đoạn này không
-        radius = max(pf.pipe.radius, 1e-6)
+        section = pf.pipe.section()
         along = pf.letter(ROLE_ALONG)
         rotary = pf.letter(ROLE_ROTARY)
         cross = pf.letter(ROLE_CROSS)
@@ -154,7 +159,7 @@ class Playback:
             # ghi vết cắt (chỉ khi nguồn cắt bật và đang chạy cắt)
             is_cut = torch and not rapid_mode and along and rotary
             if is_cut:
-                self._add_trace(move, along, rotary, cross, radius, trace_step,
+                self._add_trace(move, along, rotary, cross, section, trace_step,
                                 new_run=not cutting)
             cutting = bool(is_cut)
             t += duration
@@ -177,12 +182,14 @@ class Playback:
         return max(worst, 1e-4)
 
     def _add_trace(self, move: SimMove, along: str, rotary: str,
-                   cross: Optional[str], radius: float, step: float,
+                   cross: Optional[str], section, step: float,
                    new_run: bool = False) -> None:
         """Lấy mẫu vết cắt theo toạ độ trên phôi.
 
-        Nếu mỏ cắt lệch ngang một đoạn ``x_cross`` thì điểm chạm không còn nằm
-        ở vị trí 12 giờ nữa, mà lệch đi một góc ``asin(x_cross / R)``.
+        Tiết diện lo phần đổi ngược: biết góc quay và vị trí trục ngang thì suy
+        ra mũi cắt đang chạm vào đâu trên chu vi - đúng cho cả ống tròn lẫn ống
+        hộp (với ống hộp, cả một mặt phẳng có chung góc quay nên bắt buộc phải
+        dùng thêm trục ngang).
         """
         n = max(1, int(math.ceil(_axis_dist(move.start, move.end, (along, rotary)) / step)))
         n = min(n, 400)
@@ -190,11 +197,11 @@ class Playback:
             f = k / n
             x = _lerp(move.start.get(along, 0.0), move.end.get(along, 0.0), f)
             a = _lerp(move.start.get(rotary, 0.0), move.end.get(rotary, 0.0), f)
-            phi = 0.0
+            xc = 0.0
             if cross:
                 xc = _lerp(move.start.get(cross, 0.0), move.end.get(cross, 0.0), f)
-                phi = math.degrees(math.asin(max(-1.0, min(1.0, xc / radius))))
-            self.trace.append(TracePoint(move.t0 + move.duration * f, x, a + phi,
+            v = section.s_of_contact(a, xc)
+            self.trace.append(TracePoint(move.t0 + move.duration * f, x, v,
                                          start=(new_run and k == 0)))
 
     # ------------------------------------------------------------------

@@ -63,12 +63,24 @@ class Contour:
 
 @dataclass
 class CutPoint:
-    """Điểm đã cuốn lên ống, sẵn sàng đưa vào động học máy."""
+    """Điểm đã cuốn lên phôi, kèm tư thế máy để cắt vuông góc tại đó.
 
-    x: float             # mm dọc trục ống
-    theta: float         # ĐỘ, đã "gỡ cuộn" (có thể vượt 360 hoặc âm)
-    bevel: float = 0.0   # ĐỘ
-    cross: float = 0.0   # mm (trục ngang, thường = 0)
+    Hai nhóm số liệu:
+
+    * ``x`` và ``v`` là **toạ độ trên bề mặt phôi** (dọc phôi và theo chu vi) -
+      dùng để đo quãng đường thật, từ đó tính tốc độ cắt;
+    * ``theta``, ``cross``, ``surface_z`` là **tư thế máy** tương ứng, do tiết
+      diện phôi quyết định.  Ống tròn thì ``cross`` và ``surface_z`` luôn bằng
+      0; ống hộp thì trục ngang chạy dọc mặt phẳng còn trục Z bù chênh cao ở
+      góc lượn.
+    """
+
+    x: float                 # mm dọc phôi
+    v: float = 0.0           # mm theo chu vi (độ dài cung trên bề mặt)
+    theta: float = 0.0       # ĐỘ, trục xoay, đã gỡ cuộn (có thể vượt 360)
+    cross: float = 0.0       # mm, trục ngang
+    surface_z: float = 0.0   # mm, chênh cao bề mặt so với gốc Z
+    bevel: float = 0.0       # ĐỘ, trục vát
 
 
 @dataclass
@@ -86,9 +98,13 @@ class Toolpath:
     """Tập hợp các đường cắt của một công việc."""
 
     contours: List[Contour] = field(default_factory=list)
-    radius: float = 30.0
+    section: object = None        # pipecut.section.Section
     name: str = "job"
     meta: Dict[str, object] = field(default_factory=dict)
+
+    @property
+    def radius(self) -> float:
+        return getattr(self.section, "max_radius", 30.0)
 
     def add(self, contour: Contour) -> "Toolpath":
         self.contours.append(contour)

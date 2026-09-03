@@ -4,7 +4,7 @@ Quy ước chung
 -------------
 * Phôi ống nằm dọc trục X, quay quanh chính nó bằng trục A.
 * ``u`` = toạ độ dọc ống (mm), tăng dần về phía đầu tự do.
-* ``v`` = độ dài cung (mm) = R * theta; theta = 0 ở vị trí 12 giờ (ngay dưới mỏ cắt).
+* ``v`` = độ dài cung đo dọc chu vi tiết diện (mm); v = 0 ở vị trí 12 giờ.
 * Mọi hàm trả về ``Contour`` với dung sai rời rạc hoá do người gọi truyền vào.
 
 Toán học của các biên dạng giao tuyến ống được suy ra trực tiếp từ phương
@@ -17,11 +17,21 @@ import math
 from typing import Callable, List, Optional, Sequence, Tuple
 
 from . import geom2d as g
+from .section import RoundSection, Section
 from .toolpath import BEVEL_CONSTANT, BEVEL_FOLLOW, BEVEL_NONE, Contour, Point
 
 
 class ShapeError(ValueError):
     """Tham số biên dạng không hợp lệ về mặt hình học."""
+
+
+def _require_round(section: Section, what: str) -> RoundSection:
+    """Một số biên dạng chỉ có nghĩa với ống tròn."""
+    if not isinstance(section, RoundSection):
+        raise ShapeError(
+            f"{what} chỉ áp dụng cho ống tròn; phôi đang khai báo là {section.describe()}."
+        )
+    return section
 
 
 def _sample_closed(func: Callable[[float], Point], tol: float, max_points: int) -> List[Point]:
@@ -33,7 +43,7 @@ def _sample_closed(func: Callable[[float], Point], tol: float, max_points: int) 
 # 1. Cắt đứt / cắt vát góc (mặt phẳng cắt)
 # --------------------------------------------------------------------------
 def plane_cut(
-    radius: float,
+    section: Section,
     x: float,
     angle_deg: float = 0.0,
     roll_deg: float = 0.0,
@@ -42,27 +52,28 @@ def plane_cut(
     name: str = "cat-dut",
     max_points: int = 4000,
 ) -> Contour:
-    """Cắt đứt ống bằng một mặt phẳng nghiêng ``angle_deg`` so với mặt cắt vuông.
+    """Cắt đứt phôi bằng một mặt phẳng nghiêng ``angle_deg`` so với mặt cắt vuông.
 
-    Giao của mặt phẳng với mặt trụ là một ellipse; trải phẳng ra nó thành
-    hình sin thuần tuý::
+    Mặt phẳng cắt có phương trình ``x = x0 + tan(alpha)·p`` với ``p`` là hình
+    chiếu của điểm bề mặt lên phương nghiêng.  Công thức này đúng cho **mọi
+    tiết diện**:
 
-        u(theta) = x + R * tan(alpha) * cos(theta - roll)
+    * ống tròn -> ``p = R·cos(θ − roll)``, đường cắt trải phẳng là hình sin;
+    * ống hộp  -> ``p`` là toạ độ của điểm trên mặt phẳng, nên trên mặt trên
+      và mặt dưới đường cắt là **đường thẳng vuông góc trục**, còn trên hai mặt
+      bên là **đường chéo** - đúng như nhát cắt vát ống hộp làm bằng tay.
 
     ``angle_deg`` = 0 cho nhát cắt vuông góc, 30-45 độ cho ống nối co/cút.
-    ``roll_deg`` xoay hướng vát quanh ống.
     """
-    if radius <= 0:
-        raise ShapeError("Bán kính ống phải > 0.")
     if abs(angle_deg) >= 89.0:
         raise ShapeError("Góc cắt vát phải nhỏ hơn 89 độ.")
-    amp = radius * math.tan(math.radians(angle_deg))
-    roll = math.radians(roll_deg)
+    tan_a = math.tan(math.radians(angle_deg))
+    per = section.perimeter
 
-    def f(t: float) -> Point:
-        return (x + amp * math.cos(t - roll), radius * t)
+    def f(s_: float) -> Point:
+        return (x + tan_a * section.tilt_projection(s_, roll_deg), s_)
 
-    pts = g.adaptive_sample(f, 0.0, 2 * math.pi, tolerance, max_points=max_points)
+    pts = g.adaptive_sample(f, 0.0, per, tolerance, max_points=max_points)
     return Contour(
         points=pts,
         closed=False,
@@ -77,7 +88,7 @@ def plane_cut(
 # 2. Miệng cá / yên ngựa (ống nhánh cắt để ôm vào ống chính)
 # --------------------------------------------------------------------------
 def saddle_cut(
-    radius: float,
+    section: Section,
     main_radius: float,
     angle_deg: float = 90.0,
     offset: float = 0.0,
@@ -109,7 +120,7 @@ def saddle_cut(
       * ``toe``   - ``x_ref`` là vị trí điểm ăn sâu nhất (đáy miệng cá);
       * ``axis``  - ``x_ref`` là giao điểm hai đường tâm ống.
     """
-    r = radius
+    r = _require_round(section, "Biên dạng miệng cá").radius
     R = main_radius
     if r <= 0 or R <= 0:
         raise ShapeError("Bán kính ống phải > 0.")
@@ -167,7 +178,7 @@ def saddle_cut(
 # 3. Lỗ tròn xuyên thành ống (giao tuyến ống nhánh với ống chính - phía ống chính)
 # --------------------------------------------------------------------------
 def pierced_hole(
-    radius: float,
+    section: Section,
     hole_diameter: float,
     angle_deg: float = 90.0,
     offset: float = 0.0,
@@ -190,7 +201,7 @@ def pierced_hole(
     Với ``b = 90`` độ và ``e = 0`` ta được lỗ tròn khoan hướng tâm; với ``b``
     khác 90 độ là lỗ xiên (đầu nối chữ Y).
     """
-    R = radius
+    R = _require_round(section, "Lỗ xuyên thành ống").radius
     r = hole_diameter / 2.0
     if R <= 0 or r <= 0:
         raise ShapeError("Đường kính ống và lỗ phải > 0.")
@@ -202,7 +213,7 @@ def pierced_hole(
     if abs(math.sin(beta)) < 1e-6:
         raise ShapeError("Góc khoan phải khác 0 và 180 độ.")
     sb, cb = math.sin(beta), math.cos(beta)
-    v_center = math.radians(theta_center_deg) * R
+    v_center = section.s_of_theta(theta_center_deg)
 
     def f(t: float) -> Point:
         py = r * math.sin(t) + offset
@@ -226,7 +237,7 @@ def pierced_hole(
 # 4. Rãnh / cửa sổ chữ nhật (trải phẳng)
 # --------------------------------------------------------------------------
 def slot(
-    radius: float,
+    section: Section,
     x_center: float,
     theta_center_deg: float,
     axial_length: float,
@@ -246,15 +257,15 @@ def slot(
     if arc_width is None and angular_width_deg is None:
         raise ShapeError("Cần bề rộng rãnh (arc_width hoặc angular_width_deg).")
     if arc_width is None:
-        arc_width = math.radians(angular_width_deg or 0.0) * radius
+        arc_width = section.perimeter * (angular_width_deg or 0.0) / 360.0
     if arc_width <= 0:
         raise ShapeError("Bề rộng rãnh phải > 0.")
-    if arc_width > 2 * math.pi * radius:
-        raise ShapeError("Bề rộng rãnh vượt quá chu vi ống.")
+    if arc_width > section.perimeter:
+        raise ShapeError("Bề rộng rãnh vượt quá chu vi phôi.")
     hu = axial_length / 2.0
     hv = arc_width / 2.0
     cu = x_center
-    cv = math.radians(theta_center_deg) * radius
+    cv = section.s_of_theta(theta_center_deg)
     rect = [
         (cu - hu, cv - hv),
         (cu + hu, cv - hv),
@@ -279,7 +290,7 @@ def slot(
 # 5. Đường tròn "trắc địa" trên bề mặt (vạch dấu / lỗ đo theo bề mặt)
 # --------------------------------------------------------------------------
 def surface_circle(
-    radius: float,
+    section: Section,
     x_center: float,
     theta_center_deg: float,
     diameter: float,
@@ -289,11 +300,11 @@ def surface_circle(
     """Đường tròn đo trên bề mặt ống (khác lỗ khoan: đây là hình tròn khi trải phẳng)."""
     if diameter <= 0:
         raise ShapeError("Đường kính phải > 0.")
-    if diameter > 2 * math.pi * radius:
-        raise ShapeError("Đường tròn lớn hơn chu vi ống.")
+    if diameter > section.perimeter:
+        raise ShapeError("Đường tròn lớn hơn chu vi phôi.")
     r = diameter / 2.0
     cu = x_center
-    cv = math.radians(theta_center_deg) * radius
+    cv = section.s_of_theta(theta_center_deg)
 
     def f(t: float) -> Point:
         return (cu + r * math.cos(t), cv + r * math.sin(t))
@@ -311,7 +322,7 @@ def surface_circle(
 # 6. Đường xoắn ốc / cắt lò xo
 # --------------------------------------------------------------------------
 def helix(
-    radius: float,
+    section: Section,
     x_start: float,
     x_end: float,
     turns: float,
@@ -326,10 +337,10 @@ def helix(
     """
     if abs(turns) < 1e-9:
         raise ShapeError("Số vòng xoắn phải khác 0.")
-    v0 = math.radians(theta_start_deg) * radius
-    v1 = v0 + turns * 2 * math.pi * radius
+    v0 = section.s_of_theta(theta_start_deg)
+    v1 = v0 + turns * section.perimeter
     pts = [(x_start, v0), (x_end, v1)]
-    pts = g.resample_max_step(pts, max(2.0, radius / 4.0))
+    pts = g.resample_max_step(pts, max(2.0, section.perimeter / 24.0))
     return Contour(
         points=pts,
         closed=False,
@@ -343,7 +354,7 @@ def helix(
 # 7. Đường thẳng dọc ống / vạch dấu
 # --------------------------------------------------------------------------
 def axial_line(
-    radius: float,
+    section: Section,
     x_start: float,
     x_end: float,
     theta_deg: float = 0.0,
@@ -351,7 +362,7 @@ def axial_line(
     name: str = "duong-doc",
 ) -> Contour:
     """Đường cắt/vạch chạy dọc thân ống ở một góc quay cố định."""
-    v = math.radians(theta_deg) * radius
+    v = section.s_of_theta(theta_deg)
     return Contour(
         points=[(x_start, v), (x_end, v)],
         closed=False,
@@ -363,13 +374,13 @@ def axial_line(
 
 
 def ring_mark(
-    radius: float,
+    section: Section,
     x: float,
     tolerance: float = 0.05,
     name: str = "vach-vong",
 ) -> Contour:
     """Vạch dấu tròn quanh ống."""
-    c = plane_cut(radius, x, 0.0, tolerance=tolerance, bevel=False, name=name)
+    c = plane_cut(section, x, 0.0, tolerance=tolerance, bevel=False, name=name)
     c.kind = "mark"
     c.bevel_mode = BEVEL_NONE
     return c
@@ -379,7 +390,7 @@ def ring_mark(
 # 8. Biên dạng tự do (nhập từ DXF/CSV/SVG đã trải phẳng)
 # --------------------------------------------------------------------------
 def flat_pattern(
-    radius: float,
+    section: Section,
     points: Sequence[Point],
     closed: bool = False,
     x_offset: float = 0.0,
@@ -396,7 +407,7 @@ def flat_pattern(
     """
     if len(points) < 2:
         raise ShapeError("Biên dạng cần ít nhất 2 điểm.")
-    v_off = math.radians(theta_offset_deg) * radius
+    v_off = section.s_of_theta(theta_offset_deg)
     pts = [(p[0] * scale + x_offset, p[1] * scale + v_off) for p in points]
     pts = g.dedupe(pts)
     if closed:
@@ -416,14 +427,14 @@ def flat_pattern(
 # 9. Vát mép hàn ở đầu ống (hai đường: mặt trong và mặt ngoài)
 # --------------------------------------------------------------------------
 def weld_prep(
-    radius: float,
+    section: Section,
     x: float,
     bevel_angle_deg: float = 37.5,
     tolerance: float = 0.05,
     name: str = "vat-mep-han",
 ) -> Contour:
     """Cắt vuông đầu ống nhưng giữ trục vát ở góc cố định để tạo mép hàn V."""
-    c = plane_cut(radius, x, 0.0, tolerance=tolerance, bevel=False, name=name)
+    c = plane_cut(section, x, 0.0, tolerance=tolerance, bevel=False, name=name)
     c.bevel_mode = BEVEL_CONSTANT
     c.bevel_value = bevel_angle_deg
     c.meta["shape"] = "weld_prep"

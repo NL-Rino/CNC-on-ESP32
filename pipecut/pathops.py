@@ -22,6 +22,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from . import geom2d as g
 from .config import MotionSpec, ProcessSpec
+from .section import Section
 from .toolpath import (
     BEVEL_CONSTANT,
     BEVEL_FOLLOW,
@@ -29,7 +30,6 @@ from .toolpath import (
     Contour,
     CutPoint,
     Point,
-    v_to_theta,
 )
 
 
@@ -55,17 +55,13 @@ class Pass:
 # --------------------------------------------------------------------------
 # Hỗ trợ đường quấn quanh chu vi
 # --------------------------------------------------------------------------
-def _period(radius: float) -> float:
-    return 2 * math.pi * radius
-
-
-def periodic_extend(pts: Sequence[Point], radius: float, margin: float) -> Tuple[List[Point], int, int]:
+def periodic_extend(pts: Sequence[Point], section: Section, margin: float) -> Tuple[List[Point], int, int]:
     """Nối thêm bản sao tuần hoàn ở hai đầu đường quấn.
 
     Nhờ vậy các phép bù/bo góc ở gần điểm nối vòng vẫn đúng như ở giữa đường.
     Trả về (điểm mở rộng, số điểm thêm ở đầu, số điểm thêm ở cuối).
     """
-    P = _period(radius)
+    P = section.perimeter
     if margin <= 0 or len(pts) < 2:
         return list(pts), 0, 0
     v0, v1 = pts[0][1], pts[-1][1]
@@ -104,7 +100,7 @@ def _trim_v_range(pts: Sequence[Point], v_lo: float, v_hi: float) -> List[Point]
 # --------------------------------------------------------------------------
 # Bù bề rộng mạch cắt
 # --------------------------------------------------------------------------
-def apply_kerf(contour: Contour, radius: float, kerf: float, side: str = "auto") -> List[Point]:
+def apply_kerf(contour: Contour, section: Section, kerf: float, side: str = "auto") -> List[Point]:
     """Dịch đường chạy dao đi nửa bề rộng mạch cắt về phía phần phế liệu."""
     pts = list(contour.points)
     if kerf <= 0 or side == "none" or contour.kind == "mark":
@@ -121,7 +117,7 @@ def apply_kerf(contour: Contour, radius: float, kerf: float, side: str = "auto")
         # Cắt quanh ống: phế liệu ở phía đầu tự do (u lớn) -> lệch về +u.
         # Bù vuông góc với đường cắt (đúng hơn là chỉ dịch theo u).
         margin = 10.0 * half + 5.0
-        ext, nh, nt = periodic_extend(pts, radius, margin)
+        ext, nh, nt = periodic_extend(pts, section, margin)
         # hướng chạy chủ yếu theo +v => pháp tuyến trái là -u => cần dấu âm
         sign = -1.0 if side in ("auto", "right") else 1.0
         off = g.offset(ext, sign * half, closed=False)
@@ -137,7 +133,7 @@ def apply_kerf(contour: Contour, radius: float, kerf: float, side: str = "auto")
 # --------------------------------------------------------------------------
 # Chạy vượt (thuộc đường cắt) và vào/ra dao (không thuộc đường cắt)
 # --------------------------------------------------------------------------
-def apply_overcut(contour: Contour, pts: Sequence[Point], radius: float, overcut: float) -> List[Point]:
+def apply_overcut(contour: Contour, pts: Sequence[Point], section: Section, overcut: float) -> List[Point]:
     """Chạy vượt qua điểm khép kín để mạch cắt đứt hẳn.
 
     Phần chạy vượt là *phần nối dài của chính đường cắt* nên phải được thêm
@@ -153,7 +149,7 @@ def apply_overcut(contour: Contour, pts: Sequence[Point], radius: float, overcut
             pts = pts + extra[1:]
         return pts
     if contour.wrap:
-        ext, nh, nt = periodic_extend(pts, radius, overcut + 1.0)
+        ext, nh, nt = periodic_extend(pts, section, overcut + 1.0)
         if nt > 0:
             after = ext[len(pts) + nh - 1:]
             extra = g.trim_to_length(after, overcut)
@@ -251,6 +247,93 @@ def condition(pts: Sequence[Point], motion: MotionSpec) -> List[Point]:
             if len(out) <= motion.max_points_per_contour:
                 break
     return out
+
+
+# --------------------------------------------------------------------------
+# Bám sát tiết diện không tròn
+# --------------------------------------------------------------------------
+def insert_breakpoints(pts: Sequence[Point], section: Section) -> List[Point]:
+    """Chèn đỉnh tại mọi chỗ tiết diện chuyển giữa mặt phẳng và góc lượn.
+
+    Với ống hộp, đúng những chỗ này là nơi trục ngang X đạt cực trị và độ cong
+    nhảy bậc.  Thiếu đỉnh ở đây thì đoạn nội suy sẽ "cắt vát" qua chỗ chuyển
+    tiếp, làm sai biên dạng ngay tại cạnh ống.
+    """
+    breaks = section.breakpoints()
+    if not breaks or len(pts) < 2:
+        return list(pts)
+    per = section.perimeter
+    out: List[Point] = [pts[0]]
+    for a, b in zip(pts, pts[1:]):
+        v0, v1 = a[1], b[1]
+        if abs(v1 - v0) > 1e-9:
+            lo, hi = (v0, v1) if v1 > v0 else (v1, v0)
+            k0 = math.floor(lo / per)
+            k1 = math.floor(hi / per) + 1
+            hits: List[float] = []
+            for k in range(int(k0), int(k1) + 1):
+                for br in breaks:
+                    vv = br + k * per
+                    if lo + 1e-9 < vv < hi - 1e-9:
+                        hits.append(vv)
+            hits.sort(reverse=v1 < v0)
+            for vv in hits:
+                t = (vv - v0) / (v1 - v0)
+                out.append((a[0] + (b[0] - a[0]) * t, vv))
+        out.append(b)
+    return g.dedupe(out)
+
+
+def refine_for_section(
+    pts: Sequence[Point],
+    section: Section,
+    tolerance: float,
+    max_points: int = 8000,
+) -> List[Point]:
+    """Chia nhỏ thêm ở những nơi đường chạy dao **cong trong không gian trục**.
+
+    Trên mặt phẳng trải, một nhát cắt vuông góc quanh ống hộp là đường thẳng -
+    nhưng trong không gian bốn trục nó không hề thẳng: qua góc lượn, trục A
+    xoay 90°, trục X chạy từ mép này sang mép kia và trục Z nhô lên rồi hạ
+    xuống.  Nội suy thẳng giữa hai đầu sẽ cho mỏ cắt cắm vào phôi.
+
+    Hàm này đo sai lệch giữa **đường đi thật của mũi cắt** và dây cung nối hai
+    điểm, rồi chia đôi cho tới khi sai lệch nhỏ hơn dung sai.  Với ống tròn và
+    với các đoạn nằm trên mặt phẳng, sai lệch bằng 0 nên không thêm điểm nào -
+    số dòng G-code không hề tăng vô ích.
+    """
+    if len(pts) < 2 or tolerance <= 0:
+        return list(pts)
+    if not section.breakpoints():
+        return list(pts)          # ống tròn: nội suy trục đã chính xác tuyệt đối
+
+    def tip(v: float) -> Tuple[float, float]:
+        ct = section.contact_at(v)
+        return (ct.cross, ct.height)
+
+    budget = [max_points - len(pts)]
+    out: List[Point] = [pts[0]]
+
+    def recurse(a: Point, b: Point, depth: int) -> None:
+        if budget[0] <= 0 or depth > 12:
+            out.append(b)
+            return
+        vm = 0.5 * (a[1] + b[1])
+        um = 0.5 * (a[0] + b[0])
+        ta, tb, tm = tip(a[1]), tip(b[1]), tip(vm)
+        dx = tm[0] - 0.5 * (ta[0] + tb[0])
+        dz = tm[1] - 0.5 * (ta[1] + tb[1])
+        if math.hypot(dx, dz) <= tolerance:
+            out.append(b)
+            return
+        mid = (um, vm)
+        budget[0] -= 1
+        recurse(a, mid, depth + 1)
+        recurse(mid, b, depth + 1)
+
+    for a, b in zip(pts, pts[1:]):
+        recurse(a, b, 0)
+    return g.dedupe(out)
 
 
 # --------------------------------------------------------------------------
@@ -365,7 +448,7 @@ def _smooth(
 # --------------------------------------------------------------------------
 def process_contour(
     contour: Contour,
-    radius: float,
+    section: Section,
     motion: MotionSpec,
     process: ProcessSpec,
     kerf_override: Optional[float] = None,
@@ -383,7 +466,7 @@ def process_contour(
     side = contour.kerf_side if contour.kerf_side != "auto" else process.kerf_side
 
     # 1) bù bề rộng mạch cắt
-    pts = apply_kerf(contour, radius, kerf, side)
+    pts = apply_kerf(contour, section, kerf, side)
     if contour.closed:
         pts = g.close_loop(pts)
     # 2) bo góc nhọn nếu có yêu cầu
@@ -391,9 +474,14 @@ def process_contour(
         pts = g.round_corners(pts, motion.corner_radius, closed=contour.closed,
                               tolerance=motion.chord_tolerance)
     # 3) chạy vượt (là phần nối dài của đường cắt)
-    pts = apply_overcut(contour, pts, radius, process.overcut)
+    pts = apply_overcut(contour, pts, section, process.overcut)
     # 4) điều tiết mật độ điểm
     pts = condition(pts, motion)
+    # 4b) với tiết diện không tròn: chèn đỉnh ở chỗ đổi hình rồi bám sát
+    #     đường đi thật trong không gian trục
+    pts = insert_breakpoints(pts, section)
+    pts = refine_for_section(pts, section, motion.chord_tolerance,
+                             motion.max_points_per_contour or 8000)
     if len(pts) < 2:
         raise ValueError(f"Biên dạng '{contour.name}' rỗng sau khi xử lý.")
 
@@ -412,10 +500,15 @@ def process_contour(
     all_pts = list(lead_in) + list(pts) + list(lead_out)
     all_bevels = ([bevels[0]] * len(lead_in)) + bevels + ([bevels[-1]] * len(lead_out))
 
-    cut_points = [
-        CutPoint(x=u, theta=v_to_theta(v, radius), bevel=all_bevels[i])
-        for i, (u, v) in enumerate(all_pts)
-    ]
+    # Ánh xạ sang tư thế máy: tiết diện quyết định góc quay, vị trí trục ngang
+    # và chênh cao bề mặt tại từng điểm.
+    ref = section.reference_height
+    cut_points: List[CutPoint] = []
+    for i, (u, v) in enumerate(all_pts):
+        ct = section.contact_at(v)
+        cut_points.append(CutPoint(x=u, v=v, theta=ct.theta, cross=ct.cross,
+                                   surface_z=ct.height - ref,
+                                   bevel=all_bevels[i]))
     return Pass(
         points=cut_points,
         name=contour.name,

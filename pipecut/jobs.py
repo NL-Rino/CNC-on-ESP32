@@ -203,55 +203,55 @@ def load_pattern_points(path: str) -> List[Tuple[float, float]]:
 # --------------------------------------------------------------------------
 # Dựng biên dạng từ nguyên công
 # --------------------------------------------------------------------------
-def build_contour(op: Operation, radius: float, tolerance: float,
+def build_contour(op: Operation, section, tolerance: float,
                   base_dir: str = "") -> Contour:
     """Gọi hàm sinh biên dạng tương ứng với kiểu nguyên công."""
     t = op.type
     gp = op.get
     if t == "cutoff":
-        return shapes.plane_cut(radius, float(gp("x")), float(gp("angle")),
+        return shapes.plane_cut(section, float(gp("x")), float(gp("angle")),
                                 float(gp("roll")), tolerance=tolerance,
                                 bevel=bool(gp("bevel_axis")), name=op.label())
     if t == "saddle":
-        return shapes.saddle_cut(radius, float(gp("main_diameter")) / 2.0,
+        return shapes.saddle_cut(section, float(gp("main_diameter")) / 2.0,
                                  float(gp("angle")), float(gp("offset")),
                                  x_ref=float(gp("x")), reference=str(gp("reference")),
                                  roll_deg=float(gp("roll")), tolerance=tolerance,
                                  bevel=bool(gp("bevel_axis")), name=op.label())
     if t == "hole":
-        return shapes.pierced_hole(radius, float(gp("diameter")), float(gp("angle")),
+        return shapes.pierced_hole(section, float(gp("diameter")), float(gp("angle")),
                                    float(gp("offset")), float(gp("x")),
                                    float(gp("theta")), tolerance=tolerance,
                                    name=op.label())
     if t == "slot":
-        return shapes.slot(radius, float(gp("x")), float(gp("theta")),
+        return shapes.slot(section, float(gp("x")), float(gp("theta")),
                            float(gp("length")), angular_width_deg=float(gp("width_deg")),
                            corner_radius=float(gp("corner")), tolerance=tolerance,
                            name=op.label())
     if t == "circle":
-        return shapes.surface_circle(radius, float(gp("x")), float(gp("theta")),
+        return shapes.surface_circle(section, float(gp("x")), float(gp("theta")),
                                      float(gp("diameter")), tolerance=tolerance,
                                      name=op.label())
     if t == "helix":
-        return shapes.helix(radius, float(gp("x_start")), float(gp("x_end")),
+        return shapes.helix(section, float(gp("x_start")), float(gp("x_end")),
                             float(gp("turns")), float(gp("theta_start")),
                             tolerance=tolerance, name=op.label())
     if t == "axial":
-        return shapes.axial_line(radius, float(gp("x_start")), float(gp("x_end")),
+        return shapes.axial_line(section, float(gp("x_start")), float(gp("x_end")),
                                  float(gp("theta")),
                                  kind="mark" if bool(gp("mark")) else "cut",
                                  name=op.label())
     if t == "ring_mark":
-        return shapes.ring_mark(radius, float(gp("x")), tolerance=tolerance, name=op.label())
+        return shapes.ring_mark(section, float(gp("x")), tolerance=tolerance, name=op.label())
     if t == "weld_prep":
-        return shapes.weld_prep(radius, float(gp("x")), float(gp("angle")),
+        return shapes.weld_prep(section, float(gp("x")), float(gp("angle")),
                                 tolerance=tolerance, name=op.label())
     if t == "pattern":
         path = str(gp("file"))
         if base_dir and path and not os.path.isabs(path):
             path = os.path.join(base_dir, path)
         pts = load_pattern_points(path)
-        return shapes.flat_pattern(radius, pts, closed=bool(gp("closed")),
+        return shapes.flat_pattern(section, pts, closed=bool(gp("closed")),
                                    x_offset=float(gp("x_offset")),
                                    theta_offset_deg=float(gp("theta_offset")),
                                    scale=float(gp("scale")), tolerance=tolerance,
@@ -282,16 +282,16 @@ class Job:
     def build_toolpath(self, profile: MachineProfile) -> Tuple[Toolpath, List[str]]:
         """Dựng toàn bộ đường chạy dao.  Trả về (toolpath, danh sách cảnh báo)."""
         pipe = self.pipe or profile.pipe
-        radius = pipe.radius
+        section = pipe.section()
         tol = profile.motion.chord_tolerance
         base_dir = os.path.dirname(self.source_path) if self.source_path else ""
-        tp = Toolpath(radius=radius, name=self.name)
+        tp = Toolpath(section=section, name=self.name)
         warnings: List[str] = []
         for i, op in enumerate(self.operations, 1):
             if not op.enabled:
                 continue
             try:
-                contour = build_contour(op, radius, tol, base_dir)
+                contour = build_contour(op, section, tol, base_dir)
             except Exception as exc:
                 warnings.append(f"Nguyên công {i} ({op.label()}): {exc}")
                 continue

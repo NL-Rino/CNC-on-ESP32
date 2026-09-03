@@ -8,8 +8,8 @@
       "enabled": true,
       "max_rate": 3000.0,
       "accel": 200.0,
-      "max_travel": 200.0,
-      "min_travel": 0.0,
+      "max_travel": 100.0,
+      "min_travel": -100.0,
       "invert": false,
       "offset": 0.0
     },
@@ -48,7 +48,11 @@
     }
   ],
   "pipe": {
+    "shape": "round",
     "outer_diameter": 60.0,
+    "width": 40.0,
+    "height": 40.0,
+    "corner_radius": 0.0,
     "wall_thickness": 3.0,
     "length": 1000.0,
     "material": "steel"
@@ -96,7 +100,9 @@
     "rotary_unwrap": true,
     "rotary_rewind": false,
     "decimals": 3,
-    "corner_radius": 0.0
+    "corner_radius": 0.0,
+    "uniform_feed": false,
+    "slow_warn_ratio": 0.7
   },
   "connection": {
     "port": "",

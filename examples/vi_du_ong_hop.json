@@ -1,0 +1,64 @@
+{
+  "name": "ong-hop-vuong-50",
+  "notes": "Ống hộp 50x50x3: cửa sổ thăm trên mặt trên, hai lỗ vuông nhỏ hai bên, cắt vát 20 độ ở đầu.",
+  "optimize_order": true,
+  "operations": [
+    {
+      "type": "slot",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "x": 120,
+        "theta": 0,
+        "length": 70,
+        "width_deg": 45,
+        "corner": 6
+      }
+    },
+    {
+      "type": "slot",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "x": 220,
+        "theta": 90,
+        "length": 30,
+        "width_deg": 30,
+        "corner": 4
+      }
+    },
+    {
+      "type": "slot",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "x": 220,
+        "theta": 270,
+        "length": 30,
+        "width_deg": 30,
+        "corner": 4
+      }
+    },
+    {
+      "type": "circle",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "diameter": 25,
+        "x": 300,
+        "theta": 0
+      }
+    },
+    {
+      "type": "cutoff",
+      "name": "",
+      "enabled": true,
+      "params": {
+        "x": 380,
+        "angle": 20,
+        "roll": 0.0,
+        "bevel_axis": true
+      }
+    }
+  ]
+}

@@ -106,9 +106,24 @@ trình mà không cần cắm máy.
 
 Tab **1. Máy & Kết nối** có ba nhóm thông số:
 
-**Phôi ống** — đường kính ngoài, chiều dày, chiều dài. Đường kính là thông số
-quan trọng nhất: mọi phép quy đổi góc ↔ cung đều dựa vào nó. Hãy **đo bằng thước
-cặp**, đừng lấy theo tên gọi danh nghĩa (ống "phi 60" thực tế có thể là 60.3 mm).
+**Phôi** — chọn hình dạng trước, rồi nhập kích thước tương ứng:
+
+| Hình dạng | Ô cần nhập |
+|---|---|
+| Ống tròn | Đường kính ngoài |
+| Ống hộp vuông | Cạnh ngang (bỏ qua ô cạnh dọc) |
+| Ống hộp chữ nhật | Cạnh ngang + cạnh dọc |
+
+Kích thước là thông số quan trọng nhất: mọi phép quy đổi góc ↔ cung đều dựa vào
+nó. Hãy **đo bằng thước cặp**, đừng lấy theo tên gọi danh nghĩa (ống "phi 60"
+thực tế thường là 60,3 mm; hộp "50" có thể là 49,6 mm).
+
+*Góc lượn* của ống hộp để 0 thì phần mềm tự lấy 2 lần chiều dày thành. Nếu cần
+chính xác, đo bán kính góc thật bằng dưỡng rồi nhập vào — sai số góc lượn ảnh
+hưởng trực tiếp tới khe hở mỏ cắt khi chạy qua góc.
+
+Dòng chữ dưới bảng cho biết chu vi tính được và **hành trình trục ngang cần
+thiết** — đối chiếu với hành trình thật của máy trước khi cắt.
 
 **Tiến trình cắt**
 
@@ -189,7 +204,7 @@ Vài lưu ý theo từng nguyên công:
 1. Tab **4. Xem trước** — kiểm tra hình dạng ở cả hai khung nhìn. Dòng thống kê
    cho biết chiều dài cắt, số điểm mồi, số dòng lệnh và thời gian ước tính.
 2. Tab **5. Mô phỏng** — bấm ▶ để xem lại toàn bộ hành trình trên mô hình máy
-   (xem ảnh minh hoạ: [docs/mo_phong_may.svg](mo_phong_may.svg)):
+   (ảnh minh hoạ: [ống tròn](mo_phong_may.svg) · [ống hộp](mo_phong_ong_hop.svg)):
    ống trượt ra vào và quay, mỏ cắt chạy ngang và lên xuống, vết cắt đỏ hiện dần.
    Đây là bước phát hiện va chạm và sai gốc toạ độ **trước khi** đụng tới phôi thật.
    Kéo chuột trái để xoay góc nhìn, chuột phải để dịch, lăn chuột để phóng to.
@@ -256,6 +271,10 @@ for i, (chieu_dai, goc) in enumerate([(300, 30), (450, 45), (600, 22.5)]):
 
 | Hiện tượng | Nguyên nhân thường gặp | Cách xử lý |
 |---|---|---|
+| Cắt ống hộp bị **cháy/đọng xỉ ở góc lượn** | Tốc độ cắt tụt ở góc vì trục xoay chạm trần tốc độ | Bật *tốc độ đều* trong hồ sơ máy, hoặc tăng tốc độ tối đa trục A (giảm tỉ số truyền, tăng điện áp driver) |
+| Phần mềm báo *"tốc độ cắt tụt còn ... mm/phút"* | Đúng như trên — máy không quay kịp qua góc | Xem cột trên; nếu chấp nhận được thì bỏ qua, đây là cảnh báo chứ không phải lỗi |
+| Cắt ống hộp báo **vượt hành trình trục X** | Trục ngang không đủ dài để chạy hết bề rộng mặt | Cần hành trình ít nhất ±(nửa cạnh − góc lượn); đặt gốc X đúng đường tâm phôi |
+| Nguyên công *miệng cá* / *lỗ xuyên* bị bỏ qua | Hai biên dạng này chỉ có nghĩa với ống tròn | Với ống hộp dùng *rãnh*, *tròn trên bề mặt* hoặc *biên dạng trải phẳng* |
 | Không thấy cổng COM | Thiếu driver CP2102/CH340 | Cài driver USB-UART của chip trên bo |
 | Kết nối được nhưng không phản hồi | Sai baud, hoặc ESP32 đang khởi động | Đặt 115200; chờ 2 giây sau khi mở cổng |
 | `Lỗi 9` khi bắt đầu chạy | Máy đang khoá do báo động | Bấm **Mở khoá ($X)**, tìm nguyên nhân báo động |

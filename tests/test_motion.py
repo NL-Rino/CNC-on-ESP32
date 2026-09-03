@@ -5,6 +5,7 @@ import re
 import unittest
 
 from pipecut import shapes
+from pipecut.section import BoxSection, RoundSection
 from pipecut.config import (AxisSpec, MachineProfile, ROLE_ALONG, ROLE_BEVEL,
                             ROLE_CROSS, ROLE_ROTARY)
 from pipecut.gcode import build_program, fmt, strip_gcode_comment
@@ -22,6 +23,11 @@ class TestFeedCompensation(unittest.TestCase):
         self.p.pipe.outer_diameter = 60.0
         self.kin = Kinematics(self.p)
 
+    def cp(self, x: float, theta: float) -> CutPoint:
+        """Điểm cắt trên ống tròn: toạ độ cung suy từ góc quay."""
+        r = self.p.pipe.outer_diameter / 2.0
+        return CutPoint(x=x, v=math.radians(theta) * r, theta=theta)
+
     def _surface_speed(self, a, b, target):
         feed, l_real, l_mach = self.kin.feed_for(a, b, target)
         minutes = l_mach / feed
@@ -30,18 +36,18 @@ class TestFeedCompensation(unittest.TestCase):
     def test_toc_do_be_mat_khong_doi_moi_ti_le_phoi_hop_truc(self):
         target = 1600.0
         cases = [
-            (CutPoint(0, 0), CutPoint(10, 0)),        # chỉ trục dọc
-            (CutPoint(0, 0), CutPoint(0, 45)),        # chỉ trục xoay
-            (CutPoint(0, 0), CutPoint(10, 45)),       # phối hợp
-            (CutPoint(0, 0), CutPoint(1, 120)),       # xoay là chính
-            (CutPoint(0, 0), CutPoint(50, 2)),        # dọc là chính
+            (self.cp(0, 0), self.cp(10, 0)),        # chỉ trục dọc
+            (self.cp(0, 0), self.cp(0, 45)),        # chỉ trục xoay
+            (self.cp(0, 0), self.cp(10, 45)),       # phối hợp
+            (self.cp(0, 0), self.cp(1, 120)),       # xoay là chính
+            (self.cp(0, 0), self.cp(50, 2)),        # dọc là chính
         ]
         for a, b in cases:
             self.assertAlmostEqual(self._surface_speed(a, b, target), target, delta=0.5)
 
     def test_toc_do_be_mat_khong_doi_tren_toan_bo_duong_mieng_ca(self):
-        c = shapes.saddle_cut(30.0, 50.0, 90.0, x_ref=200.0)
-        ps = process_contour(c, 30.0, self.p.motion, self.p.process)
+        c = shapes.saddle_cut(RoundSection(60.0), 50.0, 90.0, x_ref=200.0)
+        ps = process_contour(c, self.p.pipe.section(), self.p.motion, self.p.process)
         target = self.p.process.cut_feed
         for a, b in zip(ps.points, ps.points[1:]):
             speed = self._surface_speed(a, b, target)
@@ -50,7 +56,7 @@ class TestFeedCompensation(unittest.TestCase):
     def test_khong_bu_thi_toc_do_sai_lech_lon(self):
         """Chứng minh vì sao phải bù: dùng F cố định thì tốc độ lệch hàng loạt."""
         R = self.p.pipe.radius
-        a, b = CutPoint(0, 0), CutPoint(0, 45)
+        a, b = self.cp(0, 0), self.cp(0, 45)
         l_real = math.radians(45) * R          # 23.6 mm trên bề mặt
         l_mach = 45.0                          # nhưng FluidNC thấy 45 "mm"
         naive_speed = 1600.0 * l_real / l_mach  # tốc độ bề mặt thực nếu ghi F1600
@@ -60,13 +66,13 @@ class TestFeedCompensation(unittest.TestCase):
     def test_kep_theo_toc_do_toi_da_cua_tung_truc(self):
         self.p.axis(ROLE_ROTARY).max_rate = 600.0   # trục xoay rất chậm
         kin = Kinematics(self.p)
-        feed, l_real, l_mach = kin.feed_for(CutPoint(0, 0), CutPoint(0, 90), 3000.0)
+        feed, l_real, l_mach = kin.feed_for(self.cp(0, 0), self.cp(0, 90), 3000.0)
         self.assertLessEqual(feed, 600.0 + 1e-6)
 
     def test_khong_vuot_tran_va_san_toc_do(self):
         self.p.motion.max_feed = 2000.0
         kin = Kinematics(self.p)
-        feed, _, _ = kin.feed_for(CutPoint(0, 0), CutPoint(0, 180), 5000.0)
+        feed, _, _ = kin.feed_for(self.cp(0, 0), self.cp(0, 180), 5000.0)
         self.assertLessEqual(feed, 2000.0)
 
     def test_quay_duong_ngan_nhat_chi_dung_khi_chay_khong(self):
@@ -94,15 +100,15 @@ class TestBevel(unittest.TestCase):
 
     def test_cat_vat_cho_goc_truc_vat_dung_bang_goc_mat_phang(self):
         for angle in (20.0, 30.0, 45.0):
-            c = shapes.plane_cut(30.0, 0.0, angle)
-            ps = process_contour(c, 30.0, self.p.motion, self.p.process)
+            c = shapes.plane_cut(RoundSection(60.0), 0.0, angle)
+            ps = process_contour(c, self.p.pipe.section(), self.p.motion, self.p.process)
             peak = max(abs(q.bevel) for q in ps.points)
             self.assertAlmostEqual(peak, angle, delta=1.0)
 
     def test_mieng_ca_cho_goc_truc_vat_theo_do_doc_duong_cat(self):
         r, R = 30.0, 50.0
-        c = shapes.saddle_cut(r, R, 90.0, x_ref=200.0)
-        ps = process_contour(c, r, self.p.motion, self.p.process)
+        c = shapes.saddle_cut(RoundSection(2 * r), R, 90.0, x_ref=200.0)
+        ps = process_contour(c, RoundSection(2 * r), self.p.motion, self.p.process)
         # đỉnh lý thuyết: max của atan(r sin th cos th / sqrt(R^2 - r^2 sin^2 th))
         best = max(math.degrees(math.atan(r * math.sin(t) * math.cos(t) /
                                           math.sqrt(R * R - (r * math.sin(t)) ** 2)))
@@ -112,13 +118,13 @@ class TestBevel(unittest.TestCase):
 
     def test_goc_vat_bi_kep_theo_gioi_han(self):
         self.p.motion.max_bevel = 15.0
-        c = shapes.plane_cut(30.0, 0.0, 50.0)
-        ps = process_contour(c, 30.0, self.p.motion, self.p.process)
+        c = shapes.plane_cut(RoundSection(60.0), 0.0, 50.0)
+        ps = process_contour(c, self.p.pipe.section(), self.p.motion, self.p.process)
         self.assertLessEqual(max(abs(q.bevel) for q in ps.points), 15.0 + 1e-9)
 
     def test_doan_vao_dao_khong_lam_lech_goc_vat(self):
-        c = shapes.saddle_cut(30.0, 50.0, 90.0, x_ref=200.0)
-        ps = process_contour(c, 30.0, self.p.motion, self.p.process)
+        c = shapes.saddle_cut(RoundSection(60.0), 50.0, 90.0, x_ref=200.0)
+        ps = process_contour(c, self.p.pipe.section(), self.p.motion, self.p.process)
         self.assertGreater(ps.lead_in_count, 0)
         # điểm vào dao phải mang đúng góc vát của điểm cắt đầu tiên
         first_cut = ps.points[ps.lead_in_count]
@@ -128,7 +134,7 @@ class TestBevel(unittest.TestCase):
     def test_bu_toa_do_khi_dau_cat_nghieng(self):
         self.p.motion.bevel_pivot = 50.0
         kin = Kinematics(self.p)
-        vals = kin.axis_values(CutPoint(x=100.0, theta=0.0, bevel=30.0), z=2.0)
+        vals = kin.axis_values(CutPoint(x=100.0, v=0.0, theta=0.0, bevel=30.0), z=2.0)
         along = self.p.letter(ROLE_ALONG)
         self.assertAlmostEqual(vals[along], 100.0 + 50.0 * math.sin(math.radians(30)), places=6)
         self.assertAlmostEqual(vals["Z"], 2.0 - 50.0 * (1 - math.cos(math.radians(30))), places=6)
@@ -141,40 +147,40 @@ class TestPathOps(unittest.TestCase):
     def test_bu_kerf_thu_nho_lo_dung_nua_be_rong(self):
         R, d = 30.0, 30.0
         self.p.process.kerf = 2.0
-        c = shapes.pierced_hole(R, d, 90.0, x_center=50.0)
-        ps = process_contour(c, R, self.p.motion, self.p.process)
+        c = shapes.pierced_hole(RoundSection(2 * R), d, 90.0, x_center=50.0)
+        ps = process_contour(c, RoundSection(2 * R), self.p.motion, self.p.process)
         cut = ps.points[ps.lead_in_count:len(ps.points) - ps.lead_out_count]
         span = max(q.x for q in cut) - min(q.x for q in cut)
         self.assertAlmostEqual(span, d - self.p.process.kerf, delta=0.15)
 
     def test_bu_kerf_cat_dut_lech_ve_phia_phe_lieu(self):
         self.p.process.kerf = 2.0
-        c = shapes.plane_cut(30.0, 100.0, 0.0)
-        ps = process_contour(c, 30.0, self.p.motion, self.p.process)
+        c = shapes.plane_cut(RoundSection(60.0), 100.0, 0.0)
+        ps = process_contour(c, self.p.pipe.section(), self.p.motion, self.p.process)
         cut = ps.points[ps.lead_in_count:]
         for q in cut:
             self.assertAlmostEqual(q.x, 101.0, delta=0.02)  # dịch +kerf/2 về đầu tự do
 
     def test_dieu_tiet_mat_do_diem(self):
-        c = shapes.pierced_hole(30.0, 40.0, 90.0, x_center=100.0)
+        c = shapes.pierced_hole(RoundSection(60.0), 40.0, 90.0, x_center=100.0)
         self.p.motion.min_segment = 1.0
         self.p.motion.max_segment = 4.0
-        ps = process_contour(c, 30.0, self.p.motion, self.p.process)
-        pts = [(q.x, math.radians(q.theta) * 30.0) for q in ps.points]
+        ps = process_contour(c, self.p.pipe.section(), self.p.motion, self.p.process)
+        pts = [(q.x, q.v) for q in ps.points]
         for a, b in zip(pts, pts[1:]):
             d = math.dist(a, b)
             self.assertLessEqual(d, 4.0 + 1e-6)
 
     def test_goc_quay_lien_tuc_khong_nhay_360(self):
-        c = shapes.plane_cut(30.0, 100.0, 40.0)
-        ps = process_contour(c, 30.0, self.p.motion, self.p.process)
+        c = shapes.plane_cut(RoundSection(60.0), 100.0, 40.0)
+        ps = process_contour(c, self.p.pipe.section(), self.p.motion, self.p.process)
         for a, b in zip(ps.points, ps.points[1:]):
             self.assertLess(abs(b.theta - a.theta), 30.0)
 
     def test_chay_vuot_lam_duong_cat_dai_hon_chu_vi(self):
         self.p.process.overcut = 3.0
-        c = shapes.plane_cut(30.0, 100.0, 0.0)
-        ps = process_contour(c, 30.0, self.p.motion, self.p.process)
+        c = shapes.plane_cut(RoundSection(60.0), 100.0, 0.0)
+        ps = process_contour(c, self.p.pipe.section(), self.p.motion, self.p.process)
         sweep = max(q.theta for q in ps.points) - min(q.theta for q in ps.points)
         self.assertGreater(sweep, 360.0)
         self.assertAlmostEqual(sweep, 360.0 + math.degrees(3.0 / 30.0), delta=0.5)

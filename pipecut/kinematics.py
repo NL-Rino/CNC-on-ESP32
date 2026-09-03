@@ -67,8 +67,10 @@ class Kinematics:
     def __init__(self, profile: MachineProfile):
         self.profile = profile
         self.motion = profile.motion
+        self.section = profile.pipe.section()
         self.radius = profile.pipe.radius
-        self.feed_radius = profile.pipe.feed_radius(profile.motion.feed_radius_mode)
+        # hệ số quy đổi cung ngoài -> cung dùng tính tốc độ (ống hộp luôn = 1)
+        self.feed_scale = profile.pipe.feed_scale(profile.motion.feed_radius_mode)
         self.ax_along = profile.axis(ROLE_ALONG)
         self.ax_rotary = profile.axis(ROLE_ROTARY)
         self.ax_radial = profile.axis(ROLE_RADIAL)
@@ -88,7 +90,8 @@ class Kinematics:
         """
         vals: AxisValues = {}
         x = cp.x
-        zz = z
+        # trục Z bù chênh cao bề mặt: ống hộp cao hơn ở góc lượn
+        zz = None if z is None else z + cp.surface_z
         gamma = math.radians(cp.bevel) if self.ax_bevel else 0.0
         pivot = self.motion.bevel_pivot
         if self.ax_bevel and abs(pivot) > 1e-9 and abs(gamma) > 1e-12:
@@ -103,7 +106,7 @@ class Kinematics:
             vals[self.ax_radial.letter] = self.ax_radial.apply(zz)
         if self.ax_bevel:
             vals[self.ax_bevel.letter] = self.ax_bevel.apply(cp.bevel)
-        if self.ax_cross and abs(cp.cross) > 1e-12:
+        if self.ax_cross:
             vals[self.ax_cross.letter] = self.ax_cross.apply(cp.cross)
         return vals
 
@@ -114,8 +117,10 @@ class Kinematics:
                          za: Optional[float] = None, zb: Optional[float] = None) -> float:
         """Quãng đường thật mũi cắt đi trên bề mặt ống giữa hai điểm."""
         dx = b.x - a.x
-        dv = math.radians(b.theta - a.theta) * self.feed_radius
+        # quãng đường thật đo trên bề mặt phôi, lấy thẳng từ toạ độ trải phẳng
+        dv = (b.v - a.v) * self.feed_scale
         dz = 0.0 if (za is None or zb is None) else (zb - za)
+        dz += b.surface_z - a.surface_z
         db = 0.0
         if self.ax_bevel and abs(self.motion.bevel_pivot) > 1e-9:
             db = math.radians(b.bevel - a.bevel) * self.motion.bevel_pivot
@@ -177,6 +182,25 @@ class Kinematics:
         feed = self.clamp_by_axis_rates(feed, va, vb, l_mach)
         feed = max(self.motion.min_feed, min(self.motion.max_feed, feed))
         return (feed, l_real, l_mach)
+
+    def achievable_surface_speed(
+        self,
+        a: CutPoint,
+        b: CutPoint,
+        target_surface_feed: float,
+        za: Optional[float] = None,
+        zb: Optional[float] = None,
+    ) -> float:
+        """Tốc độ bề mặt **thực sự đạt được** trên một đoạn.
+
+        Nhỏ hơn tốc độ đặt khi có trục nào chạm trần tốc độ của nó.  Cắt ống
+        hộp hay gặp: qua góc lượn, trục xoay phải quay 90 độ trong một đoạn
+        cung rất ngắn nên luôn là trục bị chạm trần trước tiên.
+        """
+        feed, l_real, l_mach = self.feed_for(a, b, target_surface_feed, za, zb)
+        if l_mach <= 1e-12 or l_real <= 1e-9:
+            return target_surface_feed
+        return l_real / (l_mach / feed)
 
     # ------------------------------------------------------------------
     # Trục xoay

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pipecut-studio"
-version = "1.0.1"
+version = "1.1.0"
 description = "Phần mềm điều khiển máy cắt ống 4 trục ESP32/FluidNC"
 readme = "README.md"
 requires-python = ">=3.9"

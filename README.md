@@ -46,13 +46,33 @@ cắt chạy dọc còn ống đứng yên** thì chỉ cần đổi vai trò v�
 
 ---
 
+## Phôi: ống tròn và ống hộp
+
+| Loại phôi | Khai báo | Bốn trục phối hợp thế nào |
+|---|---|---|
+| **Ống tròn** | đường kính ngoài | A quay đều, X đứng yên ở 0, Z giữ nguyên |
+| **Ống hộp vuông** | cạnh (+ góc lượn) | trên mặt phẳng: A đứng yên, **X chạy dọc mặt**; qua góc lượn: A xoay 90°, X và Z phối hợp bám cung |
+| **Ống hộp chữ nhật** | cạnh ngang + cạnh dọc | như trên, hai cặp mặt khác chiều dài |
+
+Điểm mấu chốt: mỏ cắt **luôn vuông góc với bề mặt phôi**. Phần mềm xoay trục A sao
+cho pháp tuyến chỗ đang cắt hướng thẳng lên, dùng trục X đưa mỏ cắt tới đúng vị trí
+trên mặt, và trục Z bù chênh cao (góc lượn nhô cao hơn mặt phẳng vài milimét).
+Với ống tròn, phép ánh xạ này tự rút gọn về X = 0, Z không đổi — nên cùng một bộ
+mã chạy đúng cho cả hai loại phôi.
+
+Góc lượn để 0 thì phần mềm tự lấy 2 lần chiều dày thành (sát ống hộp thật). Góc
+nhọn tuyệt đối không cắt được: tại đó pháp tuyến đổi hướng đột ngột 90°, máy sẽ
+phải xoay tại chỗ.
+
+![Mô phỏng cắt ống hộp](docs/mo_phong_ong_hop.svg)
+
 ## Làm được những gì
 
 | Nguyên công | Mô tả |
 |---|---|
 | `cutoff` | Cắt đứt vuông góc hoặc **cắt vát** một góc bất kỳ (làm co, cút) |
-| `saddle` | **Miệng cá / yên ngựa** — cắt đầu ống nhánh ôm khít ống chính (chữ T, chữ Y, lệch tâm) |
-| `hole` | **Lỗ xuyên thành ống**, hướng tâm hoặc xiên, có lệch tâm |
+| `saddle` | **Miệng cá / yên ngựa** — cắt đầu ống nhánh ôm khít ống chính (chữ T, chữ Y, lệch tâm) *— chỉ ống tròn* |
+| `hole` | **Lỗ xuyên thành ống**, hướng tâm hoặc xiên, có lệch tâm *— chỉ ống tròn* |
 | `slot` | Cửa sổ / rãnh chữ nhật bo góc, đo theo kích thước thật trên bề mặt |
 | `circle` | Đường tròn đo trên bề mặt ống |
 | `helix` | Đường xoắn ốc quanh ống |
@@ -170,9 +190,16 @@ Không gửi–chờ–`ok` từng dòng (kiểu đó planner không bao giờ n
 trước). Phần mềm luôn giữ bộ đệm nhận của ESP32 **gần đầy** (đo được ~124/127 byte),
 để FluidNC lúc nào cũng có 15–30 block phía trước mà làm mượt vận tốc giữa các đoạn.
 
-Ngoài ra: đường cắt được xử lý trên **mặt trụ trải phẳng** — một phép đẳng cự, nên
+Ngoài ra: đường cắt được xử lý trên **bề mặt trải phẳng** — một phép đẳng cự, nên
 bù kerf, bo góc và đo chiều dài đều chính xác tuyệt đối; và góc quay biến thiên liên
-tục, không bao giờ nhảy ±180°.
+tục, không bao giờ nhảy ±360°.
+
+Riêng với ống hộp có một giới hạn cơ khí không thể tránh: qua góc lượn, trục A phải
+quay 90° trong một đoạn cung rất ngắn (ống 50×50 góc lượn R6 cần tới ~15 000 độ/phút
+để giữ tốc độ cắt 1600 mm/phút). Phần mềm **kẹp tốc độ theo khả năng thật của trục
+và cảnh báo** thay vì xuất ra lệnh máy không chạy nổi. Bật *tốc độ đều*
+(`uniform_feed`) để cả đường chạy ở một tốc độ bề mặt duy nhất — chậm hơn nhưng vết
+cắt đồng đều từ mặt phẳng sang góc lượn.
 
 ---
 
@@ -187,6 +214,7 @@ pipecut/
   pathops.py     kerf → vào/ra dao → điều tiết điểm → góc trục vát
   kinematics.py  động học 4 trục + bù tốc độ tổng hợp
   gcode.py       hậu xử lý FluidNC (modal, dòng lệnh ngắn)
+  section.py     tiết diện phôi: ống tròn, ống hộp vuông, ống hộp chữ nhật
   gsim.py        diễn giải G-code theo thời gian (cho tab Mô phỏng)
   machinescene.py dựng hình mô phỏng máy (dùng chung cho giao diện và SVG)
   jobs.py        mô tả công việc bằng JSON + danh mục nguyên công
@@ -197,11 +225,11 @@ pipecut/
   svgview.py     xuất bản vẽ xem trước SVG
   cli.py         giao diện dòng lệnh
   ui/            giao diện đồ hoạ Tkinter (kèm khung mô phỏng máy 3D)
-config/          hồ sơ máy mẫu (thường, có trục vát, laser)
+config/          hồ sơ máy mẫu (ống tròn, ống hộp, có trục vát, laser)
 firmware/        cấu hình FluidNC cho ESP32
 examples/        tệp công việc mẫu
 docs/            hướng dẫn sử dụng và tài liệu kỹ thuật
-tests/           72 bài kiểm thử (chạy bằng thư viện chuẩn)
+tests/           92 bài kiểm thử (chạy bằng thư viện chuẩn)
 ```
 
 Chạy kiểm thử:

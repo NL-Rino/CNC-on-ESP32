@@ -5,6 +5,7 @@ import unittest
 
 from pipecut import geom2d as g
 from pipecut import shapes
+from pipecut.section import BoxSection, RoundSection
 
 
 class TestGeom2D(unittest.TestCase):
@@ -84,21 +85,22 @@ def _point_seg_dist(p, a, b):
 
 class TestShapes(unittest.TestCase):
     R = 30.0
+    SEC = RoundSection(60.0)
 
     def test_cat_vuong_goc_la_duong_thang_tren_mat_trai(self):
-        c = shapes.plane_cut(self.R, 100.0, 0.0)
+        c = shapes.plane_cut(self.SEC, 100.0, 0.0)
         self.assertTrue(all(abs(p[0] - 100.0) < 1e-9 for p in c.points))
         self.assertAlmostEqual(c.points[-1][1] - c.points[0][1], 2 * math.pi * self.R, places=6)
 
     def test_cat_vat_cho_bien_do_bang_R_tan_alpha(self):
         for angle in (15.0, 30.0, 45.0, 60.0):
-            c = shapes.plane_cut(self.R, 0.0, angle)
+            c = shapes.plane_cut(self.SEC, 0.0, angle)
             amp = max(p[0] for p in c.points)
             self.assertAlmostEqual(amp, self.R * math.tan(math.radians(angle)), delta=0.02)
 
     def test_mieng_ca_dung_cong_thuc_giao_tuyen(self):
         r, R = 30.0, 50.0
-        c = shapes.saddle_cut(r, R, 90.0, x_ref=0.0, reference="axis")
+        c = shapes.saddle_cut(RoundSection(2 * r), R, 90.0, x_ref=0.0, reference="axis")
         # kiểm tra từng điểm thoả phương trình mặt trụ ống chính
         for u, v in c.points:
             th = v / r
@@ -110,7 +112,7 @@ class TestShapes(unittest.TestCase):
 
     def test_mieng_ca_goc_xien_va_lech_tam(self):
         r, R, beta, e = 20.0, 60.0, 55.0, 8.0
-        c = shapes.saddle_cut(r, R, beta, offset=e, x_ref=0.0, reference="axis")
+        c = shapes.saddle_cut(RoundSection(2 * r), R, beta, offset=e, x_ref=0.0, reference="axis")
         sb, cb = math.sin(math.radians(beta)), math.cos(math.radians(beta))
         for u, v in c.points:
             th = v / r
@@ -122,13 +124,13 @@ class TestShapes(unittest.TestCase):
 
     def test_mieng_ca_bao_loi_khi_khong_kha_thi(self):
         with self.assertRaises(shapes.ShapeError):
-            shapes.saddle_cut(40.0, 30.0, 90.0)          # nhánh to hơn ống chính
+            shapes.saddle_cut(RoundSection(80.0), 30.0, 90.0)          # nhánh to hơn ống chính
         with self.assertRaises(shapes.ShapeError):
-            shapes.saddle_cut(20.0, 30.0, 90.0, offset=25.0)  # lệch tâm quá lớn
+            shapes.saddle_cut(RoundSection(40.0), 30.0, 90.0, offset=25.0)  # lệch tâm quá lớn
 
     def test_lo_xuyen_dung_kich_thuoc(self):
         d = 30.0
-        c = shapes.pierced_hole(self.R, d, 90.0, x_center=50.0)
+        c = shapes.pierced_hole(self.SEC, d, 90.0, x_center=50.0)
         us = [p[0] for p in c.points]
         vs = [p[1] for p in c.points]
         self.assertAlmostEqual(max(us) - min(us), d, delta=0.02)   # dài dọc trục = đường kính
@@ -138,7 +140,7 @@ class TestShapes(unittest.TestCase):
 
     def test_lo_xuyen_nam_tren_ca_hai_mat_tru(self):
         R, d, beta = 40.0, 30.0, 60.0
-        c = shapes.pierced_hole(R, d, beta, x_center=0.0)
+        c = shapes.pierced_hole(RoundSection(2 * R), d, beta, x_center=0.0)
         r = d / 2
         sb, cb = math.sin(math.radians(beta)), math.cos(math.radians(beta))
         for u, v in c.points:
@@ -154,15 +156,15 @@ class TestShapes(unittest.TestCase):
 
     def test_lo_qua_lon_bi_tu_choi(self):
         with self.assertRaises(shapes.ShapeError):
-            shapes.pierced_hole(self.R, 2 * self.R + 1.0)
+            shapes.pierced_hole(self.SEC, 2 * self.R + 1.0)
 
     def test_ranh_dung_chu_vi(self):
-        c = shapes.slot(self.R, 100.0, 0.0, 40.0, angular_width_deg=60.0, corner_radius=0.0)
+        c = shapes.slot(self.SEC, 100.0, 0.0, 40.0, angular_width_deg=60.0, corner_radius=0.0)
         w = math.radians(60.0) * self.R
         self.assertAlmostEqual(g.polyline_length(c.points), 2 * (40.0 + w), delta=0.01)
 
     def test_xoan_oc_dung_do_dai(self):
-        c = shapes.helix(self.R, 0.0, 100.0, 2.0)
+        c = shapes.helix(self.SEC, 0.0, 100.0, 2.0)
         expect = math.hypot(100.0, 2 * 2 * math.pi * self.R)
         self.assertAlmostEqual(g.polyline_length(c.points), expect, delta=0.01)
 

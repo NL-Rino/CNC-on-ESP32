@@ -57,14 +57,15 @@ class _Camera:
         return sum(a * b for a, b in zip(normal, self.dir)) > -0.02
 
 
-def _surface(x: float, theta_deg: float, radius: float) -> Vec3:
-    a = math.radians(theta_deg)
-    return (x, radius * math.sin(a), radius * math.cos(a))
+def _surface(section, x: float, v: float) -> Vec3:
+    """Điểm bề mặt ở toạ độ trải phẳng (x, v) -> toạ độ 3D."""
+    cx, cy = section.point_at(v % section.perimeter)
+    return (x, cx, cy)
 
 
-def _normal(theta_deg: float) -> Vec3:
-    a = math.radians(theta_deg)
-    return (0.0, math.sin(a), math.cos(a))
+def _normal(section, v: float) -> Vec3:
+    psi = math.radians(section.normal_angle(v % section.perimeter))
+    return (0.0, math.sin(psi), math.cos(psi))
 
 
 def _poly(points: Sequence[Tuple[float, float]], color: str, width: float = 1.4,
@@ -88,8 +89,8 @@ def render_svg(
     show_rapids: bool = True,
 ) -> str:
     """Dựng chuỗi SVG cho danh sách lượt chạy dao."""
-    radius = profile.pipe.radius
-    circ = 2 * math.pi * radius
+    section = profile.pipe.section()
+    circ = section.perimeter
     pipe_len = profile.pipe.length
 
     xs = [p.x for ps in passes for p in ps.points] or [0.0, pipe_len]
@@ -100,7 +101,7 @@ def render_svg(
     margin = 46.0
     scale = (width - 2 * margin) / span
     flat_h = circ * scale
-    layout = _iso_layout(passes, radius, x_min, x_max, width, margin, scale)
+    layout = _iso_layout(passes, section, x_min, x_max, width, margin, scale)
     iso_h = (layout[3] - layout[2]) * layout[0] + 30 if show_3d else 0.0
     total_h = margin * 2 + (flat_h + 60 if show_flat else 0) + (iso_h + 40 if show_3d else 0)
 
@@ -123,10 +124,10 @@ def render_svg(
 
     y = margin + 30
     if show_flat:
-        out.extend(_render_flat(passes, radius, x_min, scale, margin, y, span, circ, show_rapids))
+        out.extend(_render_flat(passes, section, x_min, scale, margin, y, span, circ, show_rapids))
         y += flat_h + 60
     if show_3d:
-        out.extend(_render_iso(passes, radius, x_min, x_max, margin, y, layout, show_rapids))
+        out.extend(_render_iso(passes, section, x_min, x_max, margin, y, layout, show_rapids))
     out.append(_legend(width, total_h - 14))
     out.append("</svg>")
     return "\n".join(out)
@@ -136,7 +137,7 @@ def _esc(s: str) -> str:
     return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 
-def _render_flat(passes, radius, x_min, scale, margin, y0, span, circ, show_rapids) -> List[str]:
+def _render_flat(passes, section, x_min, scale, margin, y0, span, circ, show_rapids) -> List[str]:
     out: List[str] = []
     out.append(f'<text x="{margin}" y="{y0 - 10:.1f}" font-family="sans-serif" '
                f'font-size="12" fill="{COLOR_TEXT}">Trải phẳng (ngang: dọc ống, dọc: chu vi)</text>')
@@ -144,28 +145,26 @@ def _render_flat(passes, radius, x_min, scale, margin, y0, span, circ, show_rapi
                f'height="{circ * scale:.1f}" fill="#fbfcfd" stroke="{COLOR_PIPE}"/>')
     # lưới 90 độ
     for k in range(1, 4):
-        yy = y0 + circ * scale * k / 4
+        yy = y0 + section.s_of_theta(90.0 * k) * scale
         out.append(f'<line x1="{margin:.1f}" y1="{yy:.1f}" x2="{margin + span * scale:.1f}" '
                    f'y2="{yy:.1f}" stroke="{COLOR_GRID}" stroke-width="1"/>')
         out.append(f'<text x="{margin - 6:.1f}" y="{yy + 3:.1f}" text-anchor="end" '
                    f'font-family="sans-serif" font-size="9" fill="{COLOR_TEXT}">{90 * k}°</text>')
 
     def to_xy(p: CutPoint) -> Tuple[float, float]:
-        v = math.radians(p.theta % 360.0) * radius
-        return (margin + (p.x - x_min) * scale, y0 + v * scale)
+        return (margin + (p.x - x_min) * scale, y0 + (p.v % circ) * scale)
 
     prev_end: Optional[CutPoint] = None
     for ps in passes:
         if show_rapids and prev_end is not None:
             out.append(_poly([to_xy(prev_end), to_xy(ps.points[0])], COLOR_RAPID, 1.0, "4,3", 0.8))
         color = COLOR_MARK if ps.kind == "mark" else COLOR_CUT
-        n = len(ps.points)
         segments: List[List[Tuple[float, float]]] = [[]]
         prev_v = None
-        for i, p in enumerate(ps.points):
-            v = (p.theta % 360.0)
-            if prev_v is not None and abs(v - prev_v) > 180.0:
-                segments.append([])  # cắt đoạn tại chỗ vòng qua 0/360
+        for p in ps.points:
+            v = p.v % circ
+            if prev_v is not None and abs(v - prev_v) > circ / 2:
+                segments.append([])  # cắt đoạn tại chỗ vòng qua mốc 0
             prev_v = v
             segments[-1].append(to_xy(p))
         for seg in segments:
@@ -179,7 +178,7 @@ def _render_flat(passes, radius, x_min, scale, margin, y0, span, circ, show_rapi
     return out
 
 
-def _iso_layout(passes, radius, x_min, x_max, width, margin, scale):
+def _iso_layout(passes, section, x_min, x_max, width, margin, scale):
     """Tính tỉ lệ và khung bao của hình chiếu trục đo trước khi vẽ.
 
     Phải biết trước chiều cao thật của hình 3D thì mới đặt được chiều cao
@@ -187,12 +186,13 @@ def _iso_layout(passes, radius, x_min, x_max, width, margin, scale):
     """
     cam = _Camera()
     pts: List[Tuple[float, float]] = []
+    per = section.perimeter
     for ps in passes:
         for p in ps.points:
-            pts.append(cam.project(_surface(p.x, p.theta, radius)))
+            pts.append(cam.project(_surface(section, p.x, p.v)))
     for xx in (x_min, x_max):
-        for k in range(0, 361, 6):
-            pts.append(cam.project(_surface(xx, k, radius)))
+        for i in range(61):
+            pts.append(cam.project(_surface(section, xx, per * i / 60)))
     if not pts:
         return (scale, 0.0, 0.0, 0.0)
     bx0 = min(p[0] for p in pts); bx1 = max(p[0] for p in pts)
@@ -201,7 +201,7 @@ def _iso_layout(passes, radius, x_min, x_max, width, margin, scale):
     return (s, bx0, by0, by1)
 
 
-def _render_iso(passes, radius, x_min, x_max, margin, y0, layout, show_rapids) -> List[str]:
+def _render_iso(passes, section, x_min, x_max, margin, y0, layout, show_rapids) -> List[str]:
     out: List[str] = []
     cam = _Camera()
     out.append(f'<text x="{margin}" y="{y0 - 6:.1f}" font-family="sans-serif" '
@@ -215,16 +215,19 @@ def _render_iso(passes, radius, x_min, x_max, margin, y0, layout, show_rapids) -
     def tr(p: Tuple[float, float]) -> Tuple[float, float]:
         return (ox + p[0] * s, oy + p[1] * s)
 
-    # thân ống: đường sinh + hai vành
-    for k in range(0, 360, 15):
-        n = _normal(k)
-        if not cam.visible(n):
+    # thân phôi: đường sinh + hai vành đầu
+    per = section.perimeter
+    marks = sorted(set([per * k / 24 for k in range(24)]
+                       + [b for b in section.breakpoints() if b < per]))
+    for v in marks:
+        if not cam.visible(_normal(section, v)):
             continue
-        a = tr(cam.project(_surface(x_min, k, radius)))
-        b = tr(cam.project(_surface(x_max, k, radius)))
+        a = tr(cam.project(_surface(section, x_min, v)))
+        b = tr(cam.project(_surface(section, x_max, v)))
         out.append(_poly([a, b], COLOR_PIPE, 0.6, "", 0.55))
     for xx in (x_min, x_max):
-        ring = [tr(cam.project(_surface(xx, k, radius))) for k in range(0, 361, 4)]
+        ring = [tr(cam.project(_surface(section, xx, per * i / 96)))
+                for i in range(97)]
         out.append(_poly(ring, COLOR_PIPE, 1.0, "", 0.9))
 
     prev_end: Optional[CutPoint] = None
@@ -232,8 +235,8 @@ def _render_iso(passes, radius, x_min, x_max, margin, y0, layout, show_rapids) -
         color = COLOR_MARK if ps.kind == "mark" else COLOR_CUT
         seg: List[Tuple[float, float]] = []
         for p in ps.points:
-            if cam.visible(_normal(p.theta)):
-                seg.append(tr(cam.project(_surface(p.x, p.theta, radius))))
+            if cam.visible(_normal(section, p.v)):
+                seg.append(tr(cam.project(_surface(section, p.x, p.v))))
             else:
                 if len(seg) > 1:
                     out.append(_poly(seg, color, 1.8))
@@ -241,8 +244,8 @@ def _render_iso(passes, radius, x_min, x_max, margin, y0, layout, show_rapids) -
         if len(seg) > 1:
             out.append(_poly(seg, color, 1.8))
         if show_rapids and prev_end is not None:
-            a = tr(cam.project(_surface(prev_end.x, prev_end.theta, radius)))
-            b = tr(cam.project(_surface(ps.points[0].x, ps.points[0].theta, radius)))
+            a = tr(cam.project(_surface(section, prev_end.x, prev_end.v)))
+            b = tr(cam.project(_surface(section, ps.points[0].x, ps.points[0].v)))
             out.append(_poly([a, b], COLOR_RAPID, 1.0, "4,3", 0.7))
         prev_end = ps.points[-1]
     return out

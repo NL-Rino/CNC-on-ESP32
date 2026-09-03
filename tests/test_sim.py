@@ -85,18 +85,20 @@ class TestPlayback(unittest.TestCase):
         # vết cắt phải phủ đúng vùng toạ độ của đường chạy dao
         self.assertAlmostEqual(min(t.x for t in pb.trace),
                                min(q.x for q in want), delta=0.5)
-        self.assertAlmostEqual(max(t.theta for t in pb.trace),
-                               max(q.theta for q in want), delta=1.0)
+        self.assertAlmostEqual(max(t.v for t in pb.trace),
+                               max(q.v for q in want), delta=1.0)
 
     def test_mo_cat_lech_ngang_lam_lech_diem_cham(self):
         """Khi trục ngang khác 0, điểm chạm không còn ở vị trí 12 giờ."""
+        section = self.p.pipe.section()
         r = self.p.pipe.radius
         offset = r / 2.0
         pb = Playback(self.p, ["G90", "M3", f"G1 {self.cross}{offset} "
                                             f"{self.along}50 {self.rotary}0 F600"])
         self.assertTrue(pb.trace)
-        expected = math.degrees(math.asin(offset / r))
-        self.assertAlmostEqual(pb.trace[-1].theta, expected, delta=0.5)
+        # ống tròn: lệch ngang một đoạn e thì điểm chạm lệch góc asin(e/R)
+        expected_v = section.s_of_theta(math.degrees(math.asin(offset / r)))
+        self.assertAlmostEqual(pb.trace[-1].v, expected_v, delta=0.5)
 
     def test_vet_cat_tang_dan_theo_thoi_gian(self):
         job = Job()

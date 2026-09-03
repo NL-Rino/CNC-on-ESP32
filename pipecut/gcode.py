@@ -188,7 +188,7 @@ class PostProcessor:
         stats = ProgramStats()
         job_name = name or toolpath.name
 
-        radius = toolpath.radius or pf.pipe.radius
+        section = toolpath.section or pf.pipe.section()
         z_safe = pr.safe_height
         z_cut = pr.cut_height
         z_pierce = pr.pierce_height
@@ -196,7 +196,7 @@ class PostProcessor:
 
         b.comment(f"PipeCut Studio - {job_name}")
         b.comment(f"May: {pf.name}")
-        b.comment(f"Ong: OD {pf.pipe.outer_diameter:.1f} x day {pf.pipe.wall_thickness:.1f} mm")
+        b.comment(f"Phoi: {section.describe()} x day {pf.pipe.wall_thickness:.1f} mm")
         b.comment(f"Tien trinh: {pr.kind}  kerf {pr.kerf:.2f}  F be mat {pr.cut_feed:.0f} mm/ph")
         b.comment("Truc: " + ", ".join(f"{a.letter}={a.role}" for a in pf.axes if a.enabled))
         for line in pf.preamble:
@@ -206,7 +206,7 @@ class PostProcessor:
         passes: List[Pass] = []
         for contour in toolpath.contours:
             try:
-                ps = process_contour(contour, radius, self.motion, pr)
+                ps = process_contour(contour, section, self.motion, pr)
             except Exception as exc:  # biên dạng hỏng không được làm chết cả job
                 stats.warnings.append(f"Bỏ qua '{contour.name}': {exc}")
                 continue
@@ -256,11 +256,14 @@ class PostProcessor:
         b.comment(f"--- {ps.name} ({len(pts)} diem) ---")
 
         # 1) nâng lên chiều cao an toàn
+        z_surf = pts[0].surface_z          # ống hộp: bề mặt ở góc lượn cao hơn
         if use_z:
-            b.move({z_letter: pf.axis(ROLE_RADIAL).apply(z_safe)}, None)
+            b.move({z_letter: pf.axis(ROLE_RADIAL).apply(z_safe + z_surf)}, None)
 
         # 2) chạy nhanh tới điểm mồi, quay theo đường ngắn nhất
-        start = CutPoint(pts[0].x, pts[0].theta, pts[0].bevel, pts[0].cross)
+        start = CutPoint(x=pts[0].x, v=pts[0].v, theta=pts[0].theta,
+                         cross=pts[0].cross, surface_z=pts[0].surface_z,
+                         bevel=pts[0].bevel)
         if rot:
             cur = b.position.get(rot.letter)
             if cur is not None:
@@ -275,7 +278,7 @@ class PostProcessor:
 
         # 3) mồi / bật nguồn cắt
         if use_z:
-            b.move({z_letter: pf.axis(ROLE_RADIAL).apply(z_pierce)}, None)
+            b.move({z_letter: pf.axis(ROLE_RADIAL).apply(z_pierce + z_surf)}, None)
         on_cmd = pr.on_command
         if power and ("S" not in on_cmd.upper()):
             on_cmd = f"{on_cmd} S{fmt(power, 0)}"
@@ -283,23 +286,44 @@ class PostProcessor:
         stats.pierces += 1
         b.dwell(pr.pierce_delay)
         if use_z and abs(z_pierce - z_cut) > 1e-6:
-            b.move({z_letter: pf.axis(ROLE_RADIAL).apply(z_cut)}, pr.plunge_feed,
+            b.move({z_letter: pf.axis(ROLE_RADIAL).apply(z_cut + z_surf)}, pr.plunge_feed,
                    comment="ha xuong chieu cao cat")
             stats.estimated_time += abs(z_pierce - z_cut) / max(pr.plunge_feed, 1.0) * 60.0
         elif use_z:
-            b.move({z_letter: pf.axis(ROLE_RADIAL).apply(z_cut)}, pr.plunge_feed)
+            b.move({z_letter: pf.axis(ROLE_RADIAL).apply(z_cut + z_surf)}, pr.plunge_feed)
         stats.estimated_time += pr.pierce_delay
 
-        # 4) chạy cắt: mỗi đoạn có F riêng theo tốc độ bề mặt không đổi
+        # 4) chạy cắt: mỗi đoạn có F riêng theo tốc độ bề mặt không đổi.
+        #    Trước hết dò xem máy có giữ nổi tốc độ đặt trên cả đường không -
+        #    chỗ nào trục chạm trần tốc độ thì tốc độ bề mặt sẽ tụt xuống.
         z_now = z_cut if use_z else None
+        slowest = feed_target
+        probe = start
+        for raw_pt in pts[1:]:
+            nxt = CutPoint(x=raw_pt.x, v=raw_pt.v, theta=raw_pt.theta + shift,
+                           cross=raw_pt.cross, surface_z=raw_pt.surface_z,
+                           bevel=raw_pt.bevel)
+            slowest = min(slowest, kin.achievable_surface_speed(
+                probe, nxt, feed_target, z_now, z_now))
+            probe = nxt
+        if self.motion.uniform_feed and slowest < feed_target:
+            feed_target = slowest      # cắt cả đường ở một tốc độ duy nhất
+        elif slowest < feed_target * self.motion.slow_warn_ratio:
+            stats.warnings.append(
+                f"{ps.name}: tốc độ cắt tụt còn {slowest:.0f} mm/phút "
+                f"(đặt {feed_target:.0f}) ở chỗ trục chạm trần tốc độ - "
+                f"tăng tốc độ tối đa của trục xoay hoặc bật 'tốc độ đều'."
+            )
         prev = start
         cut_len = 0.0
         for raw_pt in pts[1:]:
-            cur = CutPoint(raw_pt.x, raw_pt.theta + shift, raw_pt.bevel, raw_pt.cross)
+            cur = CutPoint(x=raw_pt.x, v=raw_pt.v, theta=raw_pt.theta + shift,
+                           cross=raw_pt.cross, surface_z=raw_pt.surface_z,
+                           bevel=raw_pt.bevel)
             feed, l_real, l_mach = kin.feed_for(prev, cur, feed_target, z_now, z_now)
             if l_mach <= 1e-9:
                 continue
-            b.move(kin.axis_values(cur, None), feed)
+            b.move(kin.axis_values(cur, z_now), feed)
             cut_len += l_real
             stats.estimated_time += l_mach / max(feed, 1e-6) * 60.0
             prev = cur

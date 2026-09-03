@@ -11,7 +11,7 @@ import json
 import math
 import os
 from dataclasses import dataclass, field, fields, asdict
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 # Vai trò của từng trục trên máy cắt ống
 ROLE_ALONG = "along"    # chạy dọc theo trục ống (thường là X)
@@ -21,6 +21,9 @@ ROLE_ROTARY = "rotary"  # mâm cặp xoay ống (thường là A) - đơn vị �
 ROLE_BEVEL = "bevel"    # trục nghiêng đầu cắt để vát mép - đơn vị ĐỘ
 
 ALL_ROLES = (ROLE_ALONG, ROLE_CROSS, ROLE_RADIAL, ROLE_ROTARY, ROLE_BEVEL)
+
+if TYPE_CHECKING:  # tránh phụ thuộc vòng khi chạy thật
+    from .section import Section
 ANGULAR_ROLES = (ROLE_ROTARY, ROLE_BEVEL)
 
 
@@ -58,16 +61,47 @@ class AxisSpec:
 
 @dataclass
 class PipeSpec:
-    """Phôi ống đang gá trên mâm cặp."""
+    """Phôi đang gá trên mâm cặp: ống tròn hoặc ống hộp.
 
-    outer_diameter: float = 60.0
+    * **Ống tròn** khai báo bằng ``outer_diameter``.
+    * **Ống hộp** khai báo bằng ``width`` (cạnh ngang) và ``height`` (cạnh dọc);
+      hộp vuông chỉ cần ``width``.  ``corner_radius`` để 0 thì phần mềm tự lấy
+      2 lần chiều dày thành - sát với ống hộp thật.
+    """
+
+    shape: str = "round"          # round | square | rect
+    outer_diameter: float = 60.0  # ống tròn
+    width: float = 40.0           # ống hộp: cạnh theo phương ngang
+    height: float = 40.0          # ống hộp: cạnh theo phương đứng
+    corner_radius: float = 0.0    # bán kính góc lượn (0 = tự tính)
     wall_thickness: float = 3.0
     length: float = 1000.0
     material: str = "steel"
 
+    def section(self) -> "Section":
+        """Đối tượng tiết diện tương ứng (dùng cho mọi phép tính hình học)."""
+        from .section import make_section
+        return make_section(self.shape, self.outer_diameter, self.width,
+                            self.height, self.corner_radius, self.wall_thickness)
+
+    @property
+    def is_round(self) -> bool:
+        return self.shape == "round"
+
     @property
     def radius(self) -> float:
-        return self.outer_diameter / 2.0
+        """Bán kính bao ngoài - khoảng cách xa nhất từ tâm tới bề mặt."""
+        if self.is_round:
+            return self.outer_diameter / 2.0
+        return self.section().max_radius
+
+    @property
+    def size_text(self) -> str:
+        if self.is_round:
+            return f"⌀{self.outer_diameter:g}"
+        if self.shape == "square":
+            return f"□{self.width:g}×{self.width:g}"
+        return f"□{self.width:g}×{self.height:g}"
 
     @property
     def inner_radius(self) -> float:
@@ -75,11 +109,25 @@ class PipeSpec:
 
     def feed_radius(self, mode: str = "outer") -> float:
         """Bán kính dùng để quy đổi tốc độ vòng -> tốc độ cắt thực."""
+        if not self.is_round:
+            return self.radius
+        r = self.outer_diameter / 2.0
         if mode == "inner":
-            return self.inner_radius
+            return max(0.1, r - self.wall_thickness)
         if mode == "mid":
-            return max(0.1, self.radius - self.wall_thickness / 2.0)
-        return self.radius
+            return max(0.1, r - self.wall_thickness / 2.0)
+        return r
+
+    def feed_scale(self, mode: str = "outer") -> float:
+        """Hệ số quy đổi chiều dài cung ngoài sang cung dùng để tính tốc độ.
+
+        Ống tròn cắt bằng nội suy quay nên có thể lấy tốc độ ở giữa thành ống;
+        ống hộp cắt trên mặt phẳng nên luôn dùng đúng bề mặt ngoài (hệ số 1).
+        """
+        if not self.is_round:
+            return 1.0
+        r = self.outer_diameter / 2.0
+        return self.feed_radius(mode) / r if r > 0 else 1.0
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "PipeSpec":
@@ -156,6 +204,8 @@ class MotionSpec:
     rotary_rewind: bool = False       # sau mỗi biên dạng, đặt lại góc A về 0..360
     decimals: int = 3
     corner_radius: float = 0.0        # bo góc mặc định cho đường có góc nhọn (mm)
+    uniform_feed: bool = False        # cắt cả đường ở một tốc độ bề mặt duy nhất
+    slow_warn_ratio: float = 0.7      # cảnh báo khi tốc độ tụt dưới tỉ lệ này
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "MotionSpec":
@@ -189,7 +239,10 @@ def _default_axes() -> List[AxisSpec]:
     * **Z** - mỏ cắt lên xuống
     """
     return [
-        AxisSpec(letter="X", role=ROLE_CROSS, max_rate=3000.0, accel=200.0, max_travel=200.0),
+        # Trục ngang lấy gốc trên đường tâm phôi nên hành trình đối xứng:
+        # cắt ống hộp cần chạy sang cả hai bên mặt.
+        AxisSpec(letter="X", role=ROLE_CROSS, max_rate=3000.0, accel=200.0,
+                 min_travel=-100.0, max_travel=100.0),
         AxisSpec(letter="Y", role=ROLE_ALONG, max_rate=4000.0, accel=250.0, max_travel=1200.0),
         AxisSpec(letter="Z", role=ROLE_RADIAL, max_rate=2000.0, accel=200.0, max_travel=150.0),
         AxisSpec(letter="A", role=ROLE_ROTARY, max_rate=3600.0, accel=400.0, max_travel=0.0),
@@ -260,10 +313,16 @@ class MachineProfile:
                 msgs.append(f"Chữ cái trục '{key}' không hợp lệ với FluidNC.")
             if a.role not in ALL_ROLES:
                 msgs.append(f"Vai trò '{a.role}' của trục {key} không hợp lệ.")
-        if self.pipe.outer_diameter <= 0:
+        try:
+            self.pipe.section()
+        except Exception as exc:
+            msgs.append(f"Tiết diện phôi không hợp lệ: {exc}")
+        if self.pipe.is_round and self.pipe.outer_diameter <= 0:
             msgs.append("Đường kính ống phải > 0.")
+        if not self.pipe.is_round and min(self.pipe.width, self.pipe.height) <= 0:
+            msgs.append("Cạnh ống hộp phải > 0.")
         if self.pipe.wall_thickness >= self.pipe.radius:
-            msgs.append("Chiều dày thành ống lớn hơn bán kính - kiểm tra lại.")
+            msgs.append("Chiều dày thành lớn hơn bán kính bao ngoài - kiểm tra lại.")
         if self.process.cut_height >= self.process.safe_height:
             msgs.append("Chiều cao an toàn phải lớn hơn chiều cao cắt.")
         if self.motion.chord_tolerance <= 0:

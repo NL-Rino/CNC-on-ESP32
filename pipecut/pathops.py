@@ -158,6 +158,46 @@ def apply_overcut(contour: Contour, pts: Sequence[Point], section: Section, over
     return pts
 
 
+def apply_lead_start(
+    contour: Contour,
+    pts: Sequence[Point],
+    section: Section,
+    percent: float,
+) -> List[Point]:
+    """Dời **điểm bắt đầu** của biên dạng đi ``percent`` % chu vi.
+
+    Điểm bắt đầu chính là nơi mồi và nơi đoạn vào dao bám vào.  Vết mồi rất
+    xấu và rộng, nên thợ luôn muốn tự chọn nó rơi vào chỗ nào - ví dụ vào giữa
+    một cạnh thay vì đúng góc bo, hoặc vào mặt khuất.
+    """
+    frac = (percent % 100.0) / 100.0
+    if frac <= 1e-9 or len(pts) < 3:
+        return list(pts)
+
+    if contour.closed:
+        loop = g.close_loop(list(pts))
+        total = g.polyline_length(loop)
+        target = total * frac
+        acc, idx = 0.0, 0
+        for i in range(len(loop) - 1):
+            step = g.dist(loop[i], loop[i + 1])
+            if acc + step >= target:
+                idx = i if (target - acc) < step / 2 else i + 1
+                break
+            acc += step
+        return g.rotate_start(loop, idx, closed=True)
+
+    if contour.wrap:
+        per = section.perimeter
+        shift = per * frac
+        ext, nh, _nt = periodic_extend(pts, section, shift + 5.0)
+        v0 = pts[0][1] + shift
+        rolled = _trim_v_range(ext, v0, v0 + per)
+        return rolled if len(rolled) >= 2 else list(pts)
+
+    return list(pts)
+
+
 def _lead_steps(length: float, min_segment: float) -> int:
     step = max(0.4, min_segment if min_segment > 0 else 0.5)
     return max(3, min(24, int(math.ceil(length / step))))
@@ -183,29 +223,35 @@ def build_leads(
     lead_out: List[Point] = []
 
     if contour.closed:
+        # phía vào dao: mặc định vào từ trong lòng biên dạng (chỗ phế liệu)
+        side = -1.0 if process.lead_side == "outside" else 1.0
         if lin > 0:
             d = g.sub(pts[1], pts[0])
             if ltype == "arc":
-                arc = g.lead_arc(pts[0], d, lin, side=1.0, steps=_lead_steps(lin * 1.6, motion.min_segment))
+                arc = g.lead_arc(pts[0], d, lin, side=side,
+                                 steps=_lead_steps(lin * 1.6, motion.min_segment))
             else:
-                arc = g.lead_line(pts[0], d, lin, process.lead_angle)
+                arc = g.lead_line(pts[0], d, lin, process.lead_angle * side)
             lead_in = arc[:-1] if len(arc) > 1 else []
         if lout > 0:
             d = g.sub(pts[-1], pts[-2])
             if ltype == "arc":
-                arc = g.lead_arc(pts[-1], g.mul(d, -1.0), lout, side=-1.0,
+                arc = g.lead_arc(pts[-1], g.mul(d, -1.0), lout, side=-side,
                                  steps=_lead_steps(lout * 1.6, motion.min_segment))
                 arc = list(reversed(arc))
             else:
-                arc = list(reversed(g.lead_line(pts[-1], g.mul(d, -1.0), lout, -process.lead_angle)))
+                arc = list(reversed(g.lead_line(pts[-1], g.mul(d, -1.0), lout,
+                                                -process.lead_angle * side)))
             lead_out = arc[1:] if len(arc) > 1 else []
         return lead_in, lead_out
 
     if contour.wrap:
-        # mồi lệch về phía đầu tự do rồi tiến ngang vào đường cắt
+        # mồi lệch dọc trục rồi tiến ngang vào đường cắt; mặc định lệch về phía
+        # đầu tự do (u lớn) vì đó là phần phế liệu
         if lin > 0:
+            sign = -1.0 if process.lead_side == "minus" else 1.0
             start = pts[0]
-            lead_in = [(start[0] + lin, start[1])]
+            lead_in = [(start[0] + lin * sign, start[1])]
         return lead_in, []
 
     # đường hở: kéo dài theo tiếp tuyến hai đầu
@@ -334,6 +380,44 @@ def refine_for_section(
     for a, b in zip(pts, pts[1:]):
         recurse(a, b, 0)
     return g.dedupe(out)
+
+
+def mark_corner_indexing(
+    points: List[CutPoint],
+    section: Section,
+    motion: MotionSpec,
+    process: ProcessSpec,
+) -> List[CutPoint]:
+    """Đánh dấu các điểm nằm trong cung góc lượn là **pha xoay góc**.
+
+    Ở chế độ ``corner_mode = "index"``, khi đường cắt tới mép mặt phẳng thì
+    dừng cắt: mâm cặp quay hết góc lượn (90 độ với ống hộp) trong khi trục
+    ngang và trục Z phối hợp giữ mỏ cắt luôn bám đúng chỗ góc đó trên phôi;
+    quay xong mới hạ xuống cắt tiếp mặt kế bên.
+
+    Nhờ vậy không còn phải ép trục xoay chạy ~15 000 độ/phút để giữ tốc độ cắt
+    qua góc - pha xoay không cắt nên chạy ở tốc độ nào cũng được.
+
+    Nếu tắt mỏ trong lúc xoay (mặc định) thì mỏ được nhấc thêm ``corner_lift``
+    mm cho an toàn; **đổi lại phần cung góc sẽ không được cắt**.
+    """
+    spans = section.arc_spans()
+    if not spans or motion.corner_mode != "index" or not points:
+        return points
+    per = section.perimeter
+    lift = motion.corner_lift if motion.corner_torch_off else 0.0
+    out: List[CutPoint] = []
+    for p in points:
+        v = p.v % per
+        inside = any(v0 + 1e-9 < v < v1 - 1e-9 for v0, v1 in spans)
+        if inside and p.kind == "cut":
+            z_axis = (process.cut_height + p.surface_z + lift) if lift else None
+            out.append(CutPoint(x=p.x, v=p.v, theta=p.theta, cross=p.cross,
+                                surface_z=p.surface_z, bevel=p.bevel,
+                                kind="index", z_axis=z_axis))
+        else:
+            out.append(p)
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -473,7 +557,8 @@ def process_contour(
     if motion.corner_radius > 0 and contour.meta.get("shape") in ("slot", "flat_pattern"):
         pts = g.round_corners(pts, motion.corner_radius, closed=contour.closed,
                               tolerance=motion.chord_tolerance)
-    # 3) chạy vượt (là phần nối dài của đường cắt)
+    # 3) dời điểm mồi theo ý người dùng, rồi chạy vượt
+    pts = apply_lead_start(contour, pts, section, process.lead_start)
     pts = apply_overcut(contour, pts, section, process.overcut)
     # 4) điều tiết mật độ điểm
     pts = condition(pts, motion)
@@ -509,11 +594,16 @@ def process_contour(
         cut_points.append(CutPoint(x=u, v=v, theta=ct.theta, cross=ct.cross,
                                    surface_z=ct.height - ref,
                                    bevel=all_bevels[i]))
+    if contour.kind != "mark":
+        cut_points = mark_corner_indexing(cut_points, section, motion, process)
+    meta = dict(contour.meta)
+    meta["wrap"] = contour.wrap
+    meta["closed"] = contour.closed
     return Pass(
         points=cut_points,
         name=contour.name,
         kind=contour.kind,
         lead_in_count=len(lead_in),
         lead_out_count=len(lead_out),
-        meta=dict(contour.meta),
+        meta=meta,
     )

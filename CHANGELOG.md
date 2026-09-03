@@ -1,5 +1,54 @@
 # Nhật ký thay đổi
 
+## v1.2.0 — 2026-09-03
+
+### Thứ tự cắt: giữ đúng như người dùng xếp
+
+Trước đây phần mềm **tự sắp xếp lại** thứ tự cắt mà không có cách nào tắt, nên
+xếp đúng thứ tự trong bảng rồi máy vẫn cắt theo thứ tự khác. Nay:
+
+* mặc định **giữ nguyên thứ tự trong bảng**, không tự đổi;
+* có ô *Tự sắp xếp thứ tự cắt* trên giao diện để bật khi cần;
+* dòng chữ dưới bảng luôn hiện **thứ tự cắt thật sự** sẽ chạy;
+* nếu tự xếp mà có nguyên công nằm ngoài một nhát cắt đứt phía trước, phần mềm
+  **cảnh báo** (lúc đó phần phôi đó đã rơi ra) chứ không tự ý đổi thứ tự.
+
+### Thư viện nguyên công lọc theo dạng phôi
+
+Máy chỉ cắt ống hộp thì không cần thấy *miệng cá* và *lỗ xuyên thành* — hai
+biên dạng đó là bài toán giao hai mặt trụ, chỉ có nghĩa với ống tròn. Danh sách
+thêm nguyên công nay tự lọc theo hình dạng phôi đang khai báo, và hồ sơ máy mặc
+định `config/machine_default.json` đã chuyển sang **ống hộp**
+(`config/machine_round.json` dành cho máy cắt ống tròn).
+
+### Điều khiển vào dao
+
+Thêm hai thông số để chọn chỗ vết mồi rơi vào:
+
+* **Vị trí điểm mồi** (`lead_start`, % chu vi biên dạng) — xoay điểm bắt đầu
+  quanh biên dạng, ví dụ đưa vết mồi vào giữa một cạnh thay vì đúng góc bo, hoặc
+  chuyển nhát cắt đứt sang bắt đầu ở mặt khác;
+* **Phía vào dao** (`lead_side`) — `inside`/`outside` với biên dạng kín,
+  `plus`/`minus` với nhát cắt quanh phôi (mồi lệch về đầu tự do hay về mâm cặp).
+
+### Chế độ dừng cắt — xoay góc — cắt tiếp (ống hộp)
+
+`corner_mode = "index"`: cắt hết một mặt phẳng thì **tắt mỏ, nhấc lên, ba trục
+phối hợp giữ mỏ bám đúng góc đó trên phôi trong lúc mâm quay 90°, quay xong hạ
+xuống mồi lại rồi cắt mặt kế tiếp**. Nhờ vậy tốc độ cắt trên mặt phẳng luôn đúng
+như đặt, không bị trục xoay kéo tụt ở góc.
+
+Đổi lại bốn cung góc lượn không được cắt nên phôi chưa rời hẳn — phần mềm cảnh
+báo rõ. Đặt `corner_torch_off = false` thì mỏ vẫn cháy suốt lúc xoay nên cắt
+luôn cả góc. Hồ sơ mẫu: `config/machine_box_index.json`.
+
+### Khác
+
+* Sửa lỗi mỏ cắt hạ xuống cao độ cắt **trước khi** quay xong ở chế độ index
+  (cắm vào thành phôi 0,13 mm).
+* Pha xoay góc được vẽ bằng nét đứt trong hai khung xem trước (vì không cắt).
+* Kiểm thử tăng từ 92 lên **109 bài**.
+
 ## v1.1.0 — 2026-09-03
 
 ### Hỗ trợ ống hộp (vuông và chữ nhật)

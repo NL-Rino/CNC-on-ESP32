@@ -90,8 +90,12 @@ class Kinematics:
         """
         vals: AxisValues = {}
         x = cp.x
-        # trục Z bù chênh cao bề mặt: ống hộp cao hơn ở góc lượn
-        zz = None if z is None else z + cp.surface_z
+        # trục Z bù chênh cao bề mặt: ống hộp cao hơn ở góc lượn.
+        # Pha xoay góc có thể ghi đè hẳn giá trị trục Z (nhấc mỏ lên cho an toàn).
+        if cp.z_axis is not None:
+            zz = cp.z_axis
+        else:
+            zz = None if z is None else z + cp.surface_z
         gamma = math.radians(cp.bevel) if self.ax_bevel else 0.0
         pivot = self.motion.bevel_pivot
         if self.ax_bevel and abs(pivot) > 1e-9 and abs(gamma) > 1e-12:

@@ -159,16 +159,20 @@ def _render_flat(passes, section, x_min, scale, margin, y0, span, circ, show_rap
         if show_rapids and prev_end is not None:
             out.append(_poly([to_xy(prev_end), to_xy(ps.points[0])], COLOR_RAPID, 1.0, "4,3", 0.8))
         color = COLOR_MARK if ps.kind == "mark" else COLOR_CUT
-        segments: List[List[Tuple[float, float]]] = [[]]
+        segments: List[Tuple[str, List[Tuple[float, float]]]] = [(ps.points[0].kind, [])]
         prev_v = None
         for p in ps.points:
             v = p.v % circ
-            if prev_v is not None and abs(v - prev_v) > circ / 2:
-                segments.append([])  # cắt đoạn tại chỗ vòng qua mốc 0
+            if (prev_v is not None and abs(v - prev_v) > circ / 2) or \
+                    p.kind != segments[-1][0]:
+                segments.append((p.kind, []))
             prev_v = v
-            segments[-1].append(to_xy(p))
-        for seg in segments:
-            out.append(_poly(seg, color, 1.6))
+            segments[-1][1].append(to_xy(p))
+        for kind, seg in segments:
+            if kind == "cut":
+                out.append(_poly(seg, color, 1.6))
+            else:   # pha xoay góc: không cắt nên vẽ nét đứt
+                out.append(_poly(seg, COLOR_RAPID, 1.2, "4,3", 0.9))
         # đoạn vào dao
         if ps.lead_in_count:
             out.append(_poly([to_xy(p) for p in ps.points[:ps.lead_in_count + 1]], COLOR_LEAD, 1.6))
@@ -234,15 +238,25 @@ def _render_iso(passes, section, x_min, x_max, margin, y0, layout, show_rapids) 
     for ps in passes:
         color = COLOR_MARK if ps.kind == "mark" else COLOR_CUT
         seg: List[Tuple[float, float]] = []
+        seg_kind = ps.points[0].kind
+
+        def flush_iso():
+            if len(seg) > 1:
+                if seg_kind == "cut":
+                    out.append(_poly(seg, color, 1.8))
+                else:
+                    out.append(_poly(seg, COLOR_RAPID, 1.2, "4,3", 0.9))
+            seg.clear()
+
         for p in ps.points:
+            if p.kind != seg_kind:
+                flush_iso()
+                seg_kind = p.kind
             if cam.visible(_normal(section, p.v)):
                 seg.append(tr(cam.project(_surface(section, p.x, p.v))))
             else:
-                if len(seg) > 1:
-                    out.append(_poly(seg, color, 1.8))
-                seg = []
-        if len(seg) > 1:
-            out.append(_poly(seg, color, 1.8))
+                flush_iso()
+        flush_iso()
         if show_rapids and prev_end is not None:
             a = tr(cam.project(_surface(section, prev_end.x, prev_end.v)))
             b = tr(cam.project(_surface(section, ps.points[0].x, ps.points[0].v)))

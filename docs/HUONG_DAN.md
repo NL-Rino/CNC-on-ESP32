@@ -147,6 +147,24 @@ thiết** — đối chiếu với hành trình thật của máy trước khi c
 | Trần tốc độ | Giới hạn F ghi ra | Chặn trên an toàn |
 | Góc vát tối đa | Giới hạn cơ khí của trục vát | Đặt đúng khả năng máy |
 | Tâm xoay tới mũi cắt | Khoảng cách từ tâm nghiêng tới mũi cắt | Để phần mềm bù toạ độ khi nghiêng |
+| Tốc độ đều cả đường | Cả đường cắt chạy một tốc độ bề mặt duy nhất | Bật khi cắt ống hộp muốn vết cắt đồng đều |
+| Qua góc ống hộp | `follow` cắt liền mạch, `index` dừng cắt rồi xoay 90° | Xem mục dưới |
+| Tắt mỏ khi xoay góc | Chỉ có tác dụng ở chế độ `index` | Tắt thì góc lượn không được cắt |
+| Nhấc mỏ khi xoay góc | Nhấc thêm bao nhiêu mm cho an toàn khi xoay | 5-10 mm là đủ |
+
+**Chọn cách vượt góc ống hộp.** Qua cung góc lượn, mâm cặp phải quay 90° trong
+một đoạn cung rất ngắn — ống 50×50 góc lượn R6 cần tới ~15 000 độ/phút để giữ
+tốc độ cắt 1600 mm/phút, không mâm cặp thường nào làm nổi. Hai lối ra:
+
+* **`follow`** — cắt liền mạch qua góc, phần mềm tự hạ tốc độ xuống mức máy chạy
+  được và báo con số cụ thể. Phôi **đứt hẳn**. Đổi lại vết cắt ở góc chậm hơn ở
+  mặt phẳng (bật *Tốc độ đều* để đồng đều lại).
+* **`index`** — cắt hết mặt phẳng rồi **dừng cắt: tắt mỏ, nhấc lên, ba trục phối
+  hợp giữ mỏ bám đúng góc đó trên phôi trong lúc mâm quay 90°, quay xong hạ
+  xuống mồi lại và cắt mặt kế tiếp**. Tốc độ trên mặt phẳng luôn đúng như đặt.
+  Đổi lại **bốn cung góc lượn không được cắt** nên phôi chưa rời hẳn — dùng khi
+  cắt cửa sổ/rãnh trên các mặt, hoặc khi chấp nhận bẻ/mài nốt góc.
+  Muốn vừa dừng-xoay vừa cắt cả góc thì đặt *Tắt mỏ khi xoay góc* = không.
 
 Bấm **Áp dụng thông số** rồi **Lưu hồ sơ máy...** để dùng lại lần sau.
 
@@ -181,9 +199,26 @@ Tab **3. Công việc**:
 3. Dùng **Lên / Xuống** để đổi thứ tự, **Bật/tắt** để tạm bỏ qua một nguyên công.
 4. **Lưu...** thành tệp `.json` để dùng lại.
 
-> **Thứ tự cắt tự động.** Phần mềm luôn sắp xếp lại: *vạch dấu → lỗ/rãnh → cắt
-> đứt*, và các nhát cắt đứt được xếp từ đầu tự do vào trong. Lý do: sau khi cắt
-> đứt thì phần ống phía ngoài rơi ra, không còn gá được nữa.
+> **Thứ tự cắt.** Mặc định phần mềm **cắt đúng thứ tự trong bảng** — xếp sao thì
+> chạy vậy. Dòng chữ dưới bảng luôn hiện thứ tự thật sự sẽ chạy để đối chiếu.
+>
+> Tích ô *Tự sắp xếp thứ tự cắt* nếu muốn phần mềm tự lo: *vạch dấu → lỗ/rãnh →
+> cắt đứt*, các nhát cắt đứt xếp từ đầu tự do vào trong (sau khi cắt đứt thì
+> phần phôi phía ngoài rơi ra, không còn gá được nữa).
+>
+> Khi tự xếp thủ công, nếu có nguyên công nằm **ngoài** một nhát cắt đứt đứng
+> trước nó, phần mềm sẽ cảnh báo chứ không tự đổi thứ tự của bạn.
+
+> **Thư viện nguyên công lọc theo phôi.** Khai báo ống hộp thì danh sách không
+> hiện *miệng cá* và *lỗ xuyên thành* — hai biên dạng đó là giao của hai mặt trụ,
+> chỉ dùng được với ống tròn. Cần lỗ tròn trên mặt ống hộp thì dùng *Lỗ tròn trên
+> mặt*.
+
+> **Chọn chỗ vết mồi.** Vết mồi rất xấu và rộng nên nên cho nó rơi vào phần phế
+> liệu hoặc chỗ khuất. Ô *Vị trí điểm mồi* (% chu vi biên dạng) xoay điểm bắt đầu
+> quanh đường cắt; ô *Phía vào dao* chọn vào từ trong hay ngoài biên dạng kín,
+> hoặc lệch về đầu tự do (`plus`) hay về phía mâm cặp (`minus`) với nhát cắt
+> quanh phôi.
 
 Vài lưu ý theo từng nguyên công:
 
@@ -271,7 +306,8 @@ for i, (chieu_dai, goc) in enumerate([(300, 30), (450, 45), (600, 22.5)]):
 
 | Hiện tượng | Nguyên nhân thường gặp | Cách xử lý |
 |---|---|---|
-| Cắt ống hộp bị **cháy/đọng xỉ ở góc lượn** | Tốc độ cắt tụt ở góc vì trục xoay chạm trần tốc độ | Bật *tốc độ đều* trong hồ sơ máy, hoặc tăng tốc độ tối đa trục A (giảm tỉ số truyền, tăng điện áp driver) |
+| Cắt ống hộp bị **cháy/đọng xỉ ở góc lượn** | Tốc độ cắt tụt ở góc vì trục xoay chạm trần tốc độ | Bật *tốc độ đều*, hoặc chuyển sang chế độ `index`, hoặc tăng tốc độ tối đa trục A |
+| Cắt ống hộp xong mà **phôi chưa rời** | Đang dùng `index` có tắt mỏ nên bốn cung góc không được cắt | Đây là cảnh báo phần mềm đã báo trước; đổi sang `follow` hoặc tắt tuỳ chọn *Tắt mỏ khi xoay góc* |
 | Phần mềm báo *"tốc độ cắt tụt còn ... mm/phút"* | Đúng như trên — máy không quay kịp qua góc | Xem cột trên; nếu chấp nhận được thì bỏ qua, đây là cảnh báo chứ không phải lỗi |
 | Cắt ống hộp báo **vượt hành trình trục X** | Trục ngang không đủ dài để chạy hết bề rộng mặt | Cần hành trình ít nhất ±(nửa cạnh − góc lượn); đặt gốc X đúng đường tâm phôi |
 | Nguyên công *miệng cá* / *lỗ xuyên* bị bỏ qua | Hai biên dạng này chỉ có nghĩa với ống tròn | Với ống hộp dùng *rãnh*, *tròn trên bề mặt* hoặc *biên dạng trải phẳng* |

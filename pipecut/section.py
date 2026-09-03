@@ -195,6 +195,14 @@ class Section:
         lap = round((theta_deg - self.normal_angle(best_v)) / 360.0)
         return best_v + lap * per
 
+    def arc_spans(self) -> List[Tuple[float, float]]:
+        """Các đoạn cung góc lượn, dạng (v bắt đầu, v kết thúc).
+
+        Đây là những chỗ phôi buộc phải xoay: pháp tuyến quay 90 độ trong một
+        đoạn cung rất ngắn.  Ống tròn không có đoạn nào như vậy (quay đều suốt).
+        """
+        return []
+
     def breakpoints(self) -> List[float]:
         """Các vị trí cung mà biên đổi kiểu hình (mặt phẳng <-> góc lượn).
 
@@ -362,6 +370,10 @@ class BoxSection(Section):
 
     def breakpoints(self) -> List[float]:
         return list(self._starts) + [self._perimeter]
+
+    def arc_spans(self) -> List[Tuple[float, float]]:
+        return [(self._starts[i], self._starts[i] + seg[1])
+                for i, seg in enumerate(self._segs) if seg[0] == "arc"]
 
     def describe(self) -> str:
         if self.kind == SHAPE_SQUARE:

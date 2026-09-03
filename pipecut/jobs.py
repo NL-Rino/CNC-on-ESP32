@@ -28,6 +28,10 @@ def P(name: str, label: str, default: Any, unit: str = "", kind: str = "float",
             "kind": kind, "choices": list(choices) if choices else None, "hint": hint}
 
 
+ALL_SHAPES = ("round", "square", "rect")
+ROUND_ONLY = ("round",)
+
+
 OP_CATALOG: Dict[str, Dict[str, Any]] = {
     "cutoff": {
         "label": "Cắt đứt / cắt vát",
@@ -42,6 +46,7 @@ OP_CATALOG: Dict[str, Dict[str, Any]] = {
     },
     "saddle": {
         "label": "Miệng cá (ôm ống chính)",
+        "shapes": ROUND_ONLY,
         "desc": "Cắt đầu ống nhánh để ôm khít vào ống chính - mối nối chữ T/Y.",
         "params": [
             P("main_diameter", "Đường kính ống chính", 100.0, "mm"),
@@ -57,6 +62,7 @@ OP_CATALOG: Dict[str, Dict[str, Any]] = {
     },
     "hole": {
         "label": "Lỗ xuyên thành ống",
+        "shapes": ROUND_ONLY,
         "desc": "Lỗ do ống nhánh hoặc mũi khoan xuyên qua thành ống.",
         "params": [
             P("diameter", "Đường kính lỗ", 30.0, "mm"),
@@ -78,8 +84,9 @@ OP_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
     },
     "circle": {
-        "label": "Tròn trên bề mặt",
-        "desc": "Đường tròn đo theo bề mặt ống (khác lỗ khoan hướng tâm).",
+        "label": "Lỗ tròn trên mặt",
+        "desc": ("Đường tròn đo theo bề mặt phôi. Với ống hộp, nếu nằm gọn trong "
+                 "một mặt phẳng thì đây chính là lỗ tròn thật, cắt vuông góc mặt."),
         "params": [
             P("diameter", "Đường kính", 40.0, "mm"),
             P("x", "Tâm theo trục ống", 150.0, "mm"),
@@ -133,6 +140,16 @@ OP_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
     },
 }
+
+
+def ops_for_shape(shape: str) -> List[str]:
+    """Danh sách nguyên công dùng được với một dạng tiết diện phôi.
+
+    Máy chỉ cắt ống hộp thì không cần thấy miệng cá hay lỗ xuyên thành - hai
+    biên dạng đó là bài toán giao hai mặt trụ, chỉ có nghĩa với ống tròn.
+    """
+    return [k for k, v in OP_CATALOG.items()
+            if shape in v.get("shapes", ALL_SHAPES)]
 
 
 def default_params(op_type: str) -> Dict[str, Any]:
@@ -267,7 +284,9 @@ class Job:
     name: str = "cong-viec"
     operations: List[Operation] = field(default_factory=list)
     pipe: Optional[PipeSpec] = None      # ghi đè phôi của hồ sơ máy
-    optimize_order: bool = True
+    # Mặc định GIỮ NGUYÊN thứ tự người dùng đã xếp.  Chỉ khi bật rõ ràng thì
+    # phần mềm mới tự sắp lại (vạch dấu -> lỗ/rãnh -> cắt đứt từ ngoài vào).
+    optimize_order: bool = False
     notes: str = ""
     source_path: str = ""
 
@@ -298,6 +317,8 @@ class Job:
             tp.add(contour)
         if self.optimize_order and len(tp.contours) > 2:
             tp.contours = order_contours(tp.contours)
+        else:
+            warnings.extend(check_order(tp.contours))
         return tp, warnings
 
     # ------------------------------------------------------------------
@@ -324,7 +345,7 @@ class Job:
             name=d.get("name", "cong-viec"),
             operations=[Operation.from_dict(o) for o in d.get("operations", [])],
             pipe=pipe,
-            optimize_order=bool(d.get("optimize_order", True)),
+            optimize_order=bool(d.get("optimize_order", False)),
             notes=d.get("notes", ""),
         )
 
@@ -339,6 +360,27 @@ class Job:
             job = cls.from_dict(json.load(fh))
         job.source_path = path
         return job
+
+
+def check_order(contours: Sequence[Contour]) -> List[str]:
+    """Soát thứ tự cắt do người dùng tự xếp, chỉ **cảnh báo** chứ không đổi.
+
+    Sau một nhát cắt đứt, phần phôi phía ngoài rơi ra nên mọi nguyên công nằm
+    xa hơn nhát cắt đó sẽ không còn phôi để gia công.
+    """
+    msgs: List[str] = []
+    cut_off_at: Optional[float] = None
+    for i, c in enumerate(contours, 1):
+        if c.wrap and c.kind == "cut":
+            x = min(p[0] for p in c.points)
+            cut_off_at = x if cut_off_at is None else min(cut_off_at, x)
+        elif cut_off_at is not None and min(p[0] for p in c.points) > cut_off_at:
+            msgs.append(
+                f"Nguyên công {i} ('{c.name}') nằm ngoài nhát cắt đứt phía trước "
+                f"(x > {cut_off_at:.0f} mm) - lúc đó phần phôi này đã rơi ra rồi. "
+                f"Hãy xếp nhát cắt đứt xuống sau, hoặc bật tự sắp xếp thứ tự."
+            )
+    return msgs
 
 
 def order_contours(contours: Sequence[Contour]) -> List[Contour]:

@@ -1,6 +1,6 @@
 {
-  "name": "Máy cắt ống hộp ESP32 - 4 trục (mặc định)",
-  "description": "Y: ống ra vào · A: mâm cặp xoay · X: mỏ cắt chạy ngang · Z: lên xuống. Phôi ống hộp - thư viện nguyên công tự lọc bỏ những thứ chỉ dùng cho ống tròn.",
+  "name": "Máy cắt ống hộp - dừng cắt & xoay góc",
+  "description": "Ống hộp, chế độ qua góc kiểu 'index': cắt hết một mặt phẳng thì tắt mỏ, ba trục phối hợp giữ mỏ bám đúng góc đó trên phôi trong lúc mâm quay 90 độ, quay xong hạ xuống mồi lại rồi cắt mặt kế tiếp. Lưu ý: phần cung góc lượn sẽ không được cắt - đặt corner_torch_off = false nếu muốn cắt luôn cả góc.",
   "axes": [
     {
       "letter": "X",
@@ -76,8 +76,6 @@
     "lead_out": 2.0,
     "lead_type": "arc",
     "lead_angle": 90.0,
-    "lead_start": 0.0,
-    "lead_side": "auto",
     "overcut": 1.0,
     "kerf_side": "auto",
     "use_radial": true,
@@ -103,9 +101,9 @@
     "rotary_rewind": false,
     "decimals": 3,
     "corner_radius": 0.0,
-    "uniform_feed": true,
+    "uniform_feed": false,
     "slow_warn_ratio": 0.7,
-    "corner_mode": "follow",
+    "corner_mode": "index",
     "corner_torch_off": true,
     "corner_lift": 6.0,
     "corner_rotate_rate": 0.0,

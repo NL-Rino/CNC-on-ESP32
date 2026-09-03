@@ -33,7 +33,7 @@ from ..config import (
 from ..controller import DeviceController, JobProgress
 from ..gcode import Program, build_program
 from ..gsim import Playback, SimState, TracePoint
-from ..jobs import OP_CATALOG, Job, Operation, default_params
+from ..jobs import OP_CATALOG, Job, Operation, default_params, ops_for_shape
 from ..protocol import MachineStatus
 from ..transport import list_ports
 from .canvasview import PreviewCanvas
@@ -46,6 +46,11 @@ APP_TITLE = "PipeCut Studio - Máy cắt ống 4 trục (ESP32 / FluidNC)"
 SHAPE_LABEL = {"round": "Ống tròn", "square": "Ống hộp vuông",
                "rect": "Ống hộp chữ nhật"}
 LABEL_SHAPE = {v: k for k, v in SHAPE_LABEL.items()}
+
+# Cách vượt qua góc lượn của ống hộp
+CORNER_LABEL = {"follow": "Cắt liền mạch qua góc",
+                "index": "Dừng cắt, xoay 90° rồi cắt tiếp"}
+LABEL_CORNER = {v: k for k, v in CORNER_LABEL.items()}
 
 
 class MainWindow:
@@ -197,6 +202,10 @@ class MainWindow:
             ("safe_height", "Cao độ an toàn [mm]", pr.safe_height),
             ("lead_in", "Vào dao [mm]", pr.lead_in),
             ("lead_type", "Kiểu vào dao", pr.lead_type, "choice", ["arc", "line", "none"]),
+            ("lead_start", "Vị trí điểm mồi [% chu vi]", pr.lead_start),
+            ("lead_side", "Phía vào dao", pr.lead_side, "choice",
+             ["auto", "inside", "outside", "plus", "minus"]),
+            ("lead_angle", "Góc vào dao [độ]", pr.lead_angle),
             ("overcut", "Chạy vượt [mm]", pr.overcut),
         ], columns=1)
         self.f_proc.pack(fill="x")
@@ -214,6 +223,12 @@ class MainWindow:
             ("bevel_pivot", "Tâm xoay tới mũi cắt [mm]", m.bevel_pivot),
             ("feed_radius_mode", "Bán kính tính tốc độ", m.feed_radius_mode,
              "choice", ["outer", "mid", "inner"]),
+            ("uniform_feed", "Tốc độ đều cả đường", m.uniform_feed, "bool"),
+            ("corner_mode", "Qua góc ống hộp", CORNER_LABEL.get(m.corner_mode,
+                                                                CORNER_LABEL["follow"]),
+             "choice", list(CORNER_LABEL.values())),
+            ("corner_torch_off", "Tắt mỏ khi xoay góc", m.corner_torch_off, "bool"),
+            ("corner_lift", "Nhấc mỏ khi xoay góc [mm]", m.corner_lift),
         ], columns=1)
         self.f_motion.pack(fill="x")
 
@@ -350,11 +365,20 @@ class MainWindow:
         add.pack(side="top", fill="x", pady=(PAD, 4))
         ttk.Label(add, text="Thêm nguyên công:").pack(side="left")
         self.var_new_op = tk.StringVar()
-        self.cmb_op = ttk.Combobox(add, textvariable=self.var_new_op, state="readonly", width=28,
-                                   values=[f"{k} - {v['label']}" for k, v in OP_CATALOG.items()])
-        self.cmb_op.current(0)
+        self.cmb_op = ttk.Combobox(add, textvariable=self.var_new_op, state="readonly", width=30)
         self.cmb_op.pack(side="left", padx=6)
         ttk.Button(add, text="Thêm", command=self.add_operation, width=8).pack(side="left")
+        self._refresh_op_choices()
+
+        order = ttk.Frame(left)
+        order.pack(side="top", fill="x", pady=(0, 4))
+        self.var_optimize = tk.BooleanVar(value=self.job.optimize_order)
+        ttk.Checkbutton(order, text="Tự sắp xếp thứ tự cắt",
+                        variable=self.var_optimize,
+                        command=self.on_toggle_order).pack(side="left")
+        self.lbl_order = ttk.Label(order, foreground="#5a646e",
+                                   text="đang cắt đúng thứ tự trong bảng")
+        self.lbl_order.pack(side="left", padx=8)
 
         cols = ("stt", "loai", "mota")
         self.tree_ops = ttk.Treeview(left, columns=cols, show="headings", height=14)
@@ -802,14 +826,23 @@ class MainWindow:
         p.pipe.length = self.f_pipe.get("length", p.pipe.length)
         p.pipe.material = self.f_pipe.get("material", p.pipe.material)
         for key in ("kerf", "cut_feed", "power", "cut_height", "pierce_height",
-                    "pierce_delay", "safe_height", "lead_in", "overcut"):
+                    "pierce_delay", "safe_height", "lead_in", "overcut",
+                    "lead_start", "lead_angle"):
             setattr(p.process, key, self.f_proc.get(key, getattr(p.process, key)))
         p.process.kind = self.f_proc.get("kind", p.process.kind)
         p.process.lead_type = self.f_proc.get("lead_type", p.process.lead_type)
+        p.process.lead_side = self.f_proc.get("lead_side", p.process.lead_side)
         for key in ("chord_tolerance", "simplify_tolerance", "min_segment", "max_segment",
                     "max_feed", "max_bevel", "bevel_pivot"):
             setattr(p.motion, key, self.f_motion.get(key, getattr(p.motion, key)))
         p.motion.feed_radius_mode = self.f_motion.get("feed_radius_mode", p.motion.feed_radius_mode)
+        p.motion.uniform_feed = bool(self.f_motion.get("uniform_feed", p.motion.uniform_feed))
+        p.motion.corner_mode = LABEL_CORNER.get(
+            str(self.f_motion.get("corner_mode", CORNER_LABEL[p.motion.corner_mode])),
+            p.motion.corner_mode)
+        p.motion.corner_torch_off = bool(
+            self.f_motion.get("corner_torch_off", p.motion.corner_torch_off))
+        p.motion.corner_lift = self.f_motion.get("corner_lift", p.motion.corner_lift)
         try:
             p.connection.baudrate = int(self.cmb_baud.get())
             p.connection.simulator_speed = max(0.01, float(self.cmb_simspeed.get()))
@@ -821,6 +854,8 @@ class MainWindow:
         if not silent:
             self.status_var.set("Đã áp dụng thông số máy.")
         self._refresh_axes_table()
+        if hasattr(self, "cmb_op"):
+            self._refresh_op_choices()
         try:
             sec = p.pipe.section()
             note = f"{sec.describe()} · chu vi {sec.perimeter:.1f} mm"
@@ -861,8 +896,15 @@ class MainWindow:
     # Công việc
     # ==================================================================
     def _seed_demo_job(self) -> None:
-        self.job.add("hole", diameter=25.0, x=90.0, theta=0.0)
-        self.job.add("saddle", main_diameter=114.3, angle=90.0, x=260.0)
+        """Công việc mẫu, chọn nguyên công hợp với dạng phôi đang khai báo."""
+        if self.profile.pipe.is_round:
+            self.job.add("hole", diameter=25.0, x=90.0, theta=0.0)
+            self.job.add("saddle", main_diameter=114.3, angle=90.0, x=260.0)
+        else:
+            self.job.add("slot", x=120.0, theta=0.0, length=60.0,
+                         width_deg=45.0, corner=5.0)
+            self.job.add("circle", diameter=25.0, x=220.0, theta=90.0)
+            self.job.add("cutoff", x=320.0, angle=0.0)
         self._refresh_op_list()
         self.generate()
 
@@ -905,6 +947,22 @@ class MainWindow:
         self.job.operations[idx].params.update(self.form.values())
         self.tree_ops.item(str(idx), values=(idx + 1, self.job.operations[idx].label(),
                                              _summary(self.job.operations[idx])))
+        self.generate()
+
+    def _refresh_op_choices(self) -> None:
+        """Chỉ hiện những nguyên công dùng được với dạng phôi đang khai báo."""
+        keys = ops_for_shape(self.profile.pipe.shape)
+        values = [f"{k} - {OP_CATALOG[k]['label']}" for k in keys]
+        cur = self.var_new_op.get()
+        self.cmb_op["values"] = values
+        if cur not in values and values:
+            self.cmb_op.current(0)
+
+    def on_toggle_order(self) -> None:
+        self.job.optimize_order = bool(self.var_optimize.get())
+        self.lbl_order.configure(
+            text=("tự xếp: vạch dấu → lỗ/rãnh → cắt đứt (từ ngoài vào)"
+                  if self.job.optimize_order else "đang cắt đúng thứ tự trong bảng"))
         self.generate()
 
     def add_operation(self) -> None:
@@ -963,6 +1021,8 @@ class MainWindow:
             messagebox.showerror("Lỗi", f"Không đọc được tệp công việc:\n{exc}")
             return
         self.var_job_name.set(self.job.name)
+        if hasattr(self, "var_optimize"):
+            self.var_optimize.set(self.job.optimize_order)
         self._refresh_op_list()
         self.generate()
         self.status_var.set(f"Đã mở công việc: {path}")
@@ -1008,6 +1068,9 @@ class MainWindow:
         self.lbl_stats.configure(
             text=f"{len(program.passes)} đường · {s.cut_length:.0f} mm cắt · "
                  f"{s.pierces} điểm mồi · {s.lines} dòng · ước tính {s.time_text}")
+        order = " → ".join(f"{i}.{ps.name}" for i, ps in enumerate(program.passes, 1))
+        self.lbl_order.configure(
+            text=("tự xếp: " if self.job.optimize_order else "thứ tự cắt: ") + order[:110])
         for w in warns + s.warnings:
             self.console.log(f"! {w}", "err")
         self.status_var.set("Đã sinh G-code." if not warns else f"Sinh G-code với {len(warns)} cảnh báo.")

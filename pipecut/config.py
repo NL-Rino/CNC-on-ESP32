@@ -156,6 +156,9 @@ class ProcessSpec:
     lead_out: float = 2.0          # chiều dài đoạn ra dao (mm)
     lead_type: str = "arc"         # none | line | arc
     lead_angle: float = 90.0       # góc vào dao so với hướng chạy (độ, chỉ dùng cho line)
+    lead_start: float = 0.0        # dời điểm mồi quanh biên dạng, tính theo % chu vi
+    lead_side: str = "auto"        # auto | inside | outside (biên dạng kín)
+                                   # auto | plus | minus   (đường cắt quanh phôi)
     overcut: float = 1.0           # chạy vượt điểm khép kín (mm)
     kerf_side: str = "auto"        # auto | none | left | right
     use_radial: bool = True        # False = đầu cắt cố định (laser tiêu cự cứng)
@@ -206,6 +209,13 @@ class MotionSpec:
     corner_radius: float = 0.0        # bo góc mặc định cho đường có góc nhọn (mm)
     uniform_feed: bool = False        # cắt cả đường ở một tốc độ bề mặt duy nhất
     slow_warn_ratio: float = 0.7      # cảnh báo khi tốc độ tụt dưới tỉ lệ này
+    # --- cách vượt qua góc lượn của ống hộp ---
+    corner_mode: str = "follow"       # follow = cắt liền mạch qua góc
+                                      # index  = dừng cắt, xoay 90 độ tại chỗ rồi cắt tiếp
+    corner_torch_off: bool = True     # tắt nguồn cắt trong lúc xoay góc (chế độ index)
+    corner_lift: float = 6.0          # nhấc thêm bao nhiêu mm khi xoay góc (nếu tắt mỏ)
+    corner_rotate_rate: float = 0.0   # tốc độ xoay khi index (độ/phút, 0 = tối đa của trục)
+    corner_dwell: float = 0.0         # dừng thêm sau khi xoay xong (giây)
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "MotionSpec":

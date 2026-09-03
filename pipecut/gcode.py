@@ -302,9 +302,13 @@ class PostProcessor:
         for raw_pt in pts[1:]:
             nxt = CutPoint(x=raw_pt.x, v=raw_pt.v, theta=raw_pt.theta + shift,
                            cross=raw_pt.cross, surface_z=raw_pt.surface_z,
-                           bevel=raw_pt.bevel)
-            slowest = min(slowest, kin.achievable_surface_speed(
-                probe, nxt, feed_target, z_now, z_now))
+                           bevel=raw_pt.bevel, kind=raw_pt.kind,
+                           z_axis=raw_pt.z_axis)
+            # Chỉ xét các đoạn thật sự đang cắt: pha xoay góc cố ý chậm nên
+            # không tính vào việc đánh giá tụt tốc độ.
+            if probe.kind == "cut" and nxt.kind == "cut":
+                slowest = min(slowest, kin.achievable_surface_speed(
+                    probe, nxt, feed_target, z_now, z_now))
             probe = nxt
         if self.motion.uniform_feed and slowest < feed_target:
             feed_target = slowest      # cắt cả đường ở một tốc độ duy nhất
@@ -316,17 +320,81 @@ class PostProcessor:
             )
         prev = start
         cut_len = 0.0
+        prev_kind = pts[0].kind
+        torch_off_now = False
+        indexed = 0
         for raw_pt in pts[1:]:
             cur = CutPoint(x=raw_pt.x, v=raw_pt.v, theta=raw_pt.theta + shift,
                            cross=raw_pt.cross, surface_z=raw_pt.surface_z,
-                           bevel=raw_pt.bevel)
-            feed, l_real, l_mach = kin.feed_for(prev, cur, feed_target, z_now, z_now)
+                           bevel=raw_pt.bevel, kind=raw_pt.kind,
+                           z_axis=raw_pt.z_axis)
+
+            # --- chuyển pha: bắt đầu hoặc kết thúc một lần xoay góc ---
+            if cur.kind != prev_kind:
+                if cur.kind == "index":
+                    indexed += 1
+                    if self.motion.corner_torch_off:
+                        b.raw(pr.off_command)
+                        b.dwell(pr.off_delay)
+                        stats.estimated_time += pr.off_delay
+                        torch_off_now = True
+                elif torch_off_now:
+                    # Hoàn tất vòng quay **ở độ cao đang nhấc** rồi mới hạ xuống:
+                    # nếu hạ trước khi quay xong, mỏ cắt sẽ cắm vào thành phôi.
+                    if use_z and prev.z_axis is not None:
+                        # giữ đúng độ cao bám góc tại điểm kết thúc vòng quay
+                        lift_z = (z_cut + cur.surface_z + self.motion.corner_lift)
+                        vals = kin.axis_values(cur, None)
+                        vals[z_letter] = pf.axis(ROLE_RADIAL).apply(lift_z)
+                        step = kin.machine_distance(kin.axis_values(prev, z_now), vals)
+                        if step > 1e-9:
+                            b.move(vals, self._index_feed(
+                                kin.axis_values(prev, z_now), vals, step))
+                            stats.estimated_time += step / max(
+                                self._index_feed(kin.axis_values(prev, z_now),
+                                                 vals, step), 1e-6) * 60.0
+                    # xoay xong: hạ xuống, mồi lại rồi cắt tiếp
+                    if use_z:
+                        b.move({z_letter: pf.axis(ROLE_RADIAL).apply(
+                            z_pierce + cur.surface_z)}, None)
+                    on_line = pr.on_command
+                    if power and ("S" not in on_line.upper()):
+                        on_line = f"{on_line} S{fmt(power, 0)}"
+                    b.raw(on_line)
+                    b.dwell(pr.pierce_delay)
+                    stats.pierces += 1
+                    stats.estimated_time += pr.pierce_delay
+                    if use_z:
+                        b.move({z_letter: pf.axis(ROLE_RADIAL).apply(
+                            z_cut + cur.surface_z)}, pr.plunge_feed)
+                    torch_off_now = False
+                    if self.motion.corner_dwell > 0:
+                        b.dwell(self.motion.corner_dwell)
+                        stats.estimated_time += self.motion.corner_dwell
+                prev_kind = cur.kind
+
+            va = kin.axis_values(prev, z_now)
+            vb = kin.axis_values(cur, z_now)
+            l_mach = kin.machine_distance(va, vb)
             if l_mach <= 1e-9:
                 continue
+            if cur.kind == "index":
+                # pha xoay không cắt: chạy nhanh nhất trong khả năng các trục
+                feed = self._index_feed(va, vb, l_mach)
+                l_real = 0.0
+            else:
+                feed, l_real, l_mach = kin.feed_for(prev, cur, feed_target, z_now, z_now)
             b.move(kin.axis_values(cur, z_now), feed)
             cut_len += l_real
             stats.estimated_time += l_mach / max(feed, 1e-6) * 60.0
             prev = cur
+
+        if indexed and self.motion.corner_torch_off and ps.meta.get("wrap"):
+            stats.warnings.append(
+                f"{ps.name}: xoay góc có tắt mỏ nên {indexed} cung góc lượn "
+                f"KHÔNG được cắt - phôi sẽ chưa rời hẳn. Tắt 'corner_torch_off' "
+                f"nếu muốn cắt luôn cả góc."
+            )
 
         # 5) tắt nguồn cắt
         b.raw(pr.off_command)
@@ -350,6 +418,21 @@ class PostProcessor:
         })
 
     # ------------------------------------------------------------------
+    def _index_feed(self, va: AxisValues, vb: AxisValues, length: float) -> float:
+        """Tốc độ cho pha xoay góc: nhanh nhất mà các trục cho phép.
+
+        Không cắt nên không cần giữ tốc độ bề mặt; chỉ cần không trục nào bị ép
+        chạy quá khả năng.  Có thể ghi đè bằng ``motion.corner_rotate_rate``.
+        """
+        feed = self.kin.clamp_by_axis_rates(1e9, va, vb, length)
+        rate = self.motion.corner_rotate_rate
+        rot = self.profile.axis(ROLE_ROTARY)
+        if rate > 0 and rot:
+            d = abs(vb.get(rot.letter, 0.0) - va.get(rot.letter, 0.0))
+            if d > 1e-12:
+                feed = min(feed, rate * length / d)
+        return max(self.motion.min_feed, min(feed, self.motion.max_feed))
+
     def _rapid_len(self, a: AxisValues, b_: AxisValues) -> float:
         if not a:
             return 0.0

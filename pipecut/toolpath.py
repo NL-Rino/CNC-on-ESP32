@@ -81,6 +81,8 @@ class CutPoint:
     cross: float = 0.0       # mm, trục ngang
     surface_z: float = 0.0   # mm, chênh cao bề mặt so với gốc Z
     bevel: float = 0.0       # ĐỘ, trục vát
+    kind: str = "cut"        # cut = đang cắt | index = đang xoay qua góc lượn
+    z_axis: Optional[float] = None   # ghi đè trực tiếp giá trị trục Z (pha xoay góc)
 
 
 @dataclass

@@ -231,15 +231,23 @@ class PreviewCanvas(ttk.Frame):
                 c.create_line(p0[0], p0[1], p1[0], p1[1], fill=COLOR_RAPID, dash=(4, 3))
             seg: List[float] = []
             prev_v = None
+            prev_kind = None
             for p in ps.points:
                 v = p.v % circ
-                if prev_v is not None and abs(v - prev_v) > circ / 2:
-                    self._flush(seg, color, 2)   # chỗ vòng qua mốc 0
+                # ngắt nét khi vòng qua mốc 0 hoặc khi đổi pha (cắt <-> xoay góc)
+                if (prev_v is not None and abs(v - prev_v) > circ / 2) or \
+                        (prev_kind is not None and p.kind != prev_kind):
+                    self._flush(seg, color if prev_kind == "cut" else COLOR_RAPID, 2,
+                                dash=() if prev_kind == "cut" else (4, 3))
                     seg = []
-                prev_v = v
+                    if prev_kind is not None and p.kind != prev_kind and prev_v is not None:
+                        sx0, sy0 = self._to_screen(p.x, prev_v)
+                        seg.extend([sx0, sy0])
+                prev_v, prev_kind = v, p.kind
                 sx, sy = self._to_screen(p.x, v)
                 seg.extend([sx, sy])
-            self._flush(seg, color, 2)
+            self._flush(seg, color if prev_kind == "cut" else COLOR_RAPID, 2,
+                        dash=() if prev_kind == "cut" else (4, 3))
             if ps.lead_in_count:
                 lead: List[float] = []
                 for p in ps.points[:ps.lead_in_count + 1]:
@@ -276,23 +284,32 @@ class PreviewCanvas(ttk.Frame):
         for ps in self.passes:
             color = COLOR_MARK if ps.kind == "mark" else COLOR_CUT
             seg: List[float] = []
+            prev_kind = None
             for p in ps.points:
+                if prev_kind is not None and p.kind != prev_kind:
+                    self._flush(seg, color if prev_kind == "cut" else COLOR_RAPID, 2,
+                                dash=() if prev_kind == "cut" else (4, 3))
+                    seg = []
                 if self.cam.visible(sec, p.v):
                     s = self._to_screen(*self.cam.project(_surface(sec, p.x, p.v)))
                     seg.extend(s)
+                    prev_kind = p.kind
                 else:
-                    self._flush(seg, color, 2)
+                    self._flush(seg, color if prev_kind == "cut" else COLOR_RAPID, 2,
+                                dash=() if prev_kind == "cut" else (4, 3))
                     seg = []
-            self._flush(seg, color, 2)
+                    prev_kind = p.kind
+            self._flush(seg, color if prev_kind == "cut" else COLOR_RAPID, 2,
+                        dash=() if prev_kind == "cut" else (4, 3))
             if self.show_rapids.get() and prev_end is not None:
                 p0 = self._to_screen(*self.cam.project(_surface(sec, prev_end[0], prev_end[1])))
                 p1 = self._to_screen(*self.cam.project(_surface(sec, ps.points[0].x, ps.points[0].v)))
                 c.create_line(p0[0], p0[1], p1[0], p1[1], fill=COLOR_RAPID, dash=(4, 3))
             prev_end = (ps.points[-1].x, ps.points[-1].v)
 
-    def _flush(self, coords: List[float], color: str, width: int) -> None:
+    def _flush(self, coords: List[float], color: str, width: int, dash=()) -> None:
         if len(coords) >= 4:
-            self.canvas.create_line(*coords, fill=color, width=width,
+            self.canvas.create_line(*coords, fill=color, width=width, dash=dash,
                                     capstyle="round", joinstyle="round")
 
     def _draw_tool(self) -> None:

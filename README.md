@@ -64,6 +64,35 @@ Góc lượn để 0 thì phần mềm tự lấy 2 lần chiều dày thành (s
 nhọn tuyệt đối không cắt được: tại đó pháp tuyến đổi hướng đột ngột 90°, máy sẽ
 phải xoay tại chỗ.
 
+### Hai cách vượt qua góc ống hộp
+
+| `corner_mode` | Máy làm gì | Khi nào dùng |
+|---|---|---|
+| `follow` *(mặc định)* | Cắt liền mạch qua cung góc, ba trục phối hợp bám mặt. Tốc độ cắt bị tụt vì trục xoay chạm trần | Cần **cắt đứt hẳn** phôi |
+| `index` | **Cắt hết mặt phẳng → tắt mỏ → nhấc lên → ba trục phối hợp giữ mỏ bám đúng góc đó trong lúc mâm quay 90° → hạ xuống, mồi lại → cắt mặt kế tiếp** | Cần tốc độ cắt đều trên mặt phẳng, chấp nhận góc lượn để lại |
+
+Ở chế độ `index`, đặt `corner_torch_off = false` thì mỏ vẫn cháy suốt lúc xoay nên
+cung góc vẫn được cắt (khi đó tương đương `follow`). Nếu tắt mỏ, phần mềm **cảnh
+báo rõ là bốn cung góc không được cắt và phôi chưa rời hẳn**.
+
+Một chu kỳ xoay góc trong G-code thật:
+
+```gcode
+X15.892                      ; đang cắt trên mặt phẳng, A đứng yên
+X19                          ; tới mép mặt
+M5                           ; tắt mỏ
+G4 P0.2
+X16.992 Z9.415  A5.774       ; ba trục phối hợp: mâm quay, X và Z giữ mỏ bám góc
+X14.812 Z11.019 A11.548
+...
+X-19    Z7.6    A90          ; quay đủ 90 độ, mỏ vẫn ở đúng góc đó
+G0 Z3.8                      ; hạ xuống cao độ mồi
+M3 S1000                     ; mồi lại
+G4 P0.6
+G1 Z1.6 F600                 ; xuống cao độ cắt
+X-15.642 F1600               ; cắt tiếp mặt kế bên
+```
+
 ![Mô phỏng cắt ống hộp](docs/mo_phong_ong_hop.svg)
 
 ## Làm được những gì
@@ -139,6 +168,14 @@ Trên Windows có thể nháy đúp `chay_gui.py` để mở giao diện.
    khai báo phôi    toạ độ          công, nhập số  hình 2D/3D     chạy thử      theo dõi
 ```
 
+* **Thứ tự cắt giữ đúng như bảng nguyên công.** Phần mềm không tự đổi; muốn nó
+  tự xếp (vạch dấu → lỗ/rãnh → cắt đứt từ ngoài vào) thì tích ô *Tự sắp xếp thứ
+  tự cắt*. Dòng chữ dưới bảng luôn hiện thứ tự thật sự sẽ chạy.
+* **Thư viện nguyên công lọc theo dạng phôi** — khai báo ống hộp thì không hiện
+  *miệng cá* và *lỗ xuyên thành* (chỉ có nghĩa với ống tròn).
+* **Chọn chỗ vết mồi rơi vào**: *Vị trí điểm mồi* (% chu vi biên dạng) xoay điểm
+  bắt đầu quanh đường cắt, *Phía vào dao* chọn vào từ trong hay ngoài (biên dạng
+  kín) / lệch về đầu tự do hay về mâm cặp (nhát cắt quanh phôi).
 * **Xem trước** có hai khung nhìn: *trải phẳng* (đo kích thước thật) và *ba chiều*
   (hình dung nhát cắt), zoom bằng con lăn, kéo bằng chuột trái.
   Xem bản mẫu: [docs/vi_du_ong_T.svg](docs/vi_du_ong_T.svg).
@@ -225,11 +262,11 @@ pipecut/
   svgview.py     xuất bản vẽ xem trước SVG
   cli.py         giao diện dòng lệnh
   ui/            giao diện đồ hoạ Tkinter (kèm khung mô phỏng máy 3D)
-config/          hồ sơ máy mẫu (ống tròn, ống hộp, có trục vát, laser)
+config/          hồ sơ máy mẫu (ống tròn, ống hộp, xoay góc, trục vát, laser)
 firmware/        cấu hình FluidNC cho ESP32
 examples/        tệp công việc mẫu
 docs/            hướng dẫn sử dụng và tài liệu kỹ thuật
-tests/           92 bài kiểm thử (chạy bằng thư viện chuẩn)
+tests/           109 bài kiểm thử (chạy bằng thư viện chuẩn)
 ```
 
 Chạy kiểm thử:

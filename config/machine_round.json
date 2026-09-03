@@ -1,6 +1,6 @@
 {
-  "name": "Máy cắt ống hộp ESP32 - 4 trục (mặc định)",
-  "description": "Y: ống ra vào · A: mâm cặp xoay · X: mỏ cắt chạy ngang · Z: lên xuống. Phôi ống hộp - thư viện nguyên công tự lọc bỏ những thứ chỉ dùng cho ống tròn.",
+  "name": "Máy cắt ống tròn ESP32 - 4 trục",
+  "description": "Y: ống ra vào theo trục ống · A: mâm cặp xoay ống · X: mỏ cắt chạy ngang vuông góc trục Y · Z: mỏ cắt lên xuống",
   "axes": [
     {
       "letter": "X",
@@ -39,8 +39,8 @@
       "letter": "A",
       "role": "rotary",
       "enabled": true,
-      "max_rate": 7200.0,
-      "accel": 800.0,
+      "max_rate": 3600.0,
+      "accel": 400.0,
       "max_travel": 0.0,
       "min_travel": 0.0,
       "invert": false,
@@ -48,10 +48,10 @@
     }
   ],
   "pipe": {
-    "shape": "square",
+    "shape": "round",
     "outer_diameter": 60.0,
-    "width": 50.0,
-    "height": 50.0,
+    "width": 40.0,
+    "height": 40.0,
     "corner_radius": 0.0,
     "wall_thickness": 3.0,
     "length": 1000.0,
@@ -103,7 +103,7 @@
     "rotary_rewind": false,
     "decimals": 3,
     "corner_radius": 0.0,
-    "uniform_feed": true,
+    "uniform_feed": false,
     "slow_warn_ratio": 0.7,
     "corner_mode": "follow",
     "corner_torch_off": true,

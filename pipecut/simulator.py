@@ -306,9 +306,12 @@ class FluidNCSimulator:
         planner_free = max(0, self.planner_size - len(self.queue))
         rx_free = self.rx_buffer
         cur_feed = self.queue[0].feed if self.queue else 0.0
+        # FluidNC chỉ gửi trường 'A:' khi có phụ kiện đang bật; 'S' = trục
+        # chính / nguồn cắt.  Giao diện dựa vào đây để biết lúc nào đang cắt.
+        acc = "|A:S" if self.spindle_on else ""
         return (f"<{state}|MPos:{mpos}|FS:{cur_feed:.0f},{self.spindle_speed:.0f}"
                 f"|WCO:{wco}|Bf:{planner_free},{rx_free}"
-                f"|Ov:{self.overrides[0]},{self.overrides[1]},{self.overrides[2]}>")
+                f"|Ov:{self.overrides[0]},{self.overrides[1]},{self.overrides[2]}{acc}>")
 
     # ------------------------------------------------------------------
     def raise_alarm(self, code: int = 1) -> None:

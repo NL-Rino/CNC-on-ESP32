@@ -21,13 +21,28 @@ Trọng tâm của phần mềm là **đường cắt mượt nhờ bốn trục
 
 | Trục | Vai trò | Đơn vị | Ghi chú |
 |------|---------|--------|---------|
-| **X** | chạy dọc theo ống | mm | xe mang đầu cắt |
-| **Y** | bàn ngang **hoặc** trục vát mép | mm hoặc độ | tuỳ cấu hình |
-| **Z** | nâng hạ đầu cắt | mm | giữ khoảng cách mỏ–phôi |
-| **A** | mâm cặp xoay ống | **độ** | quay vô hạn, không cần về gốc |
+| **Y** | **ống ra vào** — bàn mang mâm cặp chạy dọc trục ống | mm | phôi tịnh tiến, mỏ cắt đứng yên |
+| **A** | **mâm cặp xoay** ống | **độ** | quay vô hạn, không cần về gốc |
+| **X** | **mỏ cắt chạy ngang**, vuông góc với trục Y | mm | hoặc dùng làm trục vát mép |
+| **Z** | **mỏ cắt lên xuống** | mm | giữ khoảng cách mỏ–phôi |
 
-Gốc toạ độ quy ước: **X0** ở mặt đầu phôi, **Z0** khi mũi cắt chạm mặt ống,
-**A0** ở vị trí 12 giờ (ngay dưới đầu cắt).
+```
+              Z ↕ mỏ cắt lên xuống
+              │
+        X ↔───┴───  mỏ cắt chạy ngang (vuông góc Y)
+              ▼
+   ══════════════════════════╗
+    ống  ←── Y ──→  quay A   ║ mâm cặp
+   ══════════════════════════╝
+```
+
+Gốc toạ độ quy ước: **Y0** khi mũi cắt ở đúng mặt đầu phôi, **Z0** khi mũi cắt
+chạm mặt ống, **A0** ở vị trí 12 giờ (ngay dưới mỏ cắt), **X0** khi mỏ cắt nằm
+đúng trên đường tâm ống.
+
+Vai trò trục khai báo được trong hồ sơ máy, nên nếu máy của bạn là kiểu **xe mỏ
+cắt chạy dọc còn ống đứng yên** thì chỉ cần đổi vai trò và đặt
+`"layout": "torch_moves"` — phần còn lại của phần mềm không đổi gì.
 
 ---
 
@@ -80,7 +95,9 @@ Hoặc bằng dòng lệnh:
 ```bash
 python -m pipecut ops                      # xem danh mục nguyên công
 python -m pipecut gen examples/vi_du_ong_T.json -o ong_T.nc --svg xem.svg
-python -m pipecut sim ong_T.nc --speed 20  # chạy thử trên máy ảo
+python -m pipecut gen examples/vi_du_ong_T.json -o ong_T.nc \
+       --machine-svg mo-phong.svg --at 75   # chụp mô phỏng ở 75% chương trình
+python -m pipecut sim ong_T.nc --speed 20   # chạy thử trên máy ảo
 ```
 
 Khi đã có máy thật:
@@ -97,14 +114,22 @@ Trên Windows có thể nháy đúp `chay_gui.py` để mở giao diện.
 ## Trình tự làm việc trên giao diện
 
 ```
-1. Máy & Kết nối  →  2. Điều khiển  →  3. Công việc  →  4. Xem trước  →  5. Chạy
-   chọn cổng COM      jog, đặt gốc      thêm nguyên      kiểm tra       nạp lệnh,
-   khai báo phôi      toạ độ            công, nhập số    hình 2D/3D     theo dõi
+1. Máy & Kết nối → 2. Điều khiển → 3. Công việc → 4. Xem trước → 5. Mô phỏng → 6. Chạy
+   chọn cổng COM    jog, đặt gốc    thêm nguyên    kiểm tra       xem máy       nạp lệnh,
+   khai báo phôi    toạ độ          công, nhập số  hình 2D/3D     chạy thử      theo dõi
 ```
 
 * **Xem trước** có hai khung nhìn: *trải phẳng* (đo kích thước thật) và *ba chiều*
   (hình dung nhát cắt), zoom bằng con lăn, kéo bằng chuột trái.
   Xem bản mẫu: [docs/vi_du_ong_T.svg](docs/vi_du_ong_T.svg).
+![Mô phỏng máy](docs/mo_phong_may.svg)
+
+* **Mô phỏng** dựng lại đúng máy của bạn: đoạn ống dài theo kích thước đã nhập,
+  **trượt ra vào** theo trục Y và **quay** theo trục A, mỏ cắt chạy ngang (X) và
+  lên xuống (Z), vết cắt đỏ hiện dần trên mặt ống. Chạy được offline — bấm ▶,
+  tua tới lui bằng thanh trượt, đổi tốc độ 0,25× đến 20×, kéo chuột để xoay góc
+  nhìn. Khi đã nối máy thật, bật *Bám theo máy thật* thì khung này phản chiếu
+  đúng vị trí máy đang báo về.
 * Trong lúc chạy, vị trí mũi cắt được vẽ **theo thời gian thực** lên bản xem trước,
   dòng G-code đang chạy được tô sáng.
 * Nút **DỪNG** gửi feed-hold rồi reset mềm, tắt nguồn cắt ngay lập tức.
@@ -162,6 +187,8 @@ pipecut/
   pathops.py     kerf → vào/ra dao → điều tiết điểm → góc trục vát
   kinematics.py  động học 4 trục + bù tốc độ tổng hợp
   gcode.py       hậu xử lý FluidNC (modal, dòng lệnh ngắn)
+  gsim.py        diễn giải G-code theo thời gian (cho tab Mô phỏng)
+  machinescene.py dựng hình mô phỏng máy (dùng chung cho giao diện và SVG)
   jobs.py        mô tả công việc bằng JSON + danh mục nguyên công
   protocol.py    phân tích phản hồi Grbl/FluidNC, mã lỗi tiếng Việt
   transport.py   cổng COM (pyserial) hoặc máy ảo
@@ -169,12 +196,12 @@ pipecut/
   controller.py  nạp lệnh đếm ký tự, jog, tạm dừng, dừng khẩn
   svgview.py     xuất bản vẽ xem trước SVG
   cli.py         giao diện dòng lệnh
-  ui/            giao diện đồ hoạ Tkinter
+  ui/            giao diện đồ hoạ Tkinter (kèm khung mô phỏng máy 3D)
 config/          hồ sơ máy mẫu (thường, có trục vát, laser)
 firmware/        cấu hình FluidNC cho ESP32
 examples/        tệp công việc mẫu
 docs/            hướng dẫn sử dụng và tài liệu kỹ thuật
-tests/           60 bài kiểm thử (chạy bằng thư viện chuẩn)
+tests/           72 bài kiểm thử (chạy bằng thư viện chuẩn)
 ```
 
 Chạy kiểm thử:

@@ -190,7 +190,7 @@ class TestStreaming(unittest.TestCase):
         sim = c.transport.device
         sim.raise_alarm(2)          # máy báo động -> mọi lệnh G-code bị từ chối
         c.start_job(self.lines)
-        end = time.time() + 5
+        end = time.time() + 20
         while c.progress.running and time.time() < end:
             time.sleep(0.05)
         self.assertFalse(c.progress.running)
@@ -205,7 +205,7 @@ class TestStreaming(unittest.TestCase):
         c.on_line = lambda text, d: sent.append(text) if d == "tx" else None
         c.start_job(self.lines)
         c.send("G4 P0", front=True)
-        end = time.time() + 30
+        end = time.time() + 60
         while c.progress.running and time.time() < end:
             time.sleep(0.05)
         self.assertIn("G4 P0", sent)

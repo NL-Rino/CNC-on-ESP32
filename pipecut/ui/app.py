@@ -10,6 +10,7 @@ từ một hàng đợi nên không bao giờ bị "đơ" trong lúc máy đang 
 
 from __future__ import annotations
 
+import math
 import os
 import queue
 import sys
@@ -31,10 +32,12 @@ from ..config import (
 )
 from ..controller import DeviceController, JobProgress
 from ..gcode import Program, build_program
+from ..gsim import Playback, SimState, TracePoint
 from ..jobs import OP_CATALOG, Job, Operation, default_params
 from ..protocol import MachineStatus
 from ..transport import list_ports
 from .canvasview import PreviewCanvas
+from .machineview import MachineView
 from .widgets import PAD, Console, DRO, FieldGrid, ParamForm, StatusBadge
 
 APP_TITLE = "PipeCut Studio - Máy cắt ống 4 trục (ESP32 / FluidNC)"
@@ -53,6 +56,16 @@ class MainWindow:
         self.controller = DeviceController(self.profile)
         self.events: "queue.Queue[tuple]" = queue.Queue()
         self._last_status_draw = 0.0
+        # trạng thái tab mô phỏng
+        self.playback: Optional[Playback] = None
+        self.sim_time = 0.0
+        self.sim_playing = False
+        self._sim_last_tick = 0.0
+        self._sim_updating = False
+        self._live_trace: List[TracePoint] = []
+        self._live_torch = False
+        self._live_pen_up = True
+        self._match_index = 0
 
         root.title(APP_TITLE)
         root.geometry("1280x820")
@@ -70,6 +83,7 @@ class MainWindow:
             self._seed_demo_job()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         self.root.after(60, self._pump_events)
+        self.root.after(40, self._sim_tick)
 
     # ==================================================================
     # Dựng giao diện
@@ -90,17 +104,20 @@ class MainWindow:
         self.tab_control = ttk.Frame(self.nb, padding=PAD)
         self.tab_job = ttk.Frame(self.nb, padding=PAD)
         self.tab_preview = ttk.Frame(self.nb, padding=PAD)
+        self.tab_sim = ttk.Frame(self.nb, padding=PAD)
         self.tab_run = ttk.Frame(self.nb, padding=PAD)
         self.nb.add(self.tab_machine, text="1. Máy & Kết nối")
         self.nb.add(self.tab_control, text="2. Điều khiển")
         self.nb.add(self.tab_job, text="3. Công việc")
         self.nb.add(self.tab_preview, text="4. Xem trước")
-        self.nb.add(self.tab_run, text="5. Chạy")
+        self.nb.add(self.tab_sim, text="5. Mô phỏng")
+        self.nb.add(self.tab_run, text="6. Chạy")
 
         self._build_machine_tab()
         self._build_control_tab()
         self._build_job_tab()
         self._build_preview_tab()
+        self._build_sim_tab()
         self._build_run_tab()
 
         self.status_var = tk.StringVar(value="Sẵn sàng.")
@@ -360,6 +377,130 @@ class MainWindow:
         self.lbl_stats.pack(side="left", padx=14)
 
     # ------------------------------------------------------------------
+    def _build_sim_tab(self) -> None:
+        """Mô phỏng máy chạy: ống trượt/quay dưới mỏ cắt, vết cắt hiện dần."""
+        t = self.tab_sim
+        self.machine_view = MachineView(t)
+        self.machine_view.pack(side="top", fill="both", expand=True)
+
+        bar = ttk.Frame(t)
+        bar.pack(side="bottom", fill="x", pady=(PAD, 0))
+        self.btn_sim_play = ttk.Button(bar, text="▶  Chạy", width=10,
+                                       command=self.toggle_sim_play)
+        self.btn_sim_play.pack(side="left")
+        ttk.Button(bar, text="⏮  Về đầu", width=10,
+                   command=self.reset_sim).pack(side="left", padx=4)
+        ttk.Label(bar, text="Tốc độ").pack(side="left", padx=(10, 2))
+        self.var_sim_speed = tk.StringVar(value="1")
+        ttk.Combobox(bar, textvariable=self.var_sim_speed, width=5, state="readonly",
+                     values=["0.25", "0.5", "1", "2", "5", "10", "20"]).pack(side="left")
+        self.var_sim_live = tk.BooleanVar(value=True)
+        ttk.Checkbutton(bar, text="Bám theo máy thật", variable=self.var_sim_live).pack(
+            side="left", padx=(12, 0))
+        ttk.Checkbutton(bar, text="Khung máy",
+                        variable=self.machine_view.show_frame,
+                        command=self.machine_view.redraw).pack(side="left", padx=(10, 0))
+        ttk.Checkbutton(bar, text="Vết cắt",
+                        variable=self.machine_view.show_trace,
+                        command=self.machine_view.redraw).pack(side="left", padx=(6, 0))
+        ttk.Button(bar, text="Góc nhìn gốc", width=12,
+                   command=self.machine_view.reset_view).pack(side="right")
+        ttk.Button(bar, text="Xuất ảnh...", width=11,
+                   command=self.export_machine_svg).pack(side="right", padx=4)
+
+        line2 = ttk.Frame(t)
+        line2.pack(side="bottom", fill="x", pady=(4, 0))
+        self.var_sim_pos = tk.DoubleVar(value=0.0)
+        self.scale_sim = ttk.Scale(line2, from_=0.0, to=1000.0, orient="horizontal",
+                                   variable=self.var_sim_pos, command=self._on_sim_scrub)
+        self.scale_sim.pack(side="left", fill="x", expand=True)
+        self.lbl_sim_time = ttk.Label(line2, text="0.0 / 0.0 s", width=18,
+                                      font=("Consolas", 9))
+        self.lbl_sim_time.pack(side="left", padx=8)
+        self.lbl_sim_info = ttk.Label(t, text="", foreground="#5a646e")
+        self.lbl_sim_info.pack(side="bottom", anchor="w", pady=(4, 0))
+
+    # ---- điều khiển mô phỏng ----
+    def toggle_sim_play(self) -> None:
+        if not self.playback or self.playback.duration <= 0:
+            self.status_var.set("Chưa có chương trình để mô phỏng.")
+            return
+        self.sim_playing = not self.sim_playing
+        if self.sim_playing:
+            if self.sim_time >= self.playback.duration - 1e-6:
+                self.sim_time = 0.0
+            self._sim_last_tick = time.monotonic()
+            self.var_sim_live.set(False)   # xem lại thì thôi bám máy thật
+        self.btn_sim_play.configure(text="⏸  Dừng" if self.sim_playing else "▶  Chạy")
+
+    def reset_sim(self) -> None:
+        self.sim_time = 0.0
+        self.sim_playing = False
+        self.btn_sim_play.configure(text="▶  Chạy")
+        self._refresh_sim_view()
+
+    def _on_sim_scrub(self, _value: str) -> None:
+        if self._sim_updating or not self.playback:
+            return
+        self.sim_playing = False
+        self.btn_sim_play.configure(text="▶  Chạy")
+        self.var_sim_live.set(False)
+        self.sim_time = self.playback.duration * float(self.var_sim_pos.get()) / 1000.0
+        self._refresh_sim_view()
+
+    def _sim_tick(self) -> None:
+        """Vòng lặp hoạt hình, ~25 khung hình/giây."""
+        if self.sim_playing and self.playback:
+            now = time.monotonic()
+            try:
+                speed = float(self.var_sim_speed.get())
+            except ValueError:
+                speed = 1.0
+            self.sim_time += (now - self._sim_last_tick) * speed
+            self._sim_last_tick = now
+            if self.sim_time >= self.playback.duration:
+                self.sim_time = self.playback.duration
+                self.sim_playing = False
+                self.btn_sim_play.configure(text="▶  Chạy")
+            self._refresh_sim_view()
+        self.root.after(40, self._sim_tick)
+
+    def _refresh_sim_view(self) -> None:
+        if not self.playback:
+            return
+        state = self.playback.state_at(self.sim_time)
+        trace = self.playback.trace_until(self.sim_time)
+        self.machine_view.set_state(state, trace)
+        self._sim_updating = True
+        self.var_sim_pos.set(1000.0 * self.sim_time / max(self.playback.duration, 1e-6))
+        self._sim_updating = False
+        self.lbl_sim_time.configure(
+            text=f"{self.sim_time:6.1f} / {self.playback.duration:.1f} s")
+        self.lbl_sim_info.configure(
+            text=f"{self.playback.summary()} · dòng {state.line}"
+                 + (f" · F{state.feed:.0f}" if state.feed else ""))
+
+    def export_machine_svg(self) -> None:
+        """Chụp khung mô phỏng ở thời điểm đang xem thành ảnh SVG."""
+        if not self.playback:
+            self.status_var.set("Chưa có chương trình để chụp.")
+            return
+        path = filedialog.asksaveasfilename(
+            defaultextension=".svg", filetypes=[("Ảnh SVG", "*.svg")],
+            initialfile=f"{self.job.name}-mo-phong.svg")
+        if not path:
+            return
+        from ..svgview import save_machine_svg
+        save_machine_svg(path, self.profile,
+                         self.playback.state_at(self.sim_time),
+                         self.playback.trace_until(self.sim_time),
+                         title=f"{self.job.name} - giây {self.sim_time:.1f}",
+                         azimuth=self.machine_view.cam.azimuth,
+                         elevation=self.machine_view.cam.elevation,
+                         along_range=self.machine_view._along_range())
+        self.status_var.set(f"Đã lưu ảnh mô phỏng: {path}")
+
+    # ------------------------------------------------------------------
     def _build_run_tab(self) -> None:
         t = self.tab_run
         bar = ttk.Frame(t)
@@ -507,6 +648,102 @@ class MainWindow:
                 x = _undo(pos[along.letter], along)
                 a = _undo(pos[rot.letter], rot)
                 self.preview.set_tool_position(x, a)
+                self._mirror_machine(st, pos, x, a)
+
+    def _mirror_machine(self, st: MachineStatus, pos: Dict[str, float],
+                        x: float, a: float) -> None:
+        """Chiếu trạng thái máy thật lên khung mô phỏng.
+
+        FluidNC báo phụ kiện đang bật trong trường ``A:`` của báo cáo trạng
+        thái ('S' = trục chính/nguồn cắt), nhờ đó biết lúc nào đang cắt để vẽ
+        tia lửa và ghi vết cắt.
+        """
+        if not self.var_sim_live.get() or self.sim_playing:
+            return
+        torch = "S" in (st.accessories or "")
+        state = SimState(time=0.0, axes=dict(pos), torch=torch, feed=st.feed)
+
+        # Máy chỉ báo trạng thái 5 lần/giây nên nếu chỉ nối các điểm đó lại thì
+        # vết cắt rất thưa.  Vì đã biết trước chương trình đang chạy, ta dóng vị
+        # trí máy báo về vào chương trình để lấy đúng phần vết cắt đã hình thành.
+        trace = None
+        if self.playback and self.playback.moves:
+            t = self._match_playback_time(pos)
+            if t is not None:
+                trace = self.playback.trace_until(t)
+                self._sim_updating = True
+                self.var_sim_pos.set(1000.0 * t / max(self.playback.duration, 1e-6))
+                self._sim_updating = False
+                self.lbl_sim_time.configure(
+                    text=f"{t:6.1f} / {self.playback.duration:.1f} s")
+
+        if trace is None:
+            # không dóng được (tệp G-code lạ): tự tích luỹ từ báo cáo trạng thái
+            if torch and not self._live_torch:
+                self._live_pen_up = True
+            if torch:
+                cross = self.profile.axis(ROLE_CROSS)
+                phi = 0.0
+                if cross and cross.letter in pos:
+                    r = max(self.profile.pipe.radius, 1e-6)
+                    xc = _undo(pos[cross.letter], cross)
+                    phi = math.degrees(math.asin(max(-1.0, min(1.0, xc / r))))
+                if (not self._live_trace
+                        or abs(self._live_trace[-1].x - x) > 0.3
+                        or abs(self._live_trace[-1].theta - (a + phi)) > 0.3):
+                    self._live_trace.append(TracePoint(0.0, x, a + phi,
+                                                       start=self._live_pen_up))
+                    self._live_pen_up = False
+                    if len(self._live_trace) > 20000:
+                        del self._live_trace[:5000]
+            trace = self._live_trace
+        self._live_torch = torch
+        self.machine_view.set_state(state, trace)
+
+    def _match_playback_time(self, pos: Dict[str, float]) -> Optional[float]:
+        """Tìm thời điểm trong chương trình khớp nhất với vị trí máy đang báo.
+
+        Ưu tiên tìm quanh vị trí đã khớp lần trước (chương trình chạy tiến dần),
+        chỉ quét lại toàn bộ khi không tìm được điểm đủ gần - nhờ vậy đường chạy
+        tự cắt nhau cũng không làm mô phỏng nhảy lung tung.
+        """
+        pb = self.playback
+        if not pb or not pb.moves:
+            return None
+        letters = [c for c in self.profile.letters if c in pos]
+        if not letters:
+            return None
+
+        def scan(lo: int, hi: int):
+            best_t, best_d = None, float("inf")
+            for i in range(max(0, lo), min(len(pb.moves), hi)):
+                m = pb.moves[i]
+                num = den = 0.0
+                for c in letters:
+                    a0 = m.start.get(c, 0.0)
+                    d = m.end.get(c, a0) - a0
+                    num += (pos[c] - a0) * d
+                    den += d * d
+                f = 0.0 if den < 1e-12 else max(0.0, min(1.0, num / den))
+                dist = 0.0
+                for c in letters:
+                    a0 = m.start.get(c, 0.0)
+                    p = a0 + (m.end.get(c, a0) - a0) * f
+                    dist += (pos[c] - p) ** 2
+                if dist < best_d:
+                    best_d = dist
+                    best_t = m.t0 + m.duration * f
+            return best_t, math.sqrt(best_d)
+
+        near = getattr(self, "_match_index", 0)
+        t, d = scan(near - 2, near + 40)
+        if d > 1.0 or t is None:
+            t, d = scan(0, len(pb.moves))
+        if t is None:
+            return None
+        self._match_index = max(0, min(len(pb.moves) - 1,
+                                       int(len(pb.moves) * t / max(pb.duration, 1e-6))))
+        return t
 
     def _on_progress(self, pr: JobProgress) -> None:
         self.pbar["value"] = pr.percent
@@ -723,6 +960,18 @@ class MainWindow:
             return
         self.program = program
         self.preview.set_data(self.profile, program.passes)
+        try:
+            self.playback = Playback(self.profile, program.stream_lines())
+        except Exception as exc:
+            self.playback = None
+            self.console.log(f"! Không dựng được mô phỏng: {exc}", "err")
+        self.machine_view.set_profile(self.profile)
+        self.machine_view.set_playback(self.playback)
+        self.sim_time = 0.0
+        self.sim_playing = False
+        self.btn_sim_play.configure(text="▶  Chạy")
+        self._live_trace = []
+        self._refresh_sim_view()
         self.txt_gcode.delete("1.0", "end")
         self.txt_gcode.insert("1.0", "\n".join(program.stream_lines()))
         s = program.stats
@@ -766,7 +1015,15 @@ class MainWindow:
         self.txt_gcode.delete("1.0", "end")
         self.txt_gcode.insert("1.0", text)
         self.program = None
-        self.status_var.set(f"Đã nạp {path} (chạy trực tiếp, không xem trước được)")
+        try:
+            self.playback = Playback(self.profile, self._gcode_lines())
+            self.machine_view.set_profile(self.profile)
+            self.machine_view.set_playback(self.playback)
+            self.sim_time = 0.0
+            self._refresh_sim_view()
+        except Exception:
+            self.playback = None
+        self.status_var.set(f"Đã nạp {path} - mô phỏng được, nhưng không sửa lại biên dạng")
 
     # ==================================================================
     # Chạy chương trình
@@ -797,6 +1054,8 @@ class MainWindow:
                 "Kiểm tra: phôi đã kẹp chắc, gốc toạ độ đã đặt đúng,\n"
                 "nguồn cắt và khí đã sẵn sàng.\n\nBắt đầu?"):
             return
+        self._live_trace = []
+        self._live_pen_up = True
         try:
             self.controller.start_job(lines)
         except Exception as exc:

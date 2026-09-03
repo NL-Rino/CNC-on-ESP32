@@ -4,10 +4,14 @@
 #  hoặc gõ trong terminal:  $Config/Filename=fluidnc_pipe4axis.yaml
 #
 #  Vai trò trục (khớp với config/machine_default.json của PipeCut Studio):
-#    X = chạy dọc theo ống          (đơn vị mm)
-#    Y = bàn ngang / hoặc trục vát  (mm hoặc độ, xem ghi chú cuối tệp)
-#    Z = nâng hạ mỏ cắt             (mm)
-#    A = mâm cặp xoay ống           (ĐỘ - xem cách tính steps_per_mm bên dưới)
+#    Y = ỐNG RA VÀO - bàn mang mâm cặp chạy dọc theo trục ống   (mm)
+#    A = MÂM CẶP XOAY ống                                       (ĐỘ)
+#    X = MỎ CẮT CHẠY NGANG, vuông góc với trục Y                (mm)
+#    Z = MỎ CẮT LÊN XUỐNG                                       (mm)
+#
+#  Lưu ý: trục dọc theo ống ở máy này là **Y** chứ không phải X, vì chính
+#  phôi ống tịnh tiến chứ không phải xe mang mỏ cắt.  PipeCut Studio xuất
+#  G-code theo đúng vai trò đã khai báo nên không cần đổi gì thêm.
 #
 #  !! Chân GPIO bên dưới lấy theo bo MKS DLC32 / ESP32 DevKit thông dụng.
 #     Hãy đối chiếu với bo mạch thực tế của bạn trước khi nạp !!
@@ -31,15 +35,15 @@ planner_blocks: 32
 axes:
   shared_stepper_disable_pin: NO_PIN
 
-  # --- X: chạy dọc ống -------------------------------------------------
+  # --- X: mỏ cắt chạy ngang (vuông góc với trục ống) --------------------
   x:
-    steps_per_mm: 80.000          # vitme 5 mm/vòng, 1/16 vi bước: 200*16/5*... hãy tự tính
-    max_rate_mm_per_min: 4000.000
-    acceleration_mm_per_sec2: 250.000
-    max_travel_mm: 1200.000
+    steps_per_mm: 80.000
+    max_rate_mm_per_min: 3000.000
+    acceleration_mm_per_sec2: 200.000
+    max_travel_mm: 200.000
     soft_limits: true
     homing:
-      cycle: 2
+      cycle: 3
       positive_direction: false
       mpos_mm: 0.000
       feed_mm_per_min: 300.000
@@ -55,12 +59,14 @@ axes:
         direction_pin: gpio.14
         disable_pin: gpio.26
 
-  # --- Y: bàn ngang (hoặc trục vát, xem ghi chú) ------------------------
+  # --- Y: ống ra vào (bàn mang mâm cặp chạy dọc trục ống) ---------------
+  # Đây là trục chịu tải nặng nhất: nó kéo cả phôi ống.  Đặt gia tốc vừa
+  # phải để ống không bị trượt trong mâm cặp khi đảo chiều.
   y:
-    steps_per_mm: 80.000
-    max_rate_mm_per_min: 3000.000
-    acceleration_mm_per_sec2: 200.000
-    max_travel_mm: 200.000
+    steps_per_mm: 80.000          # vitme 5 mm/vòng, 1/16 vi bước - hãy tự tính lại
+    max_rate_mm_per_min: 4000.000
+    acceleration_mm_per_sec2: 250.000
+    max_travel_mm: 1200.000
     soft_limits: true
     homing:
       cycle: 2
@@ -167,7 +173,7 @@ start:
   must_home: false          # đặt true nếu máy có đủ công tắc hành trình
 
 # --- Ghi chú cấu hình có trục vát -------------------------------------
-# Nếu dùng trục Y làm TRỤC VÁT (nghiêng mỏ cắt) thay cho bàn ngang:
-#   1. Đổi steps_per_mm của Y sang "xung mỗi độ" (công thức như trục A)
+# Nếu dùng trục X làm TRỤC VÁT (nghiêng mỏ cắt) thay cho bàn chạy ngang:
+#   1. Đổi steps_per_mm của X sang "xung mỗi độ" (công thức như trục A)
 #   2. Đặt max_travel_mm theo góc nghiêng cơ khí cho phép, ví dụ 50 độ
 #   3. Bên PipeCut Studio dùng tệp config/machine_bevel.json

@@ -5,7 +5,8 @@ import re
 import unittest
 
 from pipecut import shapes
-from pipecut.config import AxisSpec, MachineProfile, ROLE_BEVEL, ROLE_CROSS
+from pipecut.config import (AxisSpec, MachineProfile, ROLE_ALONG, ROLE_BEVEL,
+                            ROLE_CROSS, ROLE_ROTARY)
 from pipecut.gcode import build_program, fmt, strip_gcode_comment
 from pipecut.jobs import Job
 from pipecut.kinematics import Kinematics
@@ -57,7 +58,7 @@ class TestFeedCompensation(unittest.TestCase):
         self.assertAlmostEqual(self._surface_speed(a, b, 1600.0), 1600.0, delta=0.5)
 
     def test_kep_theo_toc_do_toi_da_cua_tung_truc(self):
-        self.p.axes[3].max_rate = 600.0   # trục A rất chậm
+        self.p.axis(ROLE_ROTARY).max_rate = 600.0   # trục xoay rất chậm
         kin = Kinematics(self.p)
         feed, l_real, l_mach = kin.feed_for(CutPoint(0, 0), CutPoint(0, 90), 3000.0)
         self.assertLessEqual(feed, 600.0 + 1e-6)
@@ -84,7 +85,11 @@ class TestFeedCompensation(unittest.TestCase):
 class TestBevel(unittest.TestCase):
     def setUp(self):
         self.p = MachineProfile()
-        self.p.axes[1] = AxisSpec(letter="Y", role=ROLE_BEVEL, max_rate=1800.0, max_travel=0.0)
+        cross = self.p.axis(ROLE_CROSS)
+        cross.role = ROLE_BEVEL          # dùng trục ngang làm trục vát để kiểm thử
+        cross.max_rate = 1800.0
+        cross.max_travel = 0.0
+        self.bevel_letter = cross.letter
         self.p.motion.max_bevel = 60.0
 
     def test_cat_vat_cho_goc_truc_vat_dung_bang_goc_mat_phang(self):
@@ -124,7 +129,8 @@ class TestBevel(unittest.TestCase):
         self.p.motion.bevel_pivot = 50.0
         kin = Kinematics(self.p)
         vals = kin.axis_values(CutPoint(x=100.0, theta=0.0, bevel=30.0), z=2.0)
-        self.assertAlmostEqual(vals["X"], 100.0 + 50.0 * math.sin(math.radians(30)), places=6)
+        along = self.p.letter(ROLE_ALONG)
+        self.assertAlmostEqual(vals[along], 100.0 + 50.0 * math.sin(math.radians(30)), places=6)
         self.assertAlmostEqual(vals["Z"], 2.0 - 50.0 * (1 - math.cos(math.radians(30))), places=6)
 
 
@@ -210,7 +216,10 @@ class TestGcode(unittest.TestCase):
         self.assertIn(f"Z{fmt(self.p.process.cut_height)}", after)
 
     def test_xuat_modal_khong_lap_lai_tu_lenh(self):
-        lines = [l for l in self.prog.stream_lines() if l.startswith(("G1", "X", "A"))]
+        along = self.p.letter(ROLE_ALONG)
+        rotary = self.p.letter(ROLE_ROTARY)
+        lines = [l for l in self.prog.stream_lines()
+                 if l.startswith(("G1", along, rotary))]
         # G1 chỉ xuất hiện ở đầu mỗi chuỗi cắt, không lặp lại từng dòng
         self.assertGreater(sum(1 for l in lines if not l.startswith("G1")), len(lines) * 0.9)
         # F chỉ ghi lại khi tốc độ đổi quá ngưỡng, không phải mọi dòng
@@ -221,11 +230,11 @@ class TestGcode(unittest.TestCase):
         self.assertEqual(s.pierces, 2)
         self.assertGreater(s.cut_length, 100.0)
         self.assertGreater(s.estimated_time, 1.0)
-        self.assertIn("X", s.bounds)
+        self.assertIn(self.p.letter(ROLE_ALONG), s.bounds)
 
     def test_canh_bao_khi_vuot_hanh_trinh(self):
         p = MachineProfile()
-        p.axes[0].max_travel = 100.0
+        p.axis(ROLE_ALONG).max_travel = 100.0
         job = Job()
         job.add("cutoff", x=500.0)
         tp, _ = job.build_toolpath(p)

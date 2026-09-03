@@ -4,22 +4,22 @@
   "axes": [
     {
       "letter": "X",
-      "role": "along",
+      "role": "cross",
       "enabled": true,
-      "max_rate": 4000.0,
-      "accel": 250.0,
-      "max_travel": 1200.0,
+      "max_rate": 3000.0,
+      "accel": 200.0,
+      "max_travel": 200.0,
       "min_travel": 0.0,
       "invert": false,
       "offset": 0.0
     },
     {
       "letter": "Y",
-      "role": "cross",
+      "role": "along",
       "enabled": true,
-      "max_rate": 3000.0,
-      "accel": 200.0,
-      "max_travel": 200.0,
+      "max_rate": 4000.0,
+      "accel": 250.0,
+      "max_travel": 1200.0,
       "min_travel": 0.0,
       "invert": false,
       "offset": 0.0
@@ -108,6 +108,7 @@
     "timeout": 0.1,
     "simulator_speed": 1.0
   },
+  "layout": "pipe_moves",
   "work_offset": "G54",
   "preamble": [
     "G21",

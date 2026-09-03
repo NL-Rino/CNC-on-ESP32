@@ -21,10 +21,10 @@ Cấu hình cơ khí tối thiểu cho máy cắt ống 4 trục:
 
 | Bộ phận | Yêu cầu |
 |---|---|
-| Mâm cặp xoay | Nối với động cơ bước qua hộp giảm tốc (6:1 tới 20:1). Tỉ số càng lớn, mô-men giữ càng khoẻ và góc quay càng mịn |
-| Ray dọc ống (X) | Vitme bi hoặc thanh răng, hành trình ≥ chiều dài phôi cần cắt |
-| Trục Z | Nâng hạ mỏ cắt, hành trình 100–150 mm |
-| Trục thứ 4 | Bàn ngang (Y) **hoặc** cơ cấu nghiêng mỏ cắt để vát mép |
+| Mâm cặp xoay (A) | Nối với động cơ bước qua hộp giảm tốc (6:1 tới 20:1). Tỉ số càng lớn, mô-men giữ càng khoẻ và góc quay càng mịn |
+| Bàn chạy dọc (Y) | Mang cả mâm cặp và phôi ống, tịnh tiến ra vào. Vitme bi hoặc thanh răng, hành trình ≥ chiều dài phôi |
+| Trục Z | Mỏ cắt lên xuống, hành trình 100–150 mm |
+| Trục X | Mỏ cắt chạy ngang, vuông góc với trục Y — hoặc dùng làm cơ cấu nghiêng để vát mép |
 | Giá đỡ phôi | Con lăn đỡ đầu ống phía ngoài mâm cặp — **bắt buộc** với ống dài |
 | Bo mạch | ESP32 (DevKit, MKS DLC32, FluidNC v2...) + driver bước |
 
@@ -58,6 +58,9 @@ Vào tab **1. Máy & Kết nối**, chọn cổng, bấm **Kết nối**. Dòng 
 
 ## 3. Hiệu chỉnh trục xoay
 
+> **Trục dọc ống ở máy này là Y, không phải X** — vì chính phôi ống tịnh tiến
+> chứ không phải xe mang mỏ cắt. Trục X dành cho chuyển động ngang của mỏ cắt.
+
 Trục A tính bằng **độ**, nên `steps_per_mm` của nó chính là **số xung mỗi độ**:
 
 ```
@@ -77,7 +80,8 @@ Ví dụ: động cơ 1.8° (200 xung/vòng), vi bước 1/8, hộp giảm tốc
 3. Nếu ống quay đúng một vòng và hai vạch trùng lại → đúng.
 4. Nếu lệch: `steps_per_deg_mới = steps_per_deg_cũ × 360 / góc_quay_thực`.
 
-Làm tương tự với trục X: cho chạy 100 mm, đo bằng thước cặp.
+Làm tương tự với trục Y (ống ra vào): cho chạy 100 mm, đo bằng thước cặp khoảng
+dịch chuyển thật của ống.
 
 ---
 
@@ -139,15 +143,16 @@ Thứ tự chuẩn trước mỗi lô hàng:
 
 1. **Về gốc** (`$H`) nếu máy có công tắc hành trình.
 2. Kẹp phôi vào mâm cặp, mặt đầu ống nhô ra đủ dài.
-3. Jog trục X cho mũi cắt tới **đúng mặt đầu ống** → bấm **Đặt gốc chi tiết**
-   (chỉ cần với trục X, nhưng nút này đặt cả bốn trục nên hãy làm bước 4, 5 trước
-   khi bấm).
-4. Jog trục Z hạ mũi cắt xuống **chạm nhẹ mặt ống** (dùng tờ giấy để cảm nhận).
-5. Xoay trục A sao cho vị trí muốn coi là 0° nằm **ngay dưới mũi cắt**.
-6. Bấm **Đặt gốc chi tiết** — lúc này X0 ở mặt đầu ống, Z0 ở mặt ống, A0 tại 12 giờ.
+3. Jog trục **Y** (ống ra vào) cho tới khi **mặt đầu ống nằm đúng dưới mũi cắt**.
+4. Jog trục **X** cho mỏ cắt về **đúng đường tâm ống** (nhìn từ đầu ống: mũi cắt
+   thẳng hàng với đỉnh ống).
+5. Jog trục **Z** hạ mũi cắt xuống **chạm nhẹ mặt ống** (kẹp tờ giấy để cảm nhận).
+6. Xoay trục **A** sao cho vị trí muốn coi là 0° nằm **ngay dưới mũi cắt**.
+7. Bấm **Đặt gốc chi tiết** — lúc này Y0 ở mặt đầu ống, X0 trên đường tâm,
+   Z0 ở mặt ống, A0 tại 12 giờ.
 
 Toàn bộ toạ độ trong tệp công việc đều đo từ gốc này: `x` là khoảng cách từ mặt
-đầu ống, `theta` là góc quay tính từ vị trí 12 giờ.
+đầu ống (ra lệnh cho trục Y), `theta` là góc quay tính từ vị trí 12 giờ (trục A).
 
 ---
 
@@ -183,10 +188,19 @@ Vài lưu ý theo từng nguyên công:
 
 1. Tab **4. Xem trước** — kiểm tra hình dạng ở cả hai khung nhìn. Dòng thống kê
    cho biết chiều dài cắt, số điểm mồi, số dòng lệnh và thời gian ước tính.
-2. Tab **5. Chạy** — bấm **BẮT ĐẦU CẮT**, xác nhận hộp thoại kiểm tra an toàn.
-3. Trong lúc chạy:
+2. Tab **5. Mô phỏng** — bấm ▶ để xem lại toàn bộ hành trình trên mô hình máy
+   (xem ảnh minh hoạ: [docs/mo_phong_may.svg](mo_phong_may.svg)):
+   ống trượt ra vào và quay, mỏ cắt chạy ngang và lên xuống, vết cắt đỏ hiện dần.
+   Đây là bước phát hiện va chạm và sai gốc toạ độ **trước khi** đụng tới phôi thật.
+   Kéo chuột trái để xoay góc nhìn, chuột phải để dịch, lăn chuột để phóng to.
+   Thanh trượt cho phép tua tới đúng thời điểm cần soi kỹ, nút **Xuất ảnh...**
+   lưu lại khung hình đang xem thành tệp SVG để in kèm phiếu công nghệ.
+3. Tab **6. Chạy** — bấm **BẮT ĐẦU CẮT**, xác nhận hộp thoại kiểm tra an toàn.
+4. Trong lúc chạy:
    * thanh tiến độ và dòng G-code đang chạy được tô sáng;
    * vị trí mũi cắt hiện lên bản xem trước;
+   * tab **Mô phỏng** (bật *Bám theo máy thật*) phản chiếu đúng tư thế máy đang
+     báo về, kèm phần vết cắt đã hình thành tới thời điểm đó;
    * **Tạm dừng** gửi feed-hold (máy dừng êm, giữ nguyên vị trí, có thể chạy tiếp);
    * **DỪNG** gửi feed-hold rồi reset mềm — nguồn cắt tắt ngay.
 

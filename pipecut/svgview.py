@@ -266,3 +266,76 @@ def save_svg(path: str, profile: MachineProfile, passes: Sequence[Pass],
              title: str = "", **kw) -> None:
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(render_svg(profile, passes, title=title, **kw))
+
+
+# --------------------------------------------------------------------------
+# Ảnh chụp khung mô phỏng máy
+# --------------------------------------------------------------------------
+def render_machine_svg(
+    profile: MachineProfile,
+    state,
+    trace=(),
+    title: str = "",
+    width: int = 1000,
+    height: int = 560,
+    azimuth: float = 38.0,
+    elevation: float = 24.0,
+    show_frame: bool = True,
+    along_range=None,
+) -> str:
+    """Chụp lại khung mô phỏng máy tại một thời điểm thành ảnh SVG.
+
+    Dùng đúng bộ dựng cảnh của tab Mô phỏng nên hình ảnh giống hệt những gì
+    thấy trên giao diện - tiện để in kèm phiếu công nghệ hoặc gửi cho khách.
+    """
+    from .machinescene import Camera, axis_readout, build_scene, scene_bounds
+
+    cam = Camera(azimuth, elevation)
+    prims = build_scene(profile, state, list(trace), cam, show_frame=show_frame)
+    x0, y0, x1, y1 = scene_bounds(profile, cam, state, along_range)
+    pad = 40.0
+    scale = min((width - 2 * pad) / max(x1 - x0, 1e-6),
+                (height - 2 * pad) / max(y1 - y0, 1e-6))
+    ox = width / 2 - (x0 + x1) / 2 * scale
+    oy = height / 2 - (y0 + y1) / 2 * scale
+
+    def px(p):
+        return (ox + p[0] * scale, oy + p[1] * scale)
+
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+           f'viewBox="0 0 {width} {height}">',
+           '<rect width="100%" height="100%" fill="#f4f6f8"/>']
+    for prim in prims:
+        pts = [px(p) for p in prim.points]
+        if prim.kind == "fill" and len(pts) >= 3:
+            d = " ".join(f"{p[0]:.2f},{p[1]:.2f}" for p in pts)
+            out.append(f'<polygon points="{d}" fill="{prim.fill or "none"}" '
+                       f'stroke="{prim.color}" stroke-width="{prim.width}"/>')
+        elif prim.kind == "dot" and pts:
+            out.append(f'<circle cx="{pts[0][0]:.2f}" cy="{pts[0][1]:.2f}" '
+                       f'r="{prim.radius}" fill="{prim.fill or prim.color}"/>')
+        elif len(pts) >= 2:
+            out.append(_poly(pts, prim.color, prim.width))
+    y = 24.0
+    for row in axis_readout(profile, state):
+        out.append(f'<text x="16" y="{y:.0f}" font-family="monospace" font-size="13" '
+                   f'fill="{COLOR_TEXT}" xml:space="preserve">{_esc(row)}</text>')
+        y += 18
+    out.append(f'<text x="16" y="{y + 6:.0f}" font-family="sans-serif" font-size="12" '
+               f'fill="{COLOR_TEXT}">Ống ⌀{profile.pipe.outer_diameter:g} × dài '
+               f'{profile.pipe.length:g} mm</text>')
+    if getattr(state, "torch", False):
+        out.append(f'<text x="16" y="{y + 26:.0f}" font-family="sans-serif" '
+                   f'font-size="12" font-weight="bold" fill="#ff7a1a">● NGUỒN CẮT ĐANG BẬT</text>')
+    if title:
+        out.append(f'<text x="{width - 16}" y="24" text-anchor="end" '
+                   f'font-family="sans-serif" font-size="13" fill="{COLOR_TEXT}">'
+                   f'{_esc(title)}</text>')
+    out.append("</svg>")
+    return "\n".join(out)
+
+
+def save_machine_svg(path: str, profile: MachineProfile, state, trace=(),
+                     title: str = "", **kw) -> None:
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(render_machine_svg(profile, state, trace, title=title, **kw))

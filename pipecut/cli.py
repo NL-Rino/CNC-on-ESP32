@@ -107,6 +107,17 @@ def cmd_gen(args: argparse.Namespace) -> int:
         from .svgview import save_svg
         save_svg(args.svg, profile, program.passes, title=f"{job.name} - {profile.name}")
         print(f"Bản xem trước  : {args.svg}")
+    if getattr(args, "machine_svg", None):
+        from .gsim import Playback
+        from .svgview import save_machine_svg
+        pb = Playback(profile, program.stream_lines())
+        at = max(0.0, min(1.0, (args.at or 60.0) / 100.0)) * pb.duration
+        from .config import ROLE_ALONG
+        letter = profile.letter(ROLE_ALONG)
+        save_machine_svg(args.machine_svg, profile, pb.state_at(at), pb.trace_until(at),
+                         title=f"{job.name} - giây {at:.1f}/{pb.duration:.1f}",
+                         along_range=pb.axis_range(letter) if letter else None)
+        print(f"Ảnh mô phỏng   : {args.machine_svg}  (tại giây {at:.1f})")
     return 0
 
 
@@ -229,9 +240,6 @@ def cmd_demo(args: argparse.Namespace) -> int:
     """Sinh bộ tệp ví dụ để dùng thử ngay."""
     out_dir = args.dir
     os.makedirs(out_dir, exist_ok=True)
-    profile = MachineProfile()
-    profile.save(os.path.join(out_dir, "machine_demo.json"))
-
     job = Job(name="ong-nhanh-chu-T")
     job.add("ring_mark", x=40)
     job.add("hole", diameter=25, x=90, theta=0)
@@ -239,7 +247,8 @@ def cmd_demo(args: argparse.Namespace) -> int:
     job.add("slot", x=150, theta=90, length=45, width_deg=70, corner=5)
     job.add("saddle", main_diameter=114.3, angle=90, x=260)
     job.save(os.path.join(out_dir, "vi_du_ong_T.json"))
-    print(f"Đã tạo tệp mẫu trong: {out_dir}")
+    print(f"Đã tạo tệp công việc mẫu trong: {out_dir}")
+    print("Hồ sơ máy mẫu có sẵn trong thư mục config/")
     return 0
 
 
@@ -264,6 +273,10 @@ def build_parser() -> argparse.ArgumentParser:
     sg.add_argument("job")
     sg.add_argument("-o", "--output", help="tệp .nc xuất ra")
     sg.add_argument("--svg", help="đồng thời xuất bản vẽ xem trước")
+    sg.add_argument("--machine-svg", dest="machine_svg",
+                    help="xuất ảnh mô phỏng máy (SVG) tại một thời điểm")
+    sg.add_argument("--at", type=float,
+                    help="thời điểm chụp ảnh mô phỏng, tính theo %% chương trình (mặc định 60)")
     sg.add_argument("--diameter", type=float, help="ghi đè đường kính ống")
     sg.add_argument("--feed", type=float, help="ghi đè tốc độ cắt")
     sg.add_argument("--kerf", type=float, help="ghi đè bề rộng mạch cắt")
@@ -272,6 +285,9 @@ def build_parser() -> argparse.ArgumentParser:
     spv = sub.add_parser("preview", help="chỉ xuất bản vẽ xem trước")
     spv.add_argument("job")
     spv.add_argument("--svg", help="tệp SVG xuất ra")
+    spv.add_argument("--machine-svg", dest="machine_svg",
+                     help="xuất thêm ảnh mô phỏng máy")
+    spv.add_argument("--at", type=float, help="thời điểm chụp, %% chương trình")
     spv.add_argument("--diameter", type=float)
     spv.add_argument("--feed", type=float)
     spv.add_argument("--kerf", type=float)

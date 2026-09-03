@@ -224,7 +224,18 @@ class PostProcessor:
         stats.moves = b.moves
         stats.bounds = self._bounds(passes, z_safe)
         stats.warnings.extend(self._limit_warnings(passes, z_safe, z_cut))
-        return Program(lines=b.lines, stats=stats, passes=passes, name=job_name)
+        program = Program(lines=b.lines, stats=stats, passes=passes, name=job_name)
+
+        # Thời gian chạy được tính lại bằng chính bộ diễn giải dùng cho mô phỏng,
+        # để con số trên giao diện và trên thanh thời gian mô phỏng luôn khớp nhau.
+        # (nhập ở đây để tránh phụ thuộc vòng giữa hai module)
+        from .gsim import Playback
+
+        try:
+            stats.estimated_time = Playback(pf, program.stream_lines()).duration
+        except Exception:
+            pass  # giữ ước tính tích luỹ nếu có gì bất thường
+        return program
 
     # ------------------------------------------------------------------
     def _emit_pass(self, b: GCodeBuilder, ps: Pass, stats: ProgramStats,

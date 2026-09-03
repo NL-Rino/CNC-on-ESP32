@@ -181,9 +181,16 @@ class ConnectionSpec:
 
 
 def _default_axes() -> List[AxisSpec]:
+    """Bố trí trục mặc định, khớp với máy "ống tự tịnh tiến".
+
+    * **Y** - ống ra vào (bàn mang mâm cặp chạy dọc theo trục ống)
+    * **A** - mâm cặp xoay ống
+    * **X** - mỏ cắt chạy ngang, vuông góc với trục Y
+    * **Z** - mỏ cắt lên xuống
+    """
     return [
-        AxisSpec(letter="X", role=ROLE_ALONG, max_rate=4000.0, accel=250.0, max_travel=1200.0),
-        AxisSpec(letter="Y", role=ROLE_CROSS, max_rate=3000.0, accel=200.0, max_travel=200.0, enabled=True),
+        AxisSpec(letter="X", role=ROLE_CROSS, max_rate=3000.0, accel=200.0, max_travel=200.0),
+        AxisSpec(letter="Y", role=ROLE_ALONG, max_rate=4000.0, accel=250.0, max_travel=1200.0),
         AxisSpec(letter="Z", role=ROLE_RADIAL, max_rate=2000.0, accel=200.0, max_travel=150.0),
         AxisSpec(letter="A", role=ROLE_ROTARY, max_rate=3600.0, accel=400.0, max_travel=0.0),
     ]
@@ -193,13 +200,15 @@ def _default_axes() -> List[AxisSpec]:
 class MachineProfile:
     """Toàn bộ cấu hình một máy cắt ống."""
 
-    name: str = "ESP32 Pipe Cutter 4 truc"
-    description: str = "FluidNC 4 truc: X doc ong, Y ngang, Z nang ha, A xoay mam cap"
+    name: str = "May cat ong ESP32 - 4 truc"
+    description: str = ("FluidNC 4 truc: Y ong ra vao, A mam cap xoay, "
+                        "X mo cat chay ngang, Z mo cat len xuong")
     axes: List[AxisSpec] = field(default_factory=_default_axes)
     pipe: PipeSpec = field(default_factory=PipeSpec)
     process: ProcessSpec = field(default_factory=ProcessSpec)
     motion: MotionSpec = field(default_factory=MotionSpec)
     connection: ConnectionSpec = field(default_factory=ConnectionSpec)
+    layout: str = "pipe_moves"   # pipe_moves = ống tịnh tiến | torch_moves = xe mỏ cắt chạy
     work_offset: str = "G54"
     preamble: List[str] = field(default_factory=lambda: ["G21", "G90", "G94", "G54"])
     postamble: List[str] = field(default_factory=lambda: ["M5", "M30"])
@@ -271,13 +280,14 @@ class MachineProfile:
         d = dict(d or {})
         axes = [AxisSpec.from_dict(a) for a in d.get("axes", [])] or _default_axes()
         return cls(
-            name=d.get("name", "ESP32 Pipe Cutter 4 truc"),
+            name=d.get("name", "May cat ong ESP32 - 4 truc"),
             description=d.get("description", ""),
             axes=axes,
             pipe=PipeSpec.from_dict(d.get("pipe", {})),
             process=ProcessSpec.from_dict(d.get("process", {})),
             motion=MotionSpec.from_dict(d.get("motion", {})),
             connection=ConnectionSpec.from_dict(d.get("connection", {})),
+            layout=d.get("layout", "pipe_moves"),
             work_offset=d.get("work_offset", "G54"),
             preamble=list(d.get("preamble", ["G21", "G90", "G94", "G54"])),
             postamble=list(d.get("postamble", ["M5", "M30"])),

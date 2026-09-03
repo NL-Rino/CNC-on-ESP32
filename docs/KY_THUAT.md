@@ -18,15 +18,24 @@ Tài liệu này giải thích **tại sao** phần mềm làm như đang làm. 
 
 ## 1. Hệ toạ độ và mặt trụ trải phẳng
 
-Phôi là mặt trụ bán kính `R`, quay quanh trục của chính nó. Đầu cắt đứng yên ở
-vị trí 12 giờ và chỉ tiến/lùi theo phương bán kính.
+Phôi là mặt trụ bán kính `R`, quay quanh trục của chính nó và **tịnh tiến dọc
+theo trục của nó**. Mỏ cắt đứng yên theo phương dọc, chỉ chạy ngang (X) và lên
+xuống (Z).
+
+Về mặt toán học, "ống chạy còn mỏ cắt đứng yên" và "mỏ cắt chạy còn ống đứng
+yên" là **cùng một bài toán** — chỉ khác hệ quy chiếu. Nhờ vậy toàn bộ phần
+hình học không cần biết máy thuộc kiểu nào; chỉ có khung mô phỏng mới quan tâm,
+qua trường `layout` trong hồ sơ máy.
 
 Một điểm trên bề mặt được xác định bởi `(x, θ)`:
 
 ```
-x = toạ độ dọc trục ống (mm)          -> trục X của máy
-θ = góc quay của ống (độ)             -> trục A của máy
+x = toạ độ dọc trục ống (mm)          -> trục Y của máy (ống ra vào)
+θ = góc quay của ống (độ)             -> trục A của máy (mâm cặp)
 ```
+
+Chữ cái trục do **vai trò** trong hồ sơ máy quyết định, không phải do quy ước
+cứng trong mã nguồn — đổi vai trò là G-code xuất ra đổi theo.
 
 Toàn bộ phần mềm làm việc trên **mặt phẳng trải** `(u, v)`:
 
@@ -302,6 +311,33 @@ với máy cắt, chạy tiếp sau một dòng bị từ chối là cách nhanh
 
 ---
 
+## 7b. Mô phỏng máy
+
+`gsim.Playback` đọc chương trình G-code rồi trả lời câu hỏi *"tại giây thứ t,
+bốn trục ở đâu"*:
+
+* mỗi dòng thành một đoạn có thời điểm bắt đầu và thời lượng
+  (`L/F` cho G1, `max(|Δᵢ|/tốc_độ_tối_đaᵢ)` cho G0, đúng cách Grbl phân bổ);
+* vết cắt được ghi theo **toạ độ trên phôi** `(x, θ)`, không phải toạ độ thế
+  giới — nhờ vậy vết cắt nằm yên trên mặt ống khi ống trượt và quay;
+* mỗi lần mồi lại được đánh dấu `start=True` để không nối nhầm hai lượt cắt rời
+  nhau bằng một nét thẳng vắt ngang ống.
+
+Thời gian ước tính hiển thị trên giao diện lấy từ chính bộ diễn giải này, nên
+con số ở tab Xem trước và thanh thời gian ở tab Mô phỏng luôn khớp nhau.
+
+Khung vẽ 3D xử lý che khuất bằng cách tô đặc **bao lồi của hai vành đầu ống** —
+với mặt trụ thì bao lồi chính là đường bao thật — rồi mới vẽ đè lên những chi
+tiết nằm ở nửa mặt hướng về người xem (kiểm tra bằng `pháp_tuyến · hướng_nhìn > 0`).
+
+Khi đang nối máy thật, khung mô phỏng không tự tích luỹ vết cắt từ các báo cáo
+trạng thái (chỉ 5 lần/giây, vết sẽ rất thưa) mà **dóng vị trí máy báo về vào
+chương trình đã biết**: tìm điểm gần nhất trên quỹ đạo, suy ra thời điểm, rồi
+lấy đúng phần vết cắt tương ứng. Việc dò được giới hạn quanh vị trí đã khớp lần
+trước nên đường chạy tự cắt nhau cũng không làm hình nhảy lung tung.
+
+---
+
 ## 8. Hạn chế đã biết
 
 * **Chỉ xuất G1/G0**, không dùng cung tròn G2/G3. Cung tròn không biểu diễn được
@@ -309,7 +345,9 @@ với máy cắt, chạy tiếp sau một dòng bị từ chối là cách nhanh
   thì lợi ích gần như không có.
 * **Không mô hình hoá gia tốc** khi ước tính thời gian — con số hiển thị là cận
   dưới, thực tế lâu hơn 10–30% tuỳ số đoạn ngắn.
-* **Máy ảo không mô phỏng gia tốc**, chỉ dùng để kiểm tra logic và luồng lệnh.
+* **Máy ảo và mô phỏng đều không mô hình hoá gia tốc**, chỉ chạy đều theo F.
+  Dùng để kiểm tra hình học, thứ tự nguyên công và va chạm — không dùng để chốt
+  thời gian sản xuất.
 * **Trục vát 4 trục không cắt được mặt vát chuẩn ở mọi điểm** của biên dạng phức
   tạp — đó là giới hạn động học, muốn đúng tuyệt đối cần máy 5 trục. Phần mềm cho
   góc tối ưu trong khả năng của bốn trục.

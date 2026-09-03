@@ -231,3 +231,4 @@ lớp điều khiển — **trách nhiệm an toàn thuộc về người vận 
 * [docs/HUONG_DAN.md](docs/HUONG_DAN.md) — hướng dẫn lắp đặt, hiệu chỉnh và sử dụng.
 * [docs/KY_THUAT.md](docs/KY_THUAT.md) — công thức hình học, thuật toán, giao thức.
 * [firmware/fluidnc_pipe4axis.yaml](firmware/fluidnc_pipe4axis.yaml) — cấu hình FluidNC mẫu.
+* [CHANGELOG.md](CHANGELOG.md) — nhật ký thay đổi theo từng bản phát hành.

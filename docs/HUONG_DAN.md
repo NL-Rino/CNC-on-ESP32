@@ -38,14 +38,74 @@ Cấu hình cơ khí tối thiểu cho máy cắt ống 4 trục:
 
 ## 2. Nạp và cấu hình FluidNC
 
-1. Nạp firmware FluidNC vào ESP32 theo hướng dẫn chính thức
-   (http://wiki.fluidnc.com).
-2. Mở WebUI của FluidNC → **Files** → tải lên
+### 2.1 Nạp bản nào
+
+Tải bản phát hành ở https://github.com/bdring/FluidNC/releases — lấy bản gắn nhãn
+**Latest** (bản ổn định mới nhất), đừng lấy bản có chữ `pre` ở cuối, đó là bản
+thử nghiệm.
+
+Trong tệp nén có nhiều bản firmware khác nhau. **Chọn bản WiFi:**
+
+| Tệp cài | Nạp cái gì | Dùng khi nào |
+|---|---|---|
+| `install-fs.bat` / `.sh` | Hệ thống tệp + WebUI | **Lần đầu phải chạy cái này**, chỉ một lần |
+| `install-wifi.bat` / `.sh` | Firmware bản **WiFi** | **← chọn cái này** |
+| `install-bt.bat` / `.sh` | Firmware bản Bluetooth | Chỉ khi muốn điều khiển qua Bluetooth |
+
+**Vì sao phải là bản WiFi:** ESP32 chỉ có **một** bộ thu phát vô tuyến, không
+chạy WiFi và Bluetooth cùng lúc được; hai phần mã lại đều rất nặng nên FluidNC
+tách hẳn thành hai bản firmware riêng. Nạp bản `bt` thì **mất chức năng nối qua
+mạng LAN** của PipeCut Studio.
+
+Phần cứng: dùng **ESP32 gốc (WROOM-32, 4 MB flash)**. Đây là bo mà FluidNC hỗ
+trợ chính thức và đầy đủ nhất.
+
+### 2.2 Trình tự nạp
+
+```
+1. Cắm ESP32 vào máy tính bằng cáp USB
+2. Chạy install-fs      (lần đầu tiên, nạp WebUI vào flash)
+3. Chạy install-wifi    (nạp firmware)
+4. Mở lại nguồn, nối vào cổng COM để kiểm tra
+```
+
+Nếu báo lỗi lúc nạp: mở tệp `install-wifi.bat` bằng notepad, sửa `--baud 921600`
+thành `--baud 115200` rồi chạy lại. Cáp USB dài hoặc rẻ tiền hay gây lỗi ở tốc
+độ cao.
+
+### 2.3 Nạp tệp cấu hình máy
+
+1. Mở WebUI của FluidNC → **Files** → tải lên
    [`firmware/fluidnc_pipe4axis.yaml`](../firmware/fluidnc_pipe4axis.yaml).
-3. Đặt làm cấu hình đang dùng: gõ trong terminal
+2. Đặt làm cấu hình đang dùng: gõ trong terminal
    `$Config/Filename=fluidnc_pipe4axis.yaml` rồi khởi động lại.
-4. **Đối chiếu chân GPIO** trong tệp YAML với bo mạch thực tế trước khi cấp điện
-   động lực.
+3. Gõ `$Config/Validate` — FluidNC sẽ in ra mọi dòng nó không hiểu. Phải **sạch
+   lỗi** mới cấp điện động lực.
+4. **Đối chiếu chân GPIO** trong tệp YAML với bo mạch thực tế. Xem bảng chân
+   tổng hợp ở cuối tệp YAML.
+
+### 2.4 Những chân ESP32 không được dùng
+
+Đây là chỗ hay hỏng việc nhất khi tự đặt chân. Không phải chân nào cũng dùng
+được như nhau:
+
+| Chân | Vấn đề | Hệ quả nếu dùng sai |
+|---|---|---|
+| 6, 7, 8, 11 | Nối trực tiếp vào chip nhớ flash | FluidNC báo "Unusable GPIO" |
+| **34–39** | **Chỉ vào, KHÔNG có điện trở treo bên trong** | Ghi `:pu` thì FluidNC báo lỗi; công tắc hành trình báo lung tung |
+| **12** | Kéo cao lúc khởi động là chọn sai điện áp flash | **ESP32 không khởi động được** |
+| 0, 2, 5 | Chân quyết định chế độ khởi động (2 còn nối đèn LED) | Không nạp được firmware; rơ-le có thể đóng lúc bật nguồn |
+| 14, 15 | Phát xung PWM ngay khi cấp điện | Động cơ giật, hoặc **mỏ cắt phụt một nhát lúc bật nguồn** |
+| 1, 3 | TX/RX của cổng USB | Mất cổng terminal |
+| 16, 17 | Một số bo WROVER dùng cho PSRAM | Chạy được trên WROOM nhưng nên tránh cho chắc |
+
+Ba chân hành trình `34/35/36` trong tệp cấu hình **bắt buộc hàn điện trở 10k từ
+chân đó lên 3V3**, vì chúng không treo được bên trong.
+
+> **An toàn:** rơ-le nguồn cắt đặt ở `gpio 21` — chân thường, không dính gì tới
+> khởi động. Đừng đổi sang 0, 2, 5, 14 hay 15. Dù chọn chân nào cũng nên dùng
+> rơ-le **thường hở** và lắp thêm một công tắc cắt tay nối tiếp trên đường mồi
+> của nguồn cắt.
 
 Kiểm tra nhanh bằng PipeCut Studio:
 

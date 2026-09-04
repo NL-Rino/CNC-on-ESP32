@@ -1,5 +1,41 @@
 # Nhật ký thay đổi
 
+## v1.4.1 — 2026-09-04
+
+### Sửa lỗi chân GPIO trong tệp cấu hình FluidNC mẫu
+
+Đối chiếu lại `firmware/fluidnc_pipe4axis.yaml` với chính mã nguồn FluidNC
+(`GPIOPinDetail::GetDefaultCapabilities`) thì thấy bốn lỗi thật, đã sửa:
+
+* **Ba chân hành trình ghi `:pu` trên chân 34/35/36** — nhóm chân 34–39 của ESP32
+  là loại *chỉ vào* và **không có điện trở treo bên trong**. FluidNC in ra lỗi
+  `does not support :pu attribute`, chân bị bỏ lửng nên công tắc hành trình báo
+  lung tung. Nay bỏ `:pu` và ghi rõ phải hàn điện trở 10k lên 3V3 bên ngoài.
+* **Rơ-le nguồn cắt đặt ở `gpio 2`** — vừa là chân quyết định chế độ khởi động,
+  vừa nối đèn LED trên bo. Nguy hiểm thật sự: mỏ cắt có thể phụt một nhát lúc
+  bật nguồn. Đổi sang `gpio 21`, là chân thường.
+* **STEP của trục X đặt ở `gpio 12`** — chân này bị kéo cao lúc khởi động là
+  ESP32 chọn sai điện áp flash rồi treo hẳn. Đổi sang `gpio 32`.
+* **STEP/DIR đặt ở `gpio 14` và `gpio 15`** — hai chân này phát xung PWM ngay khi
+  cấp điện. Đổi sang các chân thường.
+
+Bảng chân mới: X = 32/33, Y = 25/26, Z = 27/13, A = 18/19, ENABLE chung = 23,
+hành trình = 34/35/36, dò chạm = 22, rơ-le = 21. Đã soát không trùng chân nào và
+không còn chân nào thuộc nhóm có vấn đề khi khởi động.
+
+Tiêu đề bo đổi từ "ESP32 DevKit / MKS DLC32" thành "ESP32 DevKit (WROOM-32) + 4
+driver rời" cho đúng: MKS DLC32 đẩy xung qua thanh ghi dịch I2S nên phải khai
+chân kiểu `I2SO.x` với `engine: I2S_STREAM`, không dùng được `gpio.x` như tệp
+này; hơn nữa đó là bo 3 trục, không đủ cho máy 4 trục.
+
+### Hướng dẫn nạp firmware
+
+Thêm mục **2. Nạp và cấu hình FluidNC** đầy đủ trong hướng dẫn và một mục tương
+ứng trong README: nạp bản nào (**bản `wifi`, không phải `bt`** — ESP32 chỉ có một
+bộ thu phát vô tuyến nên FluidNC tách làm hai bản firmware), trình tự
+`install-fs` rồi `install-wifi`, cách xử lý khi nạp lỗi, và bảng đầy đủ những
+chân ESP32 không được dùng kèm hệ quả nếu dùng sai.
+
 ## v1.4.0 — 2026-09-03
 
 ### Nhập biên dạng từ bốn nguồn ngoài

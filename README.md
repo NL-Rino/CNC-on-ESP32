@@ -202,6 +202,36 @@ Nạp STL không phải là "chỉ nhận dạng rồi để đấy". Trình t�
 
 ---
 
+## Nạp firmware FluidNC nào cho ESP32
+
+Tải ở https://github.com/bdring/FluidNC/releases — lấy bản gắn nhãn **Latest**,
+không lấy bản có chữ `pre` (bản thử nghiệm). Trong tệp nén, chạy theo thứ tự:
+
+```
+install-fs      ← lần đầu tiên, nạp WebUI vào flash (chỉ một lần)
+install-wifi    ← firmware bản WiFi
+```
+
+**Phải là bản `wifi`, không phải `bt`.** ESP32 chỉ có một bộ thu phát vô tuyến
+nên không chạy WiFi và Bluetooth cùng lúc; FluidNC vì thế tách thành hai bản
+firmware riêng. Nạp bản `bt` là mất chức năng nối qua mạng LAN dưới đây.
+
+Phần cứng: **ESP32 gốc (WROOM-32, 4 MB flash)** — bo được FluidNC hỗ trợ đầy đủ nhất.
+
+Rồi nạp tệp cấu hình máy: WebUI → **Files** → tải lên
+[`firmware/fluidnc_pipe4axis.yaml`](firmware/fluidnc_pipe4axis.yaml) → gõ
+`$Config/Filename=fluidnc_pipe4axis.yaml` → khởi động lại → gõ `$Config/Validate`
+để chắc không còn dòng nào FluidNC không hiểu.
+
+> **Đối chiếu chân GPIO trước khi cấp điện động lực.** Trên ESP32 không phải chân
+> nào cũng dùng được: chân 6–11 nối vào chip nhớ flash, chân 34–39 chỉ vào và
+> **không có điện trở treo bên trong**, chân 12 kéo cao là máy không khởi động,
+> chân 0/2/5/14/15 dính tới chế độ khởi động hoặc phát xung ngay lúc bật nguồn —
+> **không bao giờ đặt rơ-le mỏ cắt vào đó**. Bảng chân đầy đủ ở cuối tệp YAML và
+> trong [mục 2.4 của hướng dẫn](docs/HUONG_DAN.md#24-những-chân-esp32-không-được-dùng).
+
+---
+
 ## Kết nối qua WiFi / mạng LAN
 
 Ngoài cổng COM, phần mềm nói chuyện được với ESP32 **qua WiFi trong mạng LAN**

@@ -13,12 +13,31 @@
 #  phôi ống tịnh tiến chứ không phải xe mang mỏ cắt.  PipeCut Studio xuất
 #  G-code theo đúng vai trò đã khai báo nên không cần đổi gì thêm.
 #
-#  !! Chân GPIO bên dưới lấy theo bo MKS DLC32 / ESP32 DevKit thông dụng.
-#     Hãy đối chiếu với bo mạch thực tế của bạn trước khi nạp !!
+#  FIRMWARE CẦN NẠP: FluidNC bản **WiFi** (install-wifi), không phải bản bt.
+#  ESP32 chỉ có một sóng vô tuyến nên WiFi và Bluetooth không chạy cùng lúc,
+#  FluidNC vì thế tách làm hai bản firmware riêng.  Muốn dùng chức năng nối
+#  qua mạng LAN của PipeCut Studio thì bắt buộc là bản WiFi.
+#
+#  !! CHÂN GPIO bên dưới dành cho **ESP32 DevKit (WROOM-32) + 4 driver rời**.
+#     Đã chọn tránh mọi chân có vấn đề khi khởi động (xem bảng dưới).
+#     Bo mạch của bạn khác thì phải đối chiếu lại trước khi nạp !!
+#
+#  Những chân ESP32 KHÔNG được dùng và vì sao:
+#    gpio 6,7,8,11   nối trực tiếp vào chip nhớ flash - FluidNC báo "Unusable"
+#    gpio 34..39     CHỈ VÀO, và **không có điện trở treo bên trong**.  Dùng làm
+#                    công tắc hành trình được, nhưng phải hàn điện trở treo
+#                    10k lên 3V3 bên ngoài, và KHÔNG được ghi ':pu'.
+#    gpio 12         kéo cao lúc khởi động là ESP32 chọn sai điện áp flash rồi
+#                    treo máy - tuyệt đối không dùng cho STEP/DIR.
+#    gpio 0, 2, 5    chân quyết định chế độ khởi động; gpio 2 còn nối đèn LED
+#                    trên bo.  Không dùng cho rơ-le nguồn cắt.
+#    gpio 14, 15     phát xung PWM ngay lúc khởi động.
+#    gpio 1, 3       là TX/RX của cổng USB.
+#    gpio 16, 17     một số bo WROVER dùng cho PSRAM - nên tránh cho chắc.
 # =====================================================================
 
 name: "May cat ong 4 truc"
-board: "ESP32 DevKit / MKS DLC32"
+board: "ESP32 DevKit (WROOM-32) + 4 driver roi"
 
 stepping:
   engine: RMT          # RMT cho xung sạch nhất trên ESP32
@@ -51,13 +70,14 @@ axes:
       settle_ms: 250
       pulloff_mm: 3.000
     motor0:
-      limit_neg_pin: gpio.36:low:pu
+      # Chân chỉ-vào, không treo được bên trong -> hàn điện trở 10k lên 3V3.
+      limit_neg_pin: gpio.34:low
       hard_limits: false
       pulloff_mm: 3.000
       stepstick:
-        step_pin: gpio.12
-        direction_pin: gpio.14
-        disable_pin: gpio.26
+        step_pin: gpio.32
+        direction_pin: gpio.33
+        disable_pin: gpio.23
 
   # --- Y: ống ra vào (bàn mang mâm cặp chạy dọc trục ống) ---------------
   # Đây là trục chịu tải nặng nhất: nó kéo cả phôi ống.  Đặt gia tốc vừa
@@ -76,13 +96,13 @@ axes:
       seek_mm_per_min: 1000.000
       settle_ms: 250
     motor0:
-      limit_neg_pin: gpio.35:low:pu
+      limit_neg_pin: gpio.35:low        # chân chỉ-vào -> điện trở 10k lên 3V3
       hard_limits: false
       pulloff_mm: 2.000
       stepstick:
-        step_pin: gpio.27
-        direction_pin: gpio.25
-        disable_pin: gpio.26
+        step_pin: gpio.25
+        direction_pin: gpio.26
+        disable_pin: gpio.23
 
   # --- Z: nâng hạ mỏ cắt ----------------------------------------------
   z:
@@ -99,13 +119,13 @@ axes:
       seek_mm_per_min: 1000.000
       settle_ms: 250
     motor0:
-      limit_pos_pin: gpio.34:low:pu
+      limit_pos_pin: gpio.36:low        # chân chỉ-vào -> điện trở 10k lên 3V3
       hard_limits: false
       pulloff_mm: 2.000
       stepstick:
-        step_pin: gpio.15
+        step_pin: gpio.27
         direction_pin: gpio.13
-        disable_pin: gpio.26
+        disable_pin: gpio.23
 
   # --- A: mâm cặp xoay ống (ĐƠN VỊ = ĐỘ) --------------------------------
   #
@@ -129,15 +149,23 @@ axes:
     motor0:
       hard_limits: false
       stepstick:
-        step_pin: gpio.33
-        direction_pin: gpio.32
-        disable_pin: gpio.26
+        step_pin: gpio.18
+        direction_pin: gpio.19
+        disable_pin: gpio.23
 
 # --- Nguồn cắt --------------------------------------------------------
 # Plasma / oxy-gas: dùng rơ-le, M3 bật - M5 tắt.
+#
+# !! AN TOÀN: KHÔNG đặt rơ-le mỏ cắt vào gpio 0, 2, 5, 14, 15.  Đó là những
+#    chân quyết định chế độ khởi động hoặc phát xung PWM ngay khi cấp điện -
+#    mỏ cắt có thể phụt một nhát lúc bật nguồn.  gpio 21 dưới đây là chân
+#    thường, không dính gì tới khởi động.
+#
+#    Dù chọn chân nào cũng nên dùng rơ-le **thường hở** (normally open) và
+#    lắp thêm một công tắc cắt tay nối tiếp trên đường mồi của nguồn cắt.
 spindle:
   relay:
-    output_pin: gpio.2
+    output_pin: gpio.21
     enable_pin: NO_PIN
     disable_with_s0: true
     s0_with_disable: true
@@ -150,7 +178,7 @@ spindle:
 # spindle:
 #   PWM:
 #     pwm_hz: 5000
-#     output_pin: gpio.2
+#     output_pin: gpio.21
 #     enable_pin: NO_PIN
 #     disable_with_s0: false
 #     s0_with_disable: true
@@ -172,6 +200,25 @@ probe:
 start:
   must_home: false          # đặt true nếu máy có đủ công tắc hành trình
 
+# =====================================================================
+#  BẢNG CHÂN TỔNG HỢP - nối dây theo bảng này
+# =====================================================================
+#   Trục / thiết bị        STEP      DIR       Hành trình
+#   ---------------------  --------  --------  ----------------------
+#   X  mỏ cắt ngang        gpio 32   gpio 33   gpio 34  (+10k lên 3V3)
+#   Y  ống ra vào          gpio 25   gpio 26   gpio 35  (+10k lên 3V3)
+#   Z  mỏ lên xuống        gpio 27   gpio 13   gpio 36  (+10k lên 3V3)
+#   A  mâm cặp xoay        gpio 18   gpio 19   (không có)
+#
+#   ENABLE chung cả 4 driver : gpio 23
+#   Dò chạm (probe)          : gpio 22  (treo trong được, dùng :pu)
+#   Rơ-le nguồn cắt          : gpio 21
+#
+#  Ba chân hành trình 34/35/36 là loại CHỈ VÀO nên không treo được bên
+#  trong: bắt buộc hàn điện trở 10k từ chân đó lên 3V3, nếu không công tắc
+#  sẽ báo lung tung.  Đây cũng là lý do trong tệp này chúng không ghi ':pu'
+#  - ghi vào thì FluidNC in ra lỗi "does not support :pu attribute".
+#
 # --- Ghi chú cấu hình có trục vát -------------------------------------
 # Nếu dùng trục X làm TRỤC VÁT (nghiêng mỏ cắt) thay cho bàn chạy ngang:
 #   1. Đổi steps_per_mm của X sang "xung mỗi độ" (công thức như trục A)

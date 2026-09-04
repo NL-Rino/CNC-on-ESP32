@@ -269,6 +269,46 @@ class Response:
         return self.text
 
 
+@dataclass
+class ProbeResult:
+    """Kết quả một lần dò chạm (dòng ``[PRB:...]`` máy trả về)."""
+
+    position: Dict[str, float] = field(default_factory=dict)
+    touched: bool = False
+    raw: str = ""
+
+    def get(self, letter: str, fallback: float = 0.0) -> float:
+        return self.position.get(letter.upper(), fallback)
+
+
+def parse_probe(line: str, axis_letters: Optional[List[str]] = None) -> Optional[ProbeResult]:
+    """Đọc dòng ``[PRB:x,y,z:1]`` - vị trí lúc đầu dò chạm vào vật.
+
+    Chữ số cuối là **có chạm hay không**: 1 = chạm thật, 0 = chạy hết quãng dò
+    mà không chạm gì.  Phân biệt được hai trường hợp này là điều kiện tiên
+    quyết để dò cạnh: dò hụt chính là tín hiệu "chỗ này không còn phôi".
+    """
+    s = line.strip()
+    if not (s.startswith("[PRB:") and s.endswith("]")):
+        return None
+    body = s[5:-1]
+    coords, _, flag = body.rpartition(":")
+    if not coords:
+        coords, flag = body, "1"
+    letters = [c.upper() for c in (axis_letters or list("XYZABC"))]
+    pos: Dict[str, float] = {}
+    for i, part in enumerate(coords.split(",")):
+        if i >= len(letters):
+            break
+        try:
+            pos[letters[i]] = float(part)
+        except ValueError:
+            continue
+    if not pos:
+        return None
+    return ProbeResult(position=pos, touched=flag.strip() not in ("0", ""), raw=s)
+
+
 def parse_options(line: str) -> Optional[Tuple[int, int]]:
     """Đọc dòng ``[OPT:...]`` để lấy (số block planner, cỡ bộ đệm nhận).
 
@@ -311,6 +351,8 @@ def parse_response(line: str, axis_letters: Optional[List[str]] = None) -> Respo
         return Response(kind="alarm", text=s, code=code)
     if s.startswith("<") and s.endswith(">"):
         return Response(kind="status", text=s, status=parse_status(s, axis_letters))
+    if s.startswith("[PRB:") and s.endswith("]"):
+        return Response(kind="probe", text=s)
     if s.startswith("[") and s.endswith("]"):
         return Response(kind="message", text=s)
     if s.startswith("$"):

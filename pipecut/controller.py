@@ -76,6 +76,9 @@ class DeviceController:
         self.profile = profile
         self.transport: Optional[Transport] = None
         self.status: Optional[MachineStatus] = None
+        self._probe_result: Optional[proto.ProbeResult] = None
+        self._probe_thread: Optional[threading.Thread] = None
+        self._probe_stop = False
         self.progress = JobProgress()
         self.firmware: str = ""
 
@@ -183,6 +186,109 @@ class DeviceController:
             else:
                 self._cmd_queue.append(text)
             self._cond.notify_all()
+
+    # ==================================================================
+    # Chế độ dò cạnh
+    # ==================================================================
+    def run_probe(self, routine, on_done=None, on_step=None) -> None:
+        """Chạy một quy trình dò cạnh ở luồng nền.
+
+        Quy trình là một generator: nó phát ra từng bước, mình gửi xuống máy,
+        **chờ máy chạy xong hẳn**, rồi đưa kết quả dò ngược lại cho nó quyết
+        định bước sau.  Phải chờ máy về trạng thái rảnh chứ không chỉ chờ chữ
+        'ok': Grbl trả 'ok' ngay khi *nhận* dòng lệnh, chưa chạy xong.
+        """
+        if not self.is_connected:
+            raise RuntimeError("Chưa kết nối máy.")
+        if self._probe_thread and self._probe_thread.is_alive():
+            raise RuntimeError("Đang có một quy trình dò chạy dở.")
+        self._probe_stop = False
+
+        def work() -> None:
+            result = None
+            try:
+                while True:
+                    step = routine.send(result)
+                    result = None
+                    if self._probe_stop:
+                        raise RuntimeError("Đã dừng theo yêu cầu.")
+                    if step.note and on_step:
+                        try:
+                            on_step(step.note)
+                        except Exception:
+                            pass
+                    with self._cond:
+                        self._probe_result = None
+                    for line in step.lines:
+                        self.send(line)
+                    self._wait_idle()
+                    if step.probe:
+                        result = self._wait_probe()
+            except StopIteration as stop:
+                outcome = stop.value
+                if outcome is not None and outcome.zero:
+                    self._apply_zero(outcome.zero)
+                self._emit_event("probe_done", f"Dò xong: {outcome.kind}"
+                                 if outcome else "Dò xong")
+                if on_done:
+                    on_done(outcome, None)
+            except Exception as exc:
+                self._emit_event("error", f"Dò cạnh dừng: {exc}")
+                if on_done:
+                    on_done(None, exc)
+
+        self._probe_thread = threading.Thread(target=work, daemon=True)
+        self._probe_thread.start()
+
+    def stop_probe(self) -> None:
+        """Dừng quy trình dò đang chạy."""
+        self._probe_stop = True
+        self.send_realtime(proto.RT_FEED_HOLD)
+
+    def _wait_idle(self, timeout: float = 120.0) -> None:
+        """Chờ máy chạy hết hàng đợi và về trạng thái rảnh."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self._probe_stop:
+                raise RuntimeError("Đã dừng theo yêu cầu.")
+            state = self.status.state if self.status else ""
+            if state in ("Alarm", "Door"):
+                raise RuntimeError(f"Máy báo {state} giữa lúc dò.")
+            with self._cond:
+                idle = (not self._cmd_queue and self._pending_bytes == 0
+                        and state == "Idle")
+            if idle:
+                # Xác nhận lại sau một nhịp hỏi trạng thái: 'Idle' có thể là
+                # ảnh chụp cũ, chụp đúng khe hở trước khi máy kịp chạy.
+                time.sleep(max(0.06, self.profile.connection.poll_interval))
+                with self._cond:
+                    still = (not self._cmd_queue and self._pending_bytes == 0)
+                if still and self.status and self.status.state == "Idle":
+                    return
+            time.sleep(0.03)
+        raise RuntimeError("Chờ máy quá lâu mà chưa xong bước dò.")
+
+    def _wait_probe(self, timeout: float = 120.0) -> proto.ProbeResult:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self._probe_stop:
+                raise RuntimeError("Đã dừng theo yêu cầu.")
+            with self._cond:
+                if self._probe_result is not None:
+                    return self._probe_result
+            time.sleep(0.02)
+        raise RuntimeError(
+            "Không nhận được kết quả dò từ máy. Kiểm tra FluidNC đã khai chân "
+            "probe chưa ($Probe/Pin) và cảm biến có nối đúng không."
+        )
+
+    def _apply_zero(self, zero: Dict[str, float]) -> None:
+        """Đặt gốc chi tiết cho các trục mà quy trình dò yêu cầu."""
+        if not zero:
+            return
+        words = " ".join(f"{letter}{value:g}" for letter, value in zero.items())
+        self.send(f"G10 L20 P1 {words}")
+        self._emit_event("info", f"Đã đặt gốc chi tiết: {words}")
 
     def send_realtime(self, byte: bytes) -> None:
         """Gửi byte thời gian thực - không xếp hàng, không chiếm bộ đệm."""
@@ -417,6 +523,13 @@ class DeviceController:
                 self.progress.finished_at = time.monotonic()
                 self._cond.notify_all()
             self._notify_progress()
+        elif resp.kind == "probe":
+            result = proto.parse_probe(resp.text, self.profile.letters)
+            if result is not None:
+                with self._cond:
+                    self._probe_result = result
+                    self._cond.notify_all()
+            self._emit_event("message", resp.text)
         elif resp.kind in ("welcome", "message"):
             if resp.kind == "welcome" or "VER" in resp.text:
                 self.firmware = resp.text

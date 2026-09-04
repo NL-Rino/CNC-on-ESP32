@@ -358,6 +358,26 @@ class MainWindow:
                        style=style or "TButton").grid(
                 row=i // 2, column=i % 2, padx=2, pady=2, sticky="ew")
 
+        probe = ttk.LabelFrame(left, text="Dò cạnh (tự tìm phôi, đặt gốc)", padding=PAD)
+        probe.pack(side="top", fill="x", pady=(PAD, 0))
+        probe.columnconfigure(0, weight=1)
+        ttk.Label(probe, style="Hint.TLabel", wraplength=300, justify="left",
+                  text="Rà mỏ vào khoảng giữa mặt trên phôi rồi bấm. Máy dò xuống "
+                       "nhiều chỗ, chia đôi để tìm mép, rồi tự đặt gốc.").grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        from ..probing import ROUTINES
+        self._probe_keys = list(ROUTINES)
+        self.cmb_probe = ttk.Combobox(probe, state="readonly", width=30,
+                                      values=[ROUTINES[k][0] for k in self._probe_keys])
+        self.cmb_probe.current(len(self._probe_keys) - 1)
+        self.cmb_probe.grid(row=1, column=0, sticky="ew")
+        self.btn_probe = ttk.Button(probe, text="Bắt đầu dò", width=12,
+                                    style="Accent.TButton", command=self.start_probe)
+        self.btn_probe.grid(row=1, column=1, padx=(4, 0))
+        self.lbl_probe = ttk.Label(probe, style="Dim.TLabel", wraplength=300,
+                                   justify="left", text="")
+        self.lbl_probe.grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
         right = ttk.Frame(t)
         right.pack(side="left", fill="both", expand=True, padx=(PAD, 0))
         ttk.Label(right, text="Nhật ký giao tiếp").pack(anchor="w")
@@ -609,6 +629,73 @@ class MainWindow:
         self.run_console.pack(fill="both", expand=True)
 
     # ==================================================================
+    # Dò cạnh
+    # ==================================================================
+    def start_probe(self) -> None:
+        """Chạy quy trình dò cạnh đang chọn."""
+        if not self.controller.is_connected:
+            messagebox.showwarning("Chưa kết nối", "Hãy kết nối máy trước khi dò.")
+            return
+        from ..probing import ROUTINES, ProbeError
+        key = self._probe_keys[max(0, self.cmb_probe.current())]
+        label, factory = ROUTINES[key]
+        self.apply_profile(silent=True)
+        warns = self.profile.probe.validate()
+        if warns:
+            messagebox.showerror("Thông số dò không hợp lệ", "\n".join(warns))
+            return
+        # Điểm xuất phát là **chỗ mỏ đang đứng thật**, không phải gốc 0.
+        status = self.controller.status
+        start = dict(status.wpos or status.mpos) if status else {}
+        if not start:
+            messagebox.showwarning(
+                "Chưa biết vị trí mỏ",
+                "Chưa nhận được toạ độ từ máy. Chờ vài giây rồi thử lại.")
+            return
+        if not messagebox.askokcancel(
+                "Bắt đầu dò cạnh",
+                f"{label}\n\nMỏ sẽ hạ xuống dò phôi. Hãy chắc chắn:\n"
+                f"  • nguồn cắt ĐANG TẮT\n"
+                f"  • cảm biến chạm nối đúng và thử được\n"
+                f"  • mỏ đang ở khoảng giữa mặt trên phôi\n\n"
+                f"Vị trí hiện tại: "
+                + ", ".join(f"{k}{v:.1f}" for k, v in start.items())):
+            return
+        try:
+            routine = factory(self.profile, self.profile.probe, start=start)
+        except ProbeError as exc:
+            messagebox.showerror("Không dò được", str(exc))
+            return
+        self.btn_probe.configure(state="disabled", text="Đang dò...")
+        self.lbl_probe.configure(text="Đang dò...")
+        self.controller.run_probe(
+            routine,
+            on_done=lambda out, err: self.events.put(("probe", out, err)),
+            on_step=lambda note: self.events.put(("probe_step", note)))
+
+    def _on_probe_step(self, note: str) -> None:
+        self.lbl_probe.configure(text=f"Đang dò: {note}")
+
+    def _on_probe_done(self, outcome, error) -> None:
+        self.btn_probe.configure(state="normal", text="Bắt đầu dò")
+        if error is not None or outcome is None:
+            self.lbl_probe.configure(text=f"Dò dừng: {error}")
+            messagebox.showerror("Dò cạnh không xong", str(error))
+            return
+        lines = [f"{k}: {v:.3f}" for k, v in outcome.values.items()]
+        self.lbl_probe.configure(text=" · ".join(lines[:3]) or outcome.kind)
+        body = [outcome.kind, ""] + lines
+        if outcome.notes:
+            body += [""] + outcome.notes
+        if outcome.warnings:
+            body += [""] + ["[!] " + w for w in outcome.warnings]
+        self.status_var.set(f"Dò xong: {outcome.kind}")
+        if outcome.warnings:
+            messagebox.showwarning("Dò xong, có cảnh báo", "\n".join(body))
+        else:
+            messagebox.showinfo("Dò xong", "\n".join(body))
+
+    # ==================================================================
     # Chế độ hiển thị
     # ==================================================================
     def _update_theme_button(self) -> None:
@@ -764,6 +851,10 @@ class MainWindow:
                         self.console.log(prefix + text, tag)
                     if direction == "rx" and text.strip().lower() != "ok":
                         self.run_console.log(text, tag)
+                elif kind == "probe":
+                    self._on_probe_done(item[1], item[2])
+                elif kind == "probe_step":
+                    self._on_probe_step(item[1])
                 elif kind == "lan":
                     self._on_lan_result(item[1], item[2])
                 elif kind == "status":

@@ -27,15 +27,66 @@ class Block:
     is_dwell: bool = False
 
 
+@dataclass
+class VirtualPipe:
+    """Phôi ảo cho máy ảo: đủ để thử chế độ dò cạnh mà không cần phần cứng.
+
+    Mô tả bằng chính lớp tiết diện thật, đặt tại một vị trí và góc xoay cho
+    trước - nhờ vậy bài kiểm thử dò cạnh đo lại đúng thứ mà máy thật sẽ đo.
+    """
+
+    section: object                 # pipecut.section.Section
+    x_centre: float = 0.0           # đường tâm phôi theo trục ngang
+    y_end: float = 0.0              # mặt đầu ống theo trục dọc
+    length: float = 1000.0
+    roll_deg: float = 0.0           # phôi đang bị xoay bao nhiêu độ
+    z_axis_centre: float = 0.0      # cao độ tâm phôi theo thước trục Z
+
+    def surface_z(self, x: float, y: float, a_deg: float,
+                  steps: int = 720) -> Optional[float]:
+        """Cao độ mặt phôi ngay dưới mũi dò, hoặc None nếu chỗ đó không có phôi.
+
+        Bắn một tia thẳng đứng tại vị trí ngang ``x`` vào biên tiết diện **đã
+        quay**, lấy giao điểm cao nhất.  Phải làm đúng như vậy chứ không được
+        chỉ so với bán kính bao: ống hộp ngửa mặt phẳng lên chỉ rộng 50 mm,
+        còn quay góc chĩa ngang thì rộng tới 65,7 mm - dò cạnh mà lẫn hai số
+        này thì đo ra bề rộng sai hẳn.
+        """
+        if not (self.y_end <= y <= self.y_end + self.length):
+            return None
+        sec = self.section
+        cross = x - self.x_centre
+        theta = math.radians(a_deg + self.roll_deg)
+        ca, sa = math.cos(theta), math.sin(theta)
+
+        def rotated(v: float) -> Tuple[float, float]:
+            cx, cy = sec.point_at(v % sec.perimeter)
+            return (cx * ca - cy * sa, cx * sa + cy * ca)
+
+        best: Optional[float] = None
+        prev = rotated(0.0)
+        for i in range(1, steps + 1):
+            cur = rotated(sec.perimeter * i / steps)
+            if (prev[0] - cross) * (cur[0] - cross) <= 0 and abs(cur[0] - prev[0]) > 1e-12:
+                t = (cross - prev[0]) / (cur[0] - prev[0])
+                z = prev[1] + (cur[1] - prev[1]) * t
+                best = z if best is None else max(best, z)
+            prev = cur
+        return None if best is None else self.z_axis_centre + best
+
+
 class FluidNCSimulator:
     """Thiết bị FluidNC ảo, dùng chung giao diện với cổng COM."""
 
     def __init__(self, axes: str = "XYZA", rx_buffer: int = 127,
-                 planner_size: int = 16, time_scale: float = 1.0):
+                 planner_size: int = 16, time_scale: float = 1.0,
+                 workpiece: Optional["VirtualPipe"] = None):
         self.letters = list(axes.upper())
         self.rx_buffer = rx_buffer
         self.planner_size = planner_size
         self.time_scale = max(1e-3, time_scale)
+        # Phôi ảo để lệnh dò chạm G38 có cái mà chạm vào; None = không có phôi
+        self.workpiece = workpiece
         self.reset()
 
     # ------------------------------------------------------------------
@@ -47,6 +98,7 @@ class FluidNCSimulator:
         self._in = bytearray()
         self._out = bytearray(WELCOME.encode())
         self.state = "Idle"
+        self.probe_position: Dict[str, float] = {}
         self.feed = 1500.0
         self.spindle_on = False
         self.spindle_speed = 0.0
@@ -113,6 +165,44 @@ class FluidNCSimulator:
     # ------------------------------------------------------------------
     # Thông dịch G-code (mức đủ dùng để kiểm thử)
     # ------------------------------------------------------------------
+    def _do_probe(self, mode: int, axis_words: Dict[str, float]) -> None:
+        """Thực hiện lệnh dò chạm G38 trên phôi ảo.
+
+        Chỉ mô phỏng phần dò **xuống theo trục Z**, đúng thứ máy cắt ống làm
+        được.  Mũi dò đi từ vị trí hiện tại tới đích; nếu trên đường đi có mặt
+        phôi thì dừng lại ngay tại đó và báo ``[PRB:...:1]``, không thì chạy
+        hết quãng và báo ``:0``.
+        """
+        target = dict(self.target)
+        for letter, value in axis_words.items():
+            target[letter] = value if self.absolute else target[letter] + value
+
+        zc = "Z" if "Z" in self.letters else self.letters[-1]
+        z_from, z_to = self.target.get(zc, 0.0), target.get(zc, 0.0)
+        touched = False
+        stop = dict(target)
+        if self.workpiece is not None and z_to < z_from:
+            surface = self.workpiece.surface_z(
+                target.get("X", self.target.get("X", 0.0)),
+                target.get("Y", self.target.get("Y", 0.0)),
+                target.get("A", self.target.get("A", 0.0)))
+            if surface is not None and z_to <= surface <= z_from:
+                touched = True
+                stop[zc] = surface
+
+        dist = math.sqrt(sum((stop[c] - self.target[c]) ** 2 for c in self.letters))
+        rate = max(self.feed, 1.0)
+        self.queue.append(Block(stop, rate, (dist / rate) * 60.0))
+        self.target = stop
+        self.probe_position = dict(stop)
+        self._start_if_idle()
+        coords = ",".join(f"{stop[c]:.3f}" for c in self.letters)
+        self._emit(f"[PRB:{coords}:{1 if touched else 0}]")
+        if not touched and mode in (382, 384):
+            self._emit("error:5")       # G38.2 bắt buộc phải chạm
+            return
+        self._emit("ok")
+
     def _execute(self, line: str) -> None:
         s = line.strip()
         if s.startswith("$"):
@@ -127,12 +217,17 @@ class FluidNCSimulator:
             return
         motion = None
         dwell = 0.0
+        probe_mode = None
         for letter, value in words:
             if letter == "G":
                 iv = int(round(value * 10))
                 if iv == 0:
                     motion = "G0"
                 elif iv == 10:
+                    motion = "G1"
+                elif iv in (382, 383, 384, 385):
+                    # G38.2/.4 báo lỗi nếu không chạm; G38.3/.5 thì không
+                    probe_mode = iv
                     motion = "G1"
                 elif iv == 40:
                     dwell = -1.0
@@ -162,6 +257,9 @@ class FluidNCSimulator:
             return
 
         axis_words = {l: v for l, v in words if l in self.letters}
+        if probe_mode is not None:
+            self._do_probe(probe_mode, axis_words)
+            return
         if axis_words:
             new_target = dict(self.target)
             for letter, value in axis_words.items():

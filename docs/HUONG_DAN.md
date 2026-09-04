@@ -13,8 +13,9 @@
 9. [Định dạng tệp công việc](#9-định-dạng-tệp-công-việc)
 10. [Nhập biên dạng từ tệp ngoài](#10-nhập-biên-dạng-từ-tệp-ngoài)
 11. [Kết nối qua WiFi / mạng LAN](#11-kết-nối-qua-wifi--mạng-lan)
-12. [Giao diện: nền sáng và nền tối](#12-giao-diện-nền-sáng-và-nền-tối)
-13. [Xử lý sự cố](#13-xử-lý-sự-cố)
+12. [Dò cạnh: máy tự tìm phôi và đặt gốc](#12-dò-cạnh-máy-tự-tìm-phôi-và-đặt-gốc)
+13. [Giao diện: nền sáng và nền tối](#13-giao-diện-nền-sáng-và-nền-tối)
+14. [Xử lý sự cố](#14-xử-lý-sự-cố)
 
 ---
 
@@ -584,7 +585,111 @@ python -m pipecut send ra.nc --port 127.0.0.1:2323
 
 ---
 
-## 12. Giao diện: nền sáng và nền tối
+## 12. Dò cạnh: máy tự tìm phôi và đặt gốc
+
+Thay vì rà tay từng trục rồi đặt gốc bằng mắt, để máy tự dò. Nó tìm được **cả
+bốn gốc**: mặt phôi (Z), đường tâm phôi (X), mặt đầu ống (Y), và với ống hộp là
+cả góc xoay cho mặt phẳng nằm ngang (A).
+
+### Cần cảm biến gì
+
+Mỏ plasma kích bằng rơ-le thì bản thân nó không dò được — phải thêm **một tiếp
+điểm đóng khi mỏ chạm phôi**, nối vào chân `probe` đã khai trong FluidNC. Ba
+cách, xếp theo mức nên dùng:
+
+| Cách | Cách hoạt động | Nhận xét |
+|---|---|---|
+| **Đầu cắt thả nổi + công tắc hành trình** *(nên dùng)* | Mỏ trượt trên ray hoặc lò xo; chạm phôi là mỏ bị đẩy lên, gạt công tắc | Rẻ, bền, không dính gì tới mạch plasma nên **không sợ cao tần**. Đây là cách phổ biến nhất cho plasma không có THC |
+| **Que dò riêng đặt cạnh mỏ** | Một que kim loại gắn cạnh mỏ, lệch một khoảng đã biết | Chính xác nhất, không hại mỏ. Phải đo và khai khoảng lệch |
+| **Dò dẫn điện qua chụp mỏ (ohmic)** | Đo thông mạch giữa chụp mỏ và phôi | **Rủi ro:** xung cao tần lúc mồi hồ quang phá chân vi điều khiển. Bắt buộc cách ly quang. Xỉ bám chụp mỏ là dò sai |
+
+> **An toàn:** nguồn cắt phải **TẮT** suốt lúc dò. Phần mềm không bật mỏ khi dò,
+> nhưng hãy tự kiểm tra lần đầu. Nếu dùng kiểu ohmic, đừng đấu thẳng chụp mỏ vào
+> chân ESP32 — cao tần sẽ giết bo.
+
+Kiểm tra cảm biến trước: gõ `?` ở ô lệnh, lấy tay gạt công tắc, dòng trạng thái
+phải hiện `Pn:P`. Không thấy chữ `P` nghĩa là chưa nối đúng.
+
+### Vì sao không dò ngang như máy phay
+
+Máy phay dò cạnh bằng cách đưa đầu dò **chạm ngang** vào thành phôi. Máy cắt ống
+thì không: mỏ treo thẳng đứng, chỉ đi lên xuống, đâm ngang vào ống là gãy mỏ.
+
+Cách làm ở đây chỉ cần **dò xuống**:
+
+```
+dò xuống ở chỗ A  ->  chạm   =>  chỗ này còn phôi
+dò xuống ở chỗ B  ->  hụt    =>  chỗ này hết phôi
+             chia đôi A-B, dò lại, lặp lại  =>  ra đúng mép
+```
+
+Mỗi lần chia đôi khoảng cách còn một nửa, nên từ khoảng tìm 40 mm xuống sai số
+0,1 mm chỉ mất 9 lần dò.
+
+### Dùng thế nào
+
+1. Rà mỏ bằng tay vào **khoảng giữa mặt trên phôi**, cách mặt vài chục mm.
+2. Thẻ **Điều khiển** → khung **Dò cạnh** → chọn việc cần dò → **Bắt đầu dò**.
+3. Xác nhận hộp thoại (nó nhắc lại: nguồn cắt phải tắt).
+
+| Chọn | Máy làm gì | Đặt gốc nào |
+|---|---|---|
+| Chạm mặt phôi | Hạ xuống chạm mặt trên, dò hai lần cho chính xác | **Z** |
+| Tìm tâm phôi | Dò hai mép trái/phải, lấy điểm giữa | **X** |
+| Tìm đầu ống | Lùi dọc trục tới khi hết phôi, chia đôi | **Y** |
+| Cân mặt phẳng | Đo cao độ hai chỗ trên mặt trên, xoay cho bằng nhau | **A** |
+| **Dò trọn gói** | Cả bốn việc, đúng thứ tự Z → A → X → Y | **cả bốn** |
+
+Thứ tự trong "dò trọn gói" có lý do: **phải cân mặt trước khi tìm tâm**, vì phôi
+xoay lệch thì bề ngang đo được không phải bề ngang thật.
+
+### Nó còn tự soát giúp
+
+Lúc tìm tâm, phần mềm **đo lại bề rộng phôi** rồi đối chiếu với số đã khai:
+
+* Bề rộng nằm ngoài mọi khả năng của tiết diện đã khai → **kích thước phôi khai
+  sai**, báo ngay.
+* Bề rộng lớn hơn mức "mặt phẳng ngửa lên" → **phôi đang bị xoay lệch**, phần
+  mềm nói luôn lệch khoảng bao nhiêu độ và bảo chạy cân mặt trước.
+
+Khai sai kích thước là lỗi âm thầm nguy hiểm nhất: mọi thứ vẫn chạy, chỉ có
+đường cắt là sai chỗ. Đây là chỗ bắt được nó.
+
+### Thử trước khi có cảm biến
+
+Máy ảo có sẵn một phôi ảo, đặt lệch và xoay tuỳ ý, để xem trước trình tự dò:
+
+```bash
+python -m pipecut probe all --fake-x 7.35 --fake-y 12.4 --fake-roll 6.2 \
+       --start-x 7 --start-y 100 -v
+```
+
+Chạy với máy thật thì thay `--port`:
+
+```bash
+python -m pipecut probe surface --port 192.168.1.50
+python -m pipecut probe all --port COM5 --no-zero   # chỉ đo, không đặt gốc
+```
+
+### Thông số dò
+
+Trong hồ sơ máy, mục `probe`:
+
+| Thông số | Ý nghĩa |
+|---|---|
+| `seek_feed` | Tốc độ dò lần đầu (mm/ph). 300 là vừa |
+| `latch_feed` | Tốc độ dò lại lần hai cho chính xác. Càng chậm càng đúng |
+| `retract` | Nhấc lên bao nhiêu sau khi chạm |
+| `clearance` | Cao độ an toàn khi chạy ngang giữa các điểm dò |
+| `max_depth` | **Quãng dò xuống tối đa** — vừa là giới hạn an toàn, vừa quyết định có tới được mép rộng nhất không. Đặt theo hành trình Z dùng được của máy |
+| `tolerance` | Dừng chia đôi khi khoảng còn nhỏ hơn số này (mm) |
+
+Nếu `max_depth` không đủ sâu để chạm tới mép rộng nhất, phần mềm **báo rõ** chứ
+không lặng lẽ cho ra số sai.
+
+---
+
+## 13. Giao diện: nền sáng và nền tối
 
 Bấm nút **◐ Nền tối / ◐ Nền sáng** ở góc trên bên phải để đổi qua lại. Lựa chọn
 được ghi nhớ, lần mở sau tự dùng lại.
@@ -617,7 +722,7 @@ python -m pipecut ui --theme dark
 
 ---
 
-## 13. Xử lý sự cố
+## 14. Xử lý sự cố
 
 | Hiện tượng | Nguyên nhân thường gặp | Cách xử lý |
 |---|---|---|
@@ -633,6 +738,10 @@ python -m pipecut ui --theme dark
 | **Nạp DXF ra hình quá to hoặc quá nhỏ** | Bản vẽ không khai `$INSUNITS`, hoặc vẽ theo cm/inch | Sửa ô **Tỉ lệ** (cm → 10, inch → 25.4) |
 | **Nạp STL báo sai tiết diện** | Khai phôi không khớp mô hình, hay quên bán kính bo góc | Đọc kỹ nội dung cảnh báo — nó chỉ đúng chỗ sai; xem mục 10 |
 | **Nạp STL thiếu mất đường cắt** | Lưới quá thô so với dung sai bề mặt | Tăng **Dung sai bề mặt** lên 0,5–1 mm, hoặc xuất lại STL mịn hơn |
+| **Dò cạnh báo "không nhận được kết quả dò"** | FluidNC chưa khai chân probe, hoặc dây cảm biến đứt | Gõ `$Probe/Pin` xem đã khai chưa; gõ `?` rồi gạt tay công tắc, phải thấy `Pn:P` |
+| **Dò cạnh báo "dò hết ... mà không chạm gì"** | Mỏ chưa ở trên phôi, hoặc `max_depth` quá ngắn | Rà mỏ vào giữa mặt trên phôi trước; tăng `max_depth` |
+| **Dò cạnh ra tâm lệch** | Phôi bị xoay lệch, hoặc quãng dò không tới mép rộng nhất | Chạy **Cân mặt phẳng** trước rồi tìm tâm lại; đọc kỹ cảnh báo phần mềm in ra |
+| **Dò xong nhưng bề rộng đo khác số khai** | Kích thước phôi khai sai, hoặc phôi đặt nghiêng | Phần mềm nói rõ là sai kích thước hay chỉ nghiêng — làm theo |
 | Kết nối được nhưng không phản hồi | Sai baud, hoặc ESP32 đang khởi động | Đặt 115200; chờ 2 giây sau khi mở cổng |
 | `Lỗi 9` khi bắt đầu chạy | Máy đang khoá do báo động | Bấm **Mở khoá ($X)**, tìm nguyên nhân báo động |
 | `BÁO ĐỘNG 2` | Toạ độ vượt hành trình mềm | Kiểm tra dòng "Giới hạn trục" sau khi sinh G-code |

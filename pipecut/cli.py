@@ -111,6 +111,87 @@ def cmd_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_probe(args: argparse.Namespace) -> int:
+    """Chạy chế độ dò cạnh (dùng được cả với máy ảo để xem thử trình tự)."""
+    import threading
+
+    from .controller import DeviceController
+    from .probing import ROUTINES, ProbeError
+
+    profile = _load_profile(args.profile)
+    spec = profile.probe
+    if args.max_depth:
+        spec.max_depth = args.max_depth
+    for w in spec.validate():
+        print(f"  [!] {w}", file=sys.stderr)
+    label, factory = ROUTINES[args.what]
+
+    controller = DeviceController(profile)
+    controller.on_event = lambda kind, text: (
+        print(f"  [{kind}] {text}") if kind in ("error", "info", "alarm") else None)
+    sim = None
+    if (args.port or "").upper() in ("GIA-LAP", "SIM", "SIMULATOR"):
+        # Máy ảo kèm phôi ảo, để xem trước trình tự dò mà chưa cần phần cứng
+        from .simulator import FluidNCSimulator, VirtualPipe
+        sim = FluidNCSimulator(axes="".join(profile.letters),
+                               time_scale=max(1.0, args.speed),
+                               workpiece=VirtualPipe(
+                                   section=profile.pipe.section(),
+                                   length=profile.pipe.length,
+                                   x_centre=args.fake_x, y_end=args.fake_y,
+                                   roll_deg=args.fake_roll,
+                                   z_axis_centre=-profile.pipe.section().reference_height
+                                   - 15.0))
+    try:
+        controller.connect(port=args.port, baudrate=args.baud, simulator=sim)
+    except Exception as exc:
+        print(f"  [!] {exc}", file=sys.stderr)
+        return 2
+    time.sleep(1.0)
+    for line in ("G90", f"G0 Z{args.start_z:g}",
+                 f"G0 X{args.start_x:g} Y{args.start_y:g}"):
+        controller.send(line)
+    time.sleep(1.5)
+    status = controller.status
+    start = dict(status.wpos or status.mpos) if status else {}
+    print(f"{label}\n  mỏ đang ở: "
+          + ", ".join(f"{k}{v:.1f}" for k, v in start.items()))
+
+    done = threading.Event()
+    box: dict = {}
+
+    def finished(outcome, error):
+        box["outcome"], box["error"] = outcome, error
+        done.set()
+
+    try:
+        routine = factory(profile, spec, set_zero=not args.no_zero, start=start)
+        controller.run_probe(routine, on_done=finished,
+                             on_step=lambda note: print(f"  · {note}")
+                             if args.verbose else None)
+    except ProbeError as exc:
+        print(f"  [!] {exc}", file=sys.stderr)
+        controller.disconnect()
+        return 2
+    ok = done.wait(args.timeout)
+    controller.disconnect()
+    if not ok:
+        print("  [!] Quá thời gian chờ.", file=sys.stderr)
+        return 1
+    if box.get("error") is not None:
+        print(f"  [!] {box['error']}", file=sys.stderr)
+        return 2
+    outcome = box["outcome"]
+    print()
+    for key, value in outcome.values.items():
+        print(f"  {key:<24} {value:10.3f}")
+    for note in outcome.notes:
+        print(f"  · {note}")
+    for warn in outcome.warnings:
+        print(f"  [!] {warn}")
+    return 0
+
+
 def cmd_ops(args: argparse.Namespace) -> int:
     print("Danh mục nguyên công (dùng trong tệp công việc .json):\n")
     for key, spec in OP_CATALOG.items():
@@ -384,6 +465,30 @@ def build_parser() -> argparse.ArgumentParser:
     sc.add_argument("--tcp-port", type=int, default=23, help="cổng Telnet của FluidNC")
     sc.add_argument("--timeout", type=float, default=0.25, help="chờ mỗi địa chỉ (giây)")
     sc.set_defaults(func=cmd_scan)
+
+    sp = sub.add_parser("probe", help="dò cạnh: tự tìm phôi rồi đặt gốc toạ độ")
+    sp.add_argument("what", choices=["surface", "center", "end", "level", "all"],
+                    help="dò cái gì")
+    sp.add_argument("--port", default="GIA-LAP",
+                    help="cổng COM, địa chỉ mạng, hoặc GIA-LAP để xem thử")
+    sp.add_argument("--baud", type=int)
+    sp.add_argument("--max-depth", type=float, default=0.0,
+                    help="ghi đè quãng dò xuống tối đa (mm)")
+    sp.add_argument("--start-x", type=float, default=0.0)
+    sp.add_argument("--start-y", type=float, default=100.0)
+    sp.add_argument("--start-z", type=float, default=30.0)
+    sp.add_argument("--no-zero", action="store_true", help="chỉ đo, không đặt gốc")
+    sp.add_argument("--timeout", type=float, default=300.0)
+    sp.add_argument("-v", "--verbose", action="store_true")
+    sp.add_argument("--speed", type=float, default=60.0, help="tăng tốc máy ảo")
+    sp.add_argument("--fake-x", type=float, default=0.0,
+                    help="máy ảo: đặt tâm phôi lệch bấy nhiêu mm")
+    sp.add_argument("--fake-y", type=float, default=0.0,
+                    help="máy ảo: đầu ống nằm ở đâu")
+    sp.add_argument("--fake-roll", type=float, default=0.0,
+                    help="máy ảo: phôi bị xoay lệch bấy nhiêu độ")
+    _add_profile_arg(sp)
+    sp.set_defaults(func=cmd_probe)
 
     si = sub.add_parser("import", help="xem thử tệp DXF/SVG/G-code/STL trước khi dùng")
     si.add_argument("file")

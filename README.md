@@ -227,6 +227,44 @@ Nạp STL không phải là "chỉ nhận dạng rồi để đấy". Trình t�
 
 ---
 
+## Dò cạnh: máy tự tìm phôi và đặt gốc
+
+Không phải rà tay từng trục nữa. Máy tự dò ra **cả bốn gốc**: mặt phôi (Z),
+đường tâm phôi (X), mặt đầu ống (Y), và với ống hộp là cả góc xoay cho mặt phẳng
+nằm ngang (A).
+
+**Cần thêm gì:** một tiếp điểm đóng khi mỏ chạm phôi, nối vào chân `probe` của
+FluidNC. Cách nên dùng nhất với plasma kích rơ-le là **đầu cắt thả nổi + công
+tắc hành trình** — rẻ, bền, và không dính gì tới mạch plasma nên không sợ cao
+tần. (Kiểu dò dẫn điện qua chụp mỏ thì xung cao tần lúc mồi hồ quang dễ giết bo,
+phải cách ly quang.)
+
+**Vì sao không dò ngang như máy phay:** mỏ treo thẳng đứng, đâm ngang vào ống là
+gãy mỏ. Nên cách làm ở đây chỉ cần **dò xuống**:
+
+```
+dò xuống ở chỗ A  ->  chạm   =>  chỗ này còn phôi
+dò xuống ở chỗ B  ->  hụt    =>  chỗ này hết phôi
+             chia đôi A-B, dò lại, lặp lại  =>  ra đúng mép
+```
+
+Từ khoảng tìm 40 mm xuống sai số 0,1 mm chỉ mất 9 lần dò.
+
+**Nó còn tự soát giúp:** lúc tìm tâm, phần mềm đo lại bề rộng phôi rồi đối chiếu
+với số đã khai — sai kích thước thì báo, mà phôi bị đặt xoay lệch thì nó nói
+luôn lệch khoảng bao nhiêu độ và bảo cân mặt trước.
+
+Thử trước khi có cảm biến (máy ảo có sẵn phôi ảo, đặt lệch và xoay tuỳ ý):
+
+```bash
+python -m pipecut probe all --fake-x 7.35 --fake-y 12.4 --fake-roll 6.2
+python -m pipecut probe surface --port 192.168.1.50    # với máy thật
+```
+
+Chi tiết ở [mục 12 của hướng dẫn](docs/HUONG_DAN.md#12-dò-cạnh-máy-tự-tìm-phôi-và-đặt-gốc).
+
+---
+
 ## Giao diện
 
 Hai chế độ hiển thị, đổi bằng nút **◐** ở góc trên bên phải và được ghi nhớ cho
@@ -477,6 +515,7 @@ pipecut/
   machinescene.py dựng hình mô phỏng máy (dùng chung cho giao diện và SVG)
   jobs.py        mô tả công việc bằng JSON + danh mục nguyên công
   protocol.py    phân tích phản hồi Grbl/FluidNC, mã lỗi tiếng Việt
+  probing.py     chế độ dò cạnh: tự tìm phôi rồi đặt gốc toạ độ
   transport.py   cổng COM (pyserial), mạng LAN/WiFi (Telnet) hoặc máy ảo
   importers/     nhập biên dạng: DXF, SVG, G-code phẳng, STL/OBJ, CSV/JSON
   simulator.py   máy ảo FluidNC để thử khi chưa có phần cứng
@@ -489,7 +528,7 @@ config/          hồ sơ máy mẫu (ống tròn, ống hộp, xoay góc, trụ
 firmware/        cấu hình FluidNC cho ESP32 gốc và ESP32-S3
 examples/        tệp công việc mẫu + bản vẽ mẫu (DXF, SVG, G-code phẳng)
 docs/            hướng dẫn sử dụng và tài liệu kỹ thuật
-tests/           185 bài kiểm thử (chạy bằng thư viện chuẩn)
+tests/           204 bài kiểm thử (chạy bằng thư viện chuẩn)
 ```
 
 Chạy kiểm thử:

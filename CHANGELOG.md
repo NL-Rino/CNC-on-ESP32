@@ -1,5 +1,59 @@
 # Nhật ký thay đổi
 
+## v1.7.0 — 2026-09-04
+
+### Chế độ dò cạnh: máy tự tìm phôi và đặt gốc toạ độ
+
+Không phải rà tay từng trục rồi đặt gốc bằng mắt nữa. Máy tự dò ra **cả bốn
+gốc**: mặt phôi (Z), đường tâm phôi (X), mặt đầu ống (Y), và với ống hộp là cả
+góc xoay cho mặt phẳng nằm ngang (A).
+
+**Cần thêm gì:** một tiếp điểm đóng khi mỏ chạm phôi, nối vào chân `probe` của
+FluidNC. Với mỏ plasma kích bằng rơ-le thì nên dùng **đầu cắt thả nổi + công tắc
+hành trình** — rẻ, bền, không dính gì tới mạch plasma nên không sợ cao tần.
+
+**Cách làm, và vì sao phải khác máy phay:** máy phay dò cạnh bằng cách chạm
+ngang vào thành phôi. Máy cắt ống thì mỏ treo thẳng đứng, đâm ngang là gãy mỏ.
+Nên ở đây chỉ **dò xuống**: chỗ nào chạm là còn phôi, chỗ nào hụt là hết phôi,
+chia đôi giữa hai chỗ đó rồi lặp lại. Từ khoảng tìm 40 mm xuống sai số 0,1 mm
+chỉ mất 9 lần dò.
+
+Bốn quy trình, chạy riêng hoặc chạy trọn gói theo thứ tự Z → A → X → Y. Thứ tự
+này có lý do: **phải cân mặt trước khi tìm tâm**, vì phôi xoay lệch thì bề ngang
+đo được không phải bề ngang thật.
+
+**Nó còn tự soát giúp.** Lúc tìm tâm, phần mềm đo lại bề rộng phôi rồi đối chiếu
+với số đã khai: nằm ngoài mọi khả năng của tiết diện thì báo sai kích thước; chỉ
+rộng hơn mức "mặt phẳng ngửa lên" thì nói luôn là phôi đang xoay lệch khoảng bao
+nhiêu độ. Khai sai kích thước là lỗi âm thầm nguy hiểm nhất — mọi thứ vẫn chạy,
+chỉ có đường cắt là sai chỗ.
+
+Kiểm chứng trên phôi ảo đặt lệch tâm 7,35 mm, đầu ống ở 12,4 mm, xoay lệch 6,2°:
+đo ra tâm 7,336 · đầu ống 12,373 · nghiêng 6,201°. Sai số dưới 0,03 mm và 0,01°,
+đúng bằng dung sai chia đôi đã đặt.
+
+Thêm `python -m pipecut probe`, khung **Dò cạnh** trong thẻ Điều khiển, và một
+phôi ảo trong máy ảo để xem trước trình tự dò khi chưa có cảm biến.
+
+**Hai lỗi tự bắt được trong lúc làm:**
+
+* Quãng dò tìm mép tính từ mặt phôi thay vì từ cao độ an toàn, nên dò không tới
+  và mép tìm được chỉ là "chỗ mặt tụt quá ngưỡng". Phôi xoay lệch thì hai bên
+  tụt không đều nhau, tâm suy ra lệch 1,8 mm. Nay dò tới đúng mép rộng nhất —
+  tâm khi đó luôn đúng vì mọi tiết diện ở đây đều đối xứng qua tâm khi quay
+  180°. Không đủ quãng dò thì phần mềm báo rõ chứ không lặng lẽ cho số sai.
+* Phôi ảo trong máy ảo coi ống rộng bằng bán kính bao ở mọi góc xoay, nên bề
+  rộng đo ra sai. Ống hộp 50×50 ngửa mặt phẳng lên chỉ rộng 50 mm, quay 45° cho
+  góc chĩa ngang thì rộng tới 65,7 mm. Nay bắn tia thẳng đứng vào biên tiết diện
+  đã quay, lấy giao điểm cao nhất.
+
+### Khác
+
+* Thêm `[PRB:...]` vào bộ phân tích giao thức, phân biệt **chạm thật** với **dò
+  hụt** — phân biệt được hai cái này là điều kiện tiên quyết để dò cạnh.
+* Thông số dò lưu trong hồ sơ máy (mục `probe`).
+* Thêm 19 bài kiểm thử, tổng cộng **204**.
+
 ## v1.6.0 — 2026-09-04
 
 ### Sửa lỗi phôi quay trọn một vòng giữa nhát cắt

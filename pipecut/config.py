@@ -262,6 +262,17 @@ class ConnectionSpec:
         return cls(**_filter(cls, d))
 
 
+def _probe_spec(**kw):
+    """Tạo ``ProbeSpec`` mà không nhập vòng: probing.py cần config, không ngược lại."""
+    from .probing import ProbeSpec
+    return ProbeSpec(**kw)
+
+
+def _filter_probe(d: Dict[str, Any]) -> Dict[str, Any]:
+    from .probing import ProbeSpec
+    return _filter(ProbeSpec, d or {})
+
+
 def _default_axes() -> List[AxisSpec]:
     """Bố trí trục mặc định, khớp với máy "ống tự tịnh tiến".
 
@@ -293,6 +304,7 @@ class MachineProfile:
     process: ProcessSpec = field(default_factory=ProcessSpec)
     motion: MotionSpec = field(default_factory=MotionSpec)
     connection: ConnectionSpec = field(default_factory=ConnectionSpec)
+    probe: "ProbeSpec" = field(default_factory=lambda: _probe_spec())
     layout: str = "pipe_moves"   # pipe_moves = ống tịnh tiến | torch_moves = xe mỏ cắt chạy
     work_offset: str = "G54"
     preamble: List[str] = field(default_factory=lambda: ["G21", "G90", "G94", "G54"])
@@ -378,6 +390,7 @@ class MachineProfile:
             process=ProcessSpec.from_dict(d.get("process", {})),
             motion=MotionSpec.from_dict(d.get("motion", {})),
             connection=ConnectionSpec.from_dict(d.get("connection", {})),
+            probe=_probe_spec(**_filter_probe(d.get("probe", {}))),
             layout=d.get("layout", "pipe_moves"),
             work_offset=d.get("work_offset", "G54"),
             preamble=list(d.get("preamble", ["G21", "G90", "G94", "G54"])),

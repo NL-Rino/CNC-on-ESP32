@@ -64,8 +64,8 @@ bảng chân khác nhau. FluidNC phát hành riêng cho từng dòng:
 
 | Bo | Bản firmware | Tệp cấu hình dùng kèm |
 |---|---|---|
-| **ESP32 gốc** (WROOM-32) | `wifi` | [`fluidnc_pipe4axis.yaml`](../firmware/fluidnc_pipe4axis.yaml) |
 | **ESP32-S3** (S3-DevKitC-1...) | `wifi_s3` | [`fluidnc_pipe4axis_s3.yaml`](../firmware/fluidnc_pipe4axis_s3.yaml) |
+| **ESP32 gốc** (WROOM-32) | `wifi` | [`fluidnc_pipe4axis.yaml`](../firmware/fluidnc_pipe4axis.yaml) |
 
 Nạp lẫn là **không chạy**: ảnh firmware của hai dòng nạp mã vào những vùng địa
 chỉ khác nhau hẳn. Hai tệp cấu hình cũng **không dùng lẫn được** (xem 2.5).
@@ -84,7 +84,26 @@ Dòng `Chip ID` và các địa chỉ `Segment` sẽ cho biết ảnh đó dựn
 Trên ESP32-S3, đoạn mã chương trình nạp ở vùng `0x42000000`; trên ESP32 gốc là
 `0x400D0000`.
 
-### 2.2 Trình tự nạp
+### 2.2 Bo S3 có hai cổng USB - cắm đúng cổng
+
+Trên **ESP32-S3-DevKitC-1** có **hai** cổng USB-C cạnh nhau, dễ cắm lẫn:
+
+| Cổng in chữ | Đi qua đâu | Hiện ra là |
+|---|---|---|
+| **USB** | USB nối thẳng vào chip S3 (chân 19/20) | Mã nhà sản xuất Espressif `303A:1001` — Linux là `/dev/ttyACM*` |
+| **UART** | Chip cầu CP2102 / CH340 | `10C4:...` hoặc `1A86:...` — Linux là `/dev/ttyUSB*` |
+
+Cả hai đều dùng được. `python -m pipecut ports` giờ nhận ra và ghi rõ từng loại:
+
+```
+/dev/ttyACM0   USB JTAG/serial debug unit [ESP32-S3 USB gắn trong - cổng USB]
+/dev/ttyUSB0   CP2102 USB to UART Bridge [CP2102 - ESP32]
+```
+
+Cắm vào cổng **USB** thì tốc độ baud không có ý nghĩa (USB tự thoả thuận), đặt
+bao nhiêu cũng chạy. Cắm cổng **UART** thì phải để 115200.
+
+### 2.3 Trình tự nạp
 
 ```
 1. Cắm ESP32 vào máy tính bằng cáp USB
@@ -97,7 +116,7 @@ Nếu báo lỗi lúc nạp: mở tệp `install-wifi.bat` bằng notepad, sửa
 thành `--baud 115200` rồi chạy lại. Cáp USB dài hoặc rẻ tiền hay gây lỗi ở tốc
 độ cao.
 
-### 2.3 Nạp tệp cấu hình máy
+### 2.4 Nạp tệp cấu hình máy
 
 1. Mở WebUI của FluidNC → **Files** → tải lên
    [`firmware/fluidnc_pipe4axis.yaml`](../firmware/fluidnc_pipe4axis.yaml).
@@ -107,29 +126,6 @@ thành `--baud 115200` rồi chạy lại. Cáp USB dài hoặc rẻ tiền hay 
    lỗi** mới cấp điện động lực.
 4. **Đối chiếu chân GPIO** trong tệp YAML với bo mạch thực tế. Xem bảng chân
    tổng hợp ở cuối tệp YAML.
-
-### 2.4 Những chân ESP32 gốc không được dùng
-
-Đây là chỗ hay hỏng việc nhất khi tự đặt chân. Không phải chân nào cũng dùng
-được như nhau:
-
-| Chân | Vấn đề | Hệ quả nếu dùng sai |
-|---|---|---|
-| 6, 7, 8, 11 | Nối trực tiếp vào chip nhớ flash | FluidNC báo "Unusable GPIO" |
-| **34–39** | **Chỉ vào, KHÔNG có điện trở treo bên trong** | Ghi `:pu` thì FluidNC báo lỗi; công tắc hành trình báo lung tung |
-| **12** | Kéo cao lúc khởi động là chọn sai điện áp flash | **ESP32 không khởi động được** |
-| 0, 2, 5 | Chân quyết định chế độ khởi động (2 còn nối đèn LED) | Không nạp được firmware; rơ-le có thể đóng lúc bật nguồn |
-| 14, 15 | Phát xung PWM ngay khi cấp điện | Động cơ giật, hoặc **mỏ cắt phụt một nhát lúc bật nguồn** |
-| 1, 3 | TX/RX của cổng USB | Mất cổng terminal |
-| 16, 17 | Một số bo WROVER dùng cho PSRAM | Chạy được trên WROOM nhưng nên tránh cho chắc |
-
-Ba chân hành trình `34/35/36` trong tệp cấu hình **bắt buộc hàn điện trở 10k từ
-chân đó lên 3V3**, vì chúng không treo được bên trong.
-
-> **An toàn:** rơ-le nguồn cắt đặt ở `gpio 21` — chân thường, không dính gì tới
-> khởi động. Đừng đổi sang 0, 2, 5, 14 hay 15. Dù chọn chân nào cũng nên dùng
-> rơ-le **thường hở** và lắp thêm một công tắc cắt tay nối tiếp trên đường mồi
-> của nguồn cắt.
 
 ### 2.5 Những chân ESP32-S3 không được dùng
 
@@ -163,6 +159,29 @@ python -m pipecut ports          # tìm cổng COM (CP2102 / CH340 sẽ được
 
 Vào tab **1. Máy & Kết nối**, chọn cổng, bấm **Kết nối**. Dòng chào
 `Grbl 1.1f` hoặc `[VER:...FluidNC...]` xuất hiện trong nhật ký là thành công.
+
+### 2.6 Những chân ESP32 gốc không được dùng
+
+Đây là chỗ hay hỏng việc nhất khi tự đặt chân. Không phải chân nào cũng dùng
+được như nhau:
+
+| Chân | Vấn đề | Hệ quả nếu dùng sai |
+|---|---|---|
+| 6, 7, 8, 11 | Nối trực tiếp vào chip nhớ flash | FluidNC báo "Unusable GPIO" |
+| **34–39** | **Chỉ vào, KHÔNG có điện trở treo bên trong** | Ghi `:pu` thì FluidNC báo lỗi; công tắc hành trình báo lung tung |
+| **12** | Kéo cao lúc khởi động là chọn sai điện áp flash | **ESP32 không khởi động được** |
+| 0, 2, 5 | Chân quyết định chế độ khởi động (2 còn nối đèn LED) | Không nạp được firmware; rơ-le có thể đóng lúc bật nguồn |
+| 14, 15 | Phát xung PWM ngay khi cấp điện | Động cơ giật, hoặc **mỏ cắt phụt một nhát lúc bật nguồn** |
+| 1, 3 | TX/RX của cổng USB | Mất cổng terminal |
+| 16, 17 | Một số bo WROVER dùng cho PSRAM | Chạy được trên WROOM nhưng nên tránh cho chắc |
+
+Ba chân hành trình `34/35/36` trong tệp cấu hình **bắt buộc hàn điện trở 10k từ
+chân đó lên 3V3**, vì chúng không treo được bên trong.
+
+> **An toàn:** rơ-le nguồn cắt đặt ở `gpio 21` — chân thường, không dính gì tới
+> khởi động. Đừng đổi sang 0, 2, 5, 14 hay 15. Dù chọn chân nào cũng nên dùng
+> rơ-le **thường hở** và lắp thêm một công tắc cắt tay nối tiếp trên đường mồi
+> của nguồn cắt.
 
 ---
 

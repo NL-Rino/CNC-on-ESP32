@@ -420,7 +420,30 @@ class DeviceController:
         elif resp.kind in ("welcome", "message"):
             if resp.kind == "welcome" or "VER" in resp.text:
                 self.firmware = resp.text
+            self._adopt_options(resp.text)
             self._emit_event("message", resp.text)
+
+    def _adopt_options(self, text: str) -> None:
+        """Dùng cỡ bộ đệm nhận **thật** do máy tự khai trong dòng ``[OPT:...]``.
+
+        Hồ sơ máy chỉ ghi một con số dè dặt (127, an toàn cho cả Grbl gốc).
+        FluidNC thường có bộ đệm lớn hơn nhiều; biết số thật thì phần nạp lệnh
+        đếm ký tự giữ được bộ đệm gần đầy đúng mức, planner nhìn trước xa hơn.
+        Chỉ nới ra, không bao giờ thu nhỏ hơn hồ sơ đã khai.
+        """
+        opts = proto.parse_options(text)
+        if not opts:
+            return
+        blocks, buffer = opts
+        conn = self.profile.connection
+        if buffer > conn.rx_buffer:
+            old = conn.rx_buffer
+            conn.rx_buffer = buffer
+            self._emit_event(
+                "info",
+                f"Máy khai bộ đệm nhận {buffer} byte và {blocks} block planner "
+                f"(hồ sơ ghi {old}) - đã dùng theo số máy báo."
+            )
 
     def _poll_loop(self) -> None:
         interval = max(0.05, self.profile.connection.poll_interval)

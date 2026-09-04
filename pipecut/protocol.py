@@ -269,6 +269,26 @@ class Response:
         return self.text
 
 
+def parse_options(line: str) -> Optional[Tuple[int, int]]:
+    """Đọc dòng ``[OPT:...]`` để lấy (số block planner, cỡ bộ đệm nhận).
+
+    FluidNC và Grbl 1.1 đều tự khai hai con số này ở cuối dòng OPT, ví dụ
+    ``[OPT:VL,16,128]``.  Biết cỡ bộ đệm thật thì phần nạp lệnh đếm ký tự giữ
+    được bộ đệm gần đầy đúng mức, thay vì phải đoán dè dặt.
+    """
+    s = line.strip()
+    if not (s.startswith("[OPT:") and s.endswith("]")):
+        return None
+    parts = s[5:-1].split(",")
+    nums = [p.strip() for p in parts if p.strip().isdigit()]
+    if len(nums) < 2:
+        return None
+    blocks, buffer = int(nums[-2]), int(nums[-1])
+    if not (1 <= blocks <= 1000) or not (16 <= buffer <= 65536):
+        return None
+    return blocks, buffer
+
+
 def parse_response(line: str, axis_letters: Optional[List[str]] = None) -> Response:
     """Nhận diện một dòng bất kỳ do máy gửi lên."""
     s = line.strip()

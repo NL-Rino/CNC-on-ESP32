@@ -1,5 +1,37 @@
 # Nhật ký thay đổi
 
+## v1.4.3 — 2026-09-04
+
+### Nhận diện cổng USB gắn trong của ESP32-S3
+
+`pipecut ports` và ô chọn cổng trong giao diện trước đây chỉ biết các chip cầu
+USB-UART (CP2102, CH340, FTDI). ESP32-S3 có USB **nối thẳng vào chip** nên hiện
+ra dưới mã nhà sản xuất của Espressif, không khớp mẫu nào và bị bỏ trống phần
+ghi chú. Nay nhận ra:
+
+* `303A:1001` → "ESP32-S3 USB gắn trong - cổng USB"
+* `303A:1002` → "ESP32-S3 USB-OTG"
+
+Việc này có ích thực tế vì bo **S3-DevKitC-1 có hai cổng USB-C cạnh nhau**: cổng
+**USB** đi thẳng vào chip (Linux là `/dev/ttyACM*`), cổng **UART** đi qua chip
+cầu (`/dev/ttyUSB*`). Cắm sai cổng là không thấy máy, mà trước đây danh sách
+cổng không giúp phân biệt được.
+
+### Tự dùng cỡ bộ đệm nhận mà máy tự khai
+
+FluidNC và Grbl 1.1 đều khai số block planner và cỡ bộ đệm nhận ở cuối dòng
+`[OPT:...]`, ví dụ `[OPT:VL,16,128]`. Trước đây phần mềm bỏ qua dòng này và luôn
+dùng con số dè dặt 127 ghi trong hồ sơ máy. Nay đọc và **nới ra theo số máy
+báo** (chỉ nới, không bao giờ thu nhỏ hơn hồ sơ đã khai), nên phần nạp lệnh đếm
+ký tự giữ bộ đệm gần đầy đúng mức và planner nhìn trước xa hơn.
+
+Thêm `protocol.parse_options()` kèm kiểm thử, và bốn bài kiểm thử cho phần này.
+
+### Tài liệu
+
+Chuyển **ESP32-S3 thành lựa chọn đứng đầu** trong hướng dẫn và README, thêm mục
+2.2 về hai cổng USB của bo S3-DevKitC-1 và cách phân biệt.
+
 ## v1.4.2 — 2026-09-04
 
 ### Thêm cấu hình FluidNC cho ESP32-S3

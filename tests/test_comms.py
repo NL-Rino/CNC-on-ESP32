@@ -213,6 +213,46 @@ class TestStreaming(unittest.TestCase):
         self.assertEqual(c.progress.acked, len(self.lines))
 
 
+
+class TestOptionsAndPorts(unittest.TestCase):
+    """Đọc dòng [OPT:...] và nhận diện cổng USB gắn trong của ESP32-S3."""
+
+    def test_doc_duoc_co_bo_dem_may_khai(self):
+        self.assertEqual(proto.parse_options("[OPT:VL,16,128]"), (16, 128))
+        self.assertEqual(proto.parse_options("[OPT:VL,35,255]"), (35, 255))
+        self.assertEqual(proto.parse_options("[OPT:PHS,32,4096]"), (32, 4096))
+
+    def test_bo_qua_dong_khong_phai_opt_hoac_sai_dinh_dang(self):
+        for line in ("[VER:3.9 FluidNC]", "<Idle|MPos:0,0,0>", "[OPT:]",
+                     "[OPT:VL,16]", "ok", "", "[OPT:VL,0,10]"):
+            self.assertIsNone(proto.parse_options(line), line)
+
+    def test_controller_dung_co_bo_dem_may_bao(self):
+        profile = MachineProfile()
+        profile.connection.rx_buffer = 64        # cố tình khai nhỏ
+        c = DeviceController(profile)
+        c.connect(port="GIA-LAP")
+        try:
+            c.query_firmware()
+            deadline = time.monotonic() + 3.0
+            while profile.connection.rx_buffer == 64 and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertGreater(profile.connection.rx_buffer, 64)
+        finally:
+            c.disconnect()
+
+    def test_khong_thu_nho_bo_dem_da_khai(self):
+        profile = MachineProfile()
+        profile.connection.rx_buffer = 4096      # khai lớn hơn máy báo
+        c = DeviceController(profile)
+        c.connect(port="GIA-LAP")
+        try:
+            c.query_firmware()
+            time.sleep(0.8)
+            self.assertEqual(profile.connection.rx_buffer, 4096)
+        finally:
+            c.disconnect()
+
 if __name__ == "__main__":
     unittest.main()
 

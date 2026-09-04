@@ -222,8 +222,13 @@ Hai dòng chip dùng **firmware khác nhau và bảng chân khác nhau**, nạp 
 
 | Bo | Bản firmware | Tệp cấu hình dùng kèm |
 |---|---|---|
-| **ESP32 gốc** (WROOM-32) | `wifi` | [`fluidnc_pipe4axis.yaml`](firmware/fluidnc_pipe4axis.yaml) |
 | **ESP32-S3** (S3-DevKitC-1...) | `wifi_s3` | [`fluidnc_pipe4axis_s3.yaml`](firmware/fluidnc_pipe4axis_s3.yaml) |
+| **ESP32 gốc** (WROOM-32) | `wifi` | [`fluidnc_pipe4axis.yaml`](firmware/fluidnc_pipe4axis.yaml) |
+
+Bo **S3-DevKitC-1 có hai cổng USB-C**: cổng in chữ **USB** nối thẳng vào chip
+(hiện ra dưới mã Espressif `303A:1001`, Linux là `/dev/ttyACM*`), cổng **UART**
+đi qua CP2102/CH340 (`/dev/ttyUSB*`). Cả hai dùng được; `python -m pipecut ports`
+ghi rõ từng loại. Cắm cổng **USB** thì tốc độ baud không có ý nghĩa.
 
 S3 không có bản `bt` vì chip này không có Bluetooth Classic. Muốn biết một tệp
 `.bin` đã tải là bản nào: `esptool.py image_info --version 2 firmware.bin` — mã

@@ -323,12 +323,24 @@ def list_ports() -> List[Tuple[str, str]]:
             desc = p.description or ""
             hint = ""
             hw = (p.hwid or "").upper()
+            up = desc.upper()
+            # ESP32-S3 (và S2/C3...) có USB nối thẳng vào chip, không qua chip
+            # cầu USB-UART nào, nên hiện ra dưới mã nhà sản xuất của Espressif.
+            # Bo S3-DevKitC-1 có HAI cổng USB-C: cổng "USB" là loại này, cổng
+            # "UART" mới đi qua CP2102/CH340.  Cắm sai cổng là không thấy máy.
+            if "303A" in hw:
+                if "1001" in hw:
+                    hint = " [ESP32-S3 USB gắn trong - cổng USB]"
+                elif "1002" in hw:
+                    hint = " [ESP32-S3 USB-OTG]"
+                else:
+                    hint = " [Espressif USB gắn trong]"
             # các chip USB-UART hay gặp trên board ESP32
-            if "CP210" in desc.upper() or "10C4" in hw:
+            elif "CP210" in up or "10C4" in hw:
                 hint = " [CP2102 - ESP32]"
-            elif "CH340" in desc.upper() or "1A86" in hw:
+            elif "CH340" in up or "1A86" in hw:
                 hint = " [CH340 - ESP32]"
-            elif "FT232" in desc.upper() or "0403" in hw:
+            elif "FT232" in up or "0403" in hw:
                 hint = " [FTDI]"
             ports.append((p.device, f"{desc}{hint}"))
     except ImportError:

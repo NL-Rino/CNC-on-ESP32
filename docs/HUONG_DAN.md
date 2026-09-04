@@ -460,6 +460,27 @@ python -m pipecut import ban_ve.dxf --layers CAT,LO  # chỉ lấy hai lớp nà
 python -m pipecut import chi_tiet.stl --mesh-tol 0.3
 ```
 
+### Đặt đường vào dao riêng cho từng nguyên công
+
+Vết mồi rất xấu và rộng, nên chỗ vào dao phải rơi đúng vào **phần phế liệu**.
+Mỗi nhát cắt lại có chỗ hợp lý khác nhau: lỗ thì vào từ trong lòng, cắt đứt thì
+vào từ phía đầu tự do, rãnh dài thì tuỳ chỗ kẹp phôi.
+
+Ngoài thiết lập chung ở thẻ **Máy & Kết nối**, mỗi nguyên công còn có riêng khối
+ô nhập ở cuối bảng thông số:
+
+| Ô | Ý nghĩa |
+|---|---|
+| **Tự đặt đường vào dao** | Tắt = dùng thiết lập chung. Bật mới đọc các ô dưới |
+| **Vào dao phía nào** | `inside`/`outside` cho biên dạng kín; `plus`/`minus` cho nhát cắt quanh ống (về phía đầu tự do hay phía gốc) |
+| **Dời điểm mồi** | Xoay chỗ vào dao quanh biên dạng, tính theo % chu vi — dùng để đưa vết mồi ra giữa cạnh thay vì đúng góc bo |
+| **Kiểu vào dao** | `arc` (cung, ít cháy mép nhất), `line` (thẳng), `none` (mồi ngay trên đường cắt) |
+| **Chiều dài vào dao** | mm |
+| **Góc vào dao** | Chỉ dùng cho kiểu `line` |
+| **Chạy vượt** | Chạy quá điểm khép kín cho mạch cắt đứt hẳn |
+
+Đặt ở đây **không ảnh hưởng** các nguyên công khác và cũng không sửa hồ sơ máy.
+
 ### Hiểu từng ô thông số
 
 | Ô | Ý nghĩa |

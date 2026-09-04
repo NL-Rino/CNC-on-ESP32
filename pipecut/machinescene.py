@@ -35,7 +35,7 @@ from . import palette as _pal
 # Màu cảnh máy lấy từ bảng màu đang dùng; đổi chế độ sáng/tối là tự đổi theo.
 COLOR_PIPE_FILL = COLOR_PIPE_EDGE = COLOR_PIPE_LINE = COLOR_SEAM = ""
 COLOR_CHUCK = COLOR_CHUCK_FILL = COLOR_TRACE = COLOR_TORCH = ""
-COLOR_TORCH_HOT = COLOR_FRAME = COLOR_ROLLER = ""
+COLOR_TORCH_HOT = COLOR_FRAME = ""
 
 
 def _sync_colors(p=None) -> None:
@@ -47,7 +47,7 @@ def _sync_colors(p=None) -> None:
     """
     global COLOR_PIPE_FILL, COLOR_PIPE_EDGE, COLOR_PIPE_LINE, COLOR_SEAM
     global COLOR_CHUCK, COLOR_CHUCK_FILL, COLOR_TRACE, COLOR_TORCH
-    global COLOR_TORCH_HOT, COLOR_FRAME, COLOR_ROLLER
+    global COLOR_TORCH_HOT, COLOR_FRAME
     p = p or _pal.current()
     # Khung nhìn 3D nền xanh lam ở cả chế độ sáng lẫn tối, nên phôi và máy giữ
     # màu kim loại ở cả hai - y như FreeCAD, vật thể không đổi màu theo giao
@@ -64,7 +64,6 @@ def _sync_colors(p=None) -> None:
     COLOR_TORCH = p.tool
     COLOR_TORCH_HOT = p.torch_on
     COLOR_FRAME = p.mix(metal, p.view_bottom, 0.45)
-    COLOR_ROLLER = p.mix(metal, p.metal_fill, 0.25)
 
 
 _sync_colors()
@@ -221,7 +220,6 @@ def build_scene(
     out.extend(_chuck(pose, cam, P))
     if show_trace and trace:
         out.extend(_trace(pose, cam, P, trace, trace_limit))
-    out.extend(_roller(pose, P))
     out.extend(_torch(pose, P))
     return out
 
@@ -333,21 +331,6 @@ def _chuck(pose: MachinePose, cam: Camera, P) -> List[Prim]:
         out.append(Prim("poly", [P((rc * 1.55 * n[0], y0, rc * 1.55 * n[2])),
                                  P((rc * 0.98 * n[0], y0, rc * 0.98 * n[2]))],
                         COLOR_CHUCK, 3.0))
-    return out
-
-
-def _roller(pose: MachinePose, P) -> List[Prim]:
-    """Con lăn đỡ đứng yên - mốc để thấy ống trượt qua."""
-    out: List[Prim] = []
-    r = pose.radius
-    y = r * 2.6
-    for side in (-1.0, 1.0):
-        pts = []
-        for k in range(0, 361, 30):
-            a = math.radians(k)
-            pts.append(P((side * r * 0.75 + r * 0.28 * math.sin(a), y,
-                          -r * 0.95 + r * 0.28 * math.cos(a))))
-        out.append(Prim("poly", pts, COLOR_ROLLER, 1.6))
     return out
 
 

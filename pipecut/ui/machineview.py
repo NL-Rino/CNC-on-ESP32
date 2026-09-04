@@ -195,7 +195,7 @@ class MachineView(ttk.Frame):
                           font=("Consolas", 10), text=row)
             y += 16
         c.create_text(12, y + 4, anchor="nw", fill=COLOR_TEXT, font=("TkDefaultFont", 9),
-                      text=f"Ống ⌀{pf.pipe.outer_diameter:g} × dài {pf.pipe.length:g} mm")
+                      text=f"{pf.pipe.size_text} × dài {pf.pipe.length:g} mm")
         if self.state.torch:
             c.create_text(12, y + 20, anchor="nw", fill=COLOR_TORCH_HOT,
                           font=("TkDefaultFont", 9, "bold"), text="● NGUỒN CẮT ĐANG BẬT")

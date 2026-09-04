@@ -135,6 +135,31 @@ rồi cắt hết cung góc ở tốc độ chuẩn:
 
 ![Xoay 45 độ qua góc](docs/mo_phong_xoay_goc.svg)
 
+### Cắt góc gần vuông hơn: chia cung làm nhiều lần xoay
+
+Kiểu `pivot` mặc định xoay **một lần** đưa giữa cung lên đỉnh rồi cắt hết cung
+với trục A đứng yên — nhanh, nhưng ở hai đầu cung mỏ nghiêng tới 45° so với
+pháp tuyến nên mặt cắt chỗ đó không vuông góc.
+
+Ô **Chia cung góc mấy lần xoay** cho phép đổi lấy độ vuông góc. Đo trên nhát cắt
+đứt ống 50×50 góc lượn R6, đặt 1600 mm/phút:
+
+| Chia | Mỏ nghiêng tối đa | Tốc độ cắt | Số lần mồi | Thời gian |
+|---|---|---|---|---|
+| 1 *(mặc định)* | 45° | 1600 mm/ph | 9 | 29 s |
+| 2 | 22,5° | 1600 mm/ph | 13 | 34 s |
+| 3 | 15° | 1600 mm/ph | 17 | 38 s |
+| 6 | 7,5° | 1600 mm/ph | 29 | 51 s |
+
+Tốc độ cắt **không đổi** dù chia bao nhiêu lần — cái phải trả là **số lần mồi**,
+vì mỗi lần xoay là một lần tắt mỏ rồi mồi lại. Mồi là thứ hại phôi và hao vật tư
+nhất, nên mặc định để 1; cần mặt cắt vuông hơn thì tăng lên.
+
+Tắt ô *Tắt mỏ khi xoay góc* thì chia bao nhiêu cũng chỉ 1 lần mồi và 21 giây —
+đổi lại mỏ dừng tại chỗ với lửa đang cháy, sẽ khoét rộng chỗ đó.
+
+Khe hở mỏ–phôi giữ đúng 1,600 mm ở mọi cách chia.
+
 ## Làm được những gì
 
 | Nguyên công | Mô tả |
@@ -464,7 +489,7 @@ config/          hồ sơ máy mẫu (ống tròn, ống hộp, xoay góc, trụ
 firmware/        cấu hình FluidNC cho ESP32 gốc và ESP32-S3
 examples/        tệp công việc mẫu + bản vẽ mẫu (DXF, SVG, G-code phẳng)
 docs/            hướng dẫn sử dụng và tài liệu kỹ thuật
-tests/           175 bài kiểm thử (chạy bằng thư viện chuẩn)
+tests/           185 bài kiểm thử (chạy bằng thư viện chuẩn)
 ```
 
 Chạy kiểm thử:

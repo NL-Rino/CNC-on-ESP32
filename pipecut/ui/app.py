@@ -241,6 +241,8 @@ class MainWindow:
              "choice", list(CORNER_LABEL.values())),
             ("corner_torch_off", "Tắt mỏ khi xoay góc", m.corner_torch_off, "bool"),
             ("corner_lift", "Nhấc mỏ khi xoay góc [mm]", m.corner_lift),
+            ("corner_pivot_arcs", "Chia cung góc mấy lần xoay",
+             float(m.corner_pivot_arcs)),
         ], columns=1)
         self.f_motion.pack(fill="x")
 
@@ -951,6 +953,8 @@ class MainWindow:
         p.motion.corner_torch_off = bool(
             self.f_motion.get("corner_torch_off", p.motion.corner_torch_off))
         p.motion.corner_lift = self.f_motion.get("corner_lift", p.motion.corner_lift)
+        p.motion.corner_pivot_arcs = max(1, int(self.f_motion.get(
+            "corner_pivot_arcs", p.motion.corner_pivot_arcs)))
         try:
             p.connection.baudrate = int(self.cmb_baud.get())
             p.connection.simulator_speed = max(0.01, float(self.cmb_simspeed.get()))
@@ -968,8 +972,15 @@ class MainWindow:
             sec = p.pipe.section()
             note = f"{sec.describe()} · chu vi {sec.perimeter:.1f} mm"
             if not p.pipe.is_round:
-                note += (f" · góc lượn R{getattr(sec, 'rc', 0):.1f}"
+                auto = " (phần mềm tự lấy vì ô bán kính để 0)" \
+                    if p.pipe.corner_radius <= 0 else ""
+                note += (f" · góc lượn R{sec.rc:.1f}{auto}"
                          f" · trục ngang cần chạy ±{sec.hx - sec.rc:.0f} mm")
+                # Ghi luôn số thật vào ô nhập để người dùng không phải đoán:
+                # gõ 0 rồi thấy máy báo R6 thì rất dễ tưởng phần mềm bỏ qua.
+                if p.pipe.corner_radius <= 0 and "corner_radius" in self.f_pipe.vars:
+                    self.f_pipe.vars["corner_radius"].set(f"{sec.rc:g}")
+                    p.pipe.corner_radius = sec.rc
             self.lbl_pipe.configure(text=note)
         except Exception as exc:
             self.lbl_pipe.configure(text=f"Tiết diện không hợp lệ: {exc}")

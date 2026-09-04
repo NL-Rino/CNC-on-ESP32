@@ -110,7 +110,8 @@
     "corner_torch_off": true,
     "corner_lift": 6.0,
     "corner_rotate_rate": 0.0,
-    "corner_dwell": 0.0
+    "corner_dwell": 0.0,
+    "corner_pivot_arcs": 1
   },
   "connection": {
     "port": "",

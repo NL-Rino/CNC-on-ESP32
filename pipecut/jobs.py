@@ -32,6 +32,41 @@ ALL_SHAPES = ("round", "square", "rect")
 ROUND_ONLY = ("round",)
 
 
+# --------------------------------------------------------------------------
+# Đường dẫn mồi riêng cho từng nguyên công
+# --------------------------------------------------------------------------
+# Vết mồi rất xấu và rộng, nên chỗ vào dao phải nằm đúng chỗ phế liệu.  Mỗi
+# nhát cắt lại có chỗ hợp lý khác nhau: lỗ thì vào từ trong lòng, cắt đứt thì
+# vào từ phía đầu tự do, rãnh dài thì tuỳ chỗ kẹp phôi.  Vì vậy ngoài thiết
+# lập chung ở hồ sơ máy, từng nguyên công còn ghi đè được bằng khối này.
+LEAD_SIDE_LABEL = {
+    "auto": "tự chọn",
+    "inside": "vào từ trong lòng (biên dạng kín)",
+    "outside": "vào từ ngoài (biên dạng kín)",
+    "plus": "về phía đầu tự do (cắt quanh ống)",
+    "minus": "về phía gốc ống (cắt quanh ống)",
+}
+
+
+def lead_params() -> List[Dict[str, Any]]:
+    """Khối thông số vào dao, gắn thêm vào mọi nguyên công có cắt."""
+    return [
+        P("lead_custom", "Tự đặt đường vào dao", False, "", "bool",
+          hint="Tắt = dùng thiết lập chung ở thẻ Máy & Kết nối"),
+        P("lead_side", "Vào dao phía nào", "auto", "", "choice",
+          choices=list(LEAD_SIDE_LABEL),
+          hint="Chỗ mồi phải rơi vào phần phế liệu, không rơi vào chi tiết"),
+        P("lead_start", "Dời điểm mồi", 0.0, "% chu vi",
+          hint="Xoay chỗ vào dao quanh biên dạng, ví dụ ra giữa cạnh thay vì đúng góc"),
+        P("lead_type", "Kiểu vào dao", "arc", "", "choice",
+          choices=["arc", "line", "none"]),
+        P("lead_in", "Chiều dài vào dao", 4.0, "mm"),
+        P("lead_angle", "Góc vào dao", 90.0, "độ", hint="Chỉ dùng cho kiểu line"),
+        P("overcut", "Chạy vượt", 1.0, "mm",
+          hint="Chạy quá điểm khép kín cho mạch cắt đứt hẳn"),
+    ]
+
+
 OP_CATALOG: Dict[str, Dict[str, Any]] = {
     "cutoff": {
         "label": "Cắt đứt / cắt vát",
@@ -155,6 +190,13 @@ OP_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
     },
 }
+
+
+# Vạch dấu vòng không cắt đứt nên không có đường vào dao.
+_NO_LEAD = {"ring_mark"}
+for _key, _spec in OP_CATALOG.items():
+    if _key not in _NO_LEAD:
+        _spec["params"] = list(_spec["params"]) + lead_params()
 
 
 def ops_for_shape(shape: str) -> List[str]:
@@ -290,12 +332,32 @@ def build_imported(op: Operation, section, tolerance: float,
     return out
 
 
+def lead_overrides(op: Operation) -> Dict[str, Any]:
+    """Thông số vào dao riêng của một nguyên công, rỗng nếu dùng mặc định."""
+    if not bool(op.get("lead_custom", False)):
+        return {}
+    return {
+        "lead_side": str(op.get("lead_side", "auto")),
+        "lead_start": float(op.get("lead_start", 0.0)),
+        "lead_type": str(op.get("lead_type", "arc")),
+        "lead_in": float(op.get("lead_in", 4.0)),
+        "lead_angle": float(op.get("lead_angle", 90.0)),
+        "overcut": float(op.get("overcut", 1.0)),
+    }
+
+
 def build_contours(op: Operation, section, tolerance: float,
                    base_dir: str = "") -> List[Contour]:
     """Dựng mọi biên dạng của một nguyên công (tệp nhập vào có thể nhiều đường)."""
     if op.type == "pattern":
-        return build_imported(op, section, tolerance, base_dir)
-    return [build_contour(op, section, tolerance, base_dir)]
+        out = build_imported(op, section, tolerance, base_dir)
+    else:
+        out = [build_contour(op, section, tolerance, base_dir)]
+    over = lead_overrides(op)
+    if over:
+        for contour in out:
+            contour.meta["lead"] = dict(over)
+    return out
 
 
 def build_contour(op: Operation, section, tolerance: float,

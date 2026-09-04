@@ -258,5 +258,64 @@ class TestGcode(unittest.TestCase):
         self.assertGreater(prog.stats.pierces, 0)   # nguyên công còn lại vẫn chạy
 
 
+
+class TestLeadPerOperation(unittest.TestCase):
+    """Mỗi nguyên công tự đặt được chỗ vào dao, không ảnh hưởng nguyên công khác."""
+
+    def setUp(self):
+        from pipecut.config import MachineProfile
+        self.p = MachineProfile()
+        self.p.pipe.shape = "square"
+        self.p.pipe.width = self.p.pipe.height = 50.0
+        self.p.pipe.wall_thickness = 3.0
+
+    def _pierce(self, **extra):
+        from pipecut.jobs import Job
+        from pipecut.pathops import process_contour
+        job = Job(name="t")
+        job.add("slot", x=120.0, theta=0.0, length=60.0, width_deg=45.0,
+                corner=5.0, **extra)
+        toolpath, _ = job.build_toolpath(self.p)
+        ps = process_contour(toolpath.contours[0], self.p.pipe.section(),
+                             self.p.motion, self.p.process)
+        return ps.points[0], ps
+
+    def test_khong_bat_thi_dung_thiet_lap_chung(self):
+        from pipecut.jobs import lead_overrides, Operation
+        self.assertEqual(lead_overrides(Operation("slot", {})), {})
+
+    def test_doi_diem_moi_lam_doi_cho_vao_dao(self):
+        a, _ = self._pierce()
+        b, _ = self._pierce(lead_custom=True, lead_start=50.0)
+        self.assertGreater(abs(a.x - b.x) + abs(a.v - b.v), 5.0)
+
+    def test_tat_vao_dao_thi_bat_dau_ngay_tren_duong_cat(self):
+        _, with_lead = self._pierce()
+        _, none = self._pierce(lead_custom=True, lead_type="none")
+        self.assertGreater(with_lead.lead_in_count, 0)
+        self.assertEqual(none.lead_in_count, 0)
+
+    def test_ghi_de_khong_lam_hong_thiet_lap_chung(self):
+        before = (self.p.process.lead_type, self.p.process.lead_in,
+                  self.p.process.lead_start)
+        self._pierce(lead_custom=True, lead_type="line", lead_in=12.0,
+                     lead_start=25.0)
+        self.assertEqual((self.p.process.lead_type, self.p.process.lead_in,
+                          self.p.process.lead_start), before)
+
+    def test_hai_nguyen_cong_dat_khac_nhau_thi_ra_khac_nhau(self):
+        from pipecut.jobs import Job
+        from pipecut.gcode import build_program
+        job = Job(name="t")
+        job.add("slot", x=100.0, theta=0.0, length=40.0, width_deg=45.0, corner=5.0)
+        job.add("slot", x=200.0, theta=0.0, length=40.0, width_deg=45.0, corner=5.0,
+                lead_custom=True, lead_type="none")
+        toolpath, warns = job.build_toolpath(self.p)
+        self.assertEqual(warns, [])
+        program = build_program(self.p, toolpath, job.name)
+        self.assertEqual(len(program.passes), 2)
+        self.assertGreater(program.passes[0].lead_in_count, 0)
+        self.assertEqual(program.passes[1].lead_in_count, 0)
+
 if __name__ == "__main__":
     unittest.main()

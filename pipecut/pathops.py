@@ -17,8 +17,8 @@ cắt mượt.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from dataclasses import dataclass, field, replace
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from . import geom2d as g
 from .config import MotionSpec, ProcessSpec
@@ -390,8 +390,18 @@ def _arc_index(arcs, v: float, per: float) -> Optional[int]:
     return None
 
 
-def _corner_pose(section: Section, arc, v: float, a_deg: float,
-                 lap: int) -> Tuple[float, float]:
+def _psi_near(section: Section, v: float, reference: float) -> float:
+    """Góc pháp tuyến tại ``v``, lấy đại diện **gần** ``reference`` nhất.
+
+    Góc pháp tuyến chỉ xác định sai khác bội số của 360 độ.  Chọn đại diện gần
+    góc quay hiện tại là cách an toàn duy nhất: dò theo phép chia dư sẽ nhảy
+    bậc ngay tại mốc chu vi và làm phôi quay thừa trọn một vòng.
+    """
+    raw = section.normal_angle(v % section.perimeter)
+    return raw + 360.0 * round((reference - raw) / 360.0)
+
+
+def _corner_pose(section: Section, arc, v: float, a_deg: float) -> Tuple[float, float]:
     """Vị trí trục ngang và chiều cao bề mặt khi phôi quay ``a_deg`` mà tia cắt
     thẳng đứng rơi đúng vào điểm vật liệu ``v`` trên cung góc.
 
@@ -399,8 +409,7 @@ def _corner_pose(section: Section, arc, v: float, a_deg: float,
     K (đã quay) đúng rc, lệch khỏi phương thẳng đứng một góc bằng chênh lệch
     giữa pháp tuyến tại đó và góc quay hiện tại.
     """
-    per = section.perimeter
-    psi = section.normal_angle(v % per) + 360.0 * lap
+    psi = _psi_near(section, v, a_deg)
     delta = math.radians(psi - a_deg)
     kwx, kwz = section.rotate_point(arc["cx"], arc["cy"], a_deg)
     return (kwx + arc["rc"] * math.sin(delta),
@@ -416,48 +425,68 @@ def _pivot_corner(
     motion: MotionSpec,
     process: ProcessSpec,
 ) -> List[CutPoint]:
-    """Dựng một lượt vượt góc kiểu **xoay 45 độ đưa góc bo lên đỉnh**.
+    """Vượt góc lượn bằng cách **xoay đưa góc lên đỉnh rồi cắt**.
 
-    Trình tự đúng như thợ làm bằng tay::
+    Trình tự đúng như thợ làm bằng tay: cắt hết mặt phẳng ở tốc độ chuẩn ->
+    dừng, xoay đưa phần cung sắp cắt lên đỉnh (mỏ vẫn đứng đúng điểm vừa cắt
+    xong trên phôi, trục ngang và trục Z phối hợp bám theo) -> cắt phần cung
+    đó ở **tốc độ chuẩn** với trục A đứng yên -> lặp lại cho tới hết cung ->
+    xoay nốt về mặt phẳng kế tiếp -> cắt tiếp.
 
-        cắt hết mặt phẳng  ->  dừng, xoay ~45 độ (mỏ vẫn đứng đúng chỗ vừa cắt,
-        trục ngang và trục Z bám theo)  ->  cả cung góc bây giờ nằm gọn quanh
-        đỉnh, cắt hết cung ở TỐC ĐỘ CHUẨN (trục A đứng yên, chỉ X-Y-Z chạy)
-        ->  dừng, xoay nốt 45 độ về mặt phẳng kế tiếp  ->  cắt tiếp
+    Vì sao giữ được tốc độ chuẩn: khi cung đã nằm ở đỉnh, cắt hết nó chỉ cần
+    trục ngang chạy, trục A không phải quay tí nào.  So với cắt liền mạch
+    (trục A phải quay 90 độ trong khoảng 9 mm cung, tức ~15 000 độ/phút) thì
+    đây là trời với vực.
 
-    Vì sao giữ được tốc độ chuẩn: khi góc bo đã nằm ở đỉnh, cắt hết cung 9,4 mm
-    chỉ cần trục ngang chạy khoảng 8,5 mm - trục A không phải quay tí nào.  So
-    với kiểu cắt liền mạch (trục A phải quay 90 độ trong 9,4 mm cung, tức
-    ~15 000 độ/phút) thì đây là trời với vực.
-
-    Đánh đổi: ở hai đầu cung, mỏ cắt nghiêng tới 45 độ so với pháp tuyến bề mặt
-    nên mặt cắt chỗ đó không vuông góc.
+    **Chia cung làm mấy lần xoay** (``motion.corner_pivot_arcs``) quyết định độ
+    vuông góc của mặt cắt.  Cả cung 90 độ mà chỉ xoay một lần thì ở hai đầu
+    cung mỏ nghiêng tới 45 độ so với pháp tuyến; chia làm ``k`` lần thì độ
+    nghiêng lớn nhất chỉ còn ``45/k`` độ, đổi lại thêm ``k-1`` lần dừng xoay.
     """
-    per = section.perimeter
     ref = section.reference_height
     zc = process.cut_height
-    lap = int(round((hold_in.theta - section.normal_angle(hold_in.v % per)) / 360.0))
-    psi_mid = (arc["psi0"] + arc["psi1"]) / 2.0 + 360.0 * lap
     steps = max(2, int(motion.corner_pivot_steps))
+    groups = max(1, int(getattr(motion, "corner_pivot_arcs", 1)))
 
     def make(v: float, x: float, a_deg: float, kind: str) -> CutPoint:
-        cross, surf = _corner_pose(section, arc, v, a_deg, lap)
+        cross, surf = _corner_pose(section, arc, v, a_deg)
         return CutPoint(x=x, v=v, theta=a_deg, cross=cross,
                         surface_z=surf - ref, bevel=0.0, kind=kind,
                         z_axis=surf - ref + zc)
 
+    # Chia cung thành k phần **bằng nhau theo góc** (không phải theo số điểm:
+    # các điểm không rải đều theo góc nên chia theo chỉ số sẽ ra góc lệch).
+    psi0, psi1 = float(arc["psi0"]), float(arc["psi1"])
+    width = (psi1 - psi0) / groups
+    parts: List[List[CutPoint]] = [[] for _ in range(groups)]
+    targets = [psi0 + (m + 0.5) * width for m in range(groups)]
+    for q in run:
+        psi = section.normal_angle(q.v % section.perimeter)
+        # đưa về đúng nhánh [psi0, psi1] rồi mới xếp nhóm
+        psi += 360.0 * round(((psi0 + psi1) / 2.0 - psi) / 360.0)
+        m = int((psi - psi0) / width) if width else 0
+        parts[max(0, min(groups - 1, m))].append(q)
+
     out: List[CutPoint] = []
-    # 1) xoay tới góc giữa cung, mỏ vẫn bám đúng điểm vừa cắt xong
-    for k in range(1, steps + 1):
-        a = hold_in.theta + (psi_mid - hold_in.theta) * k / steps
-        out.append(make(hold_in.v, hold_in.x, a, "index"))
-    # 2) cắt hết cung góc ở tốc độ chuẩn, trục A đứng yên
-    for p in run:
-        out.append(make(p.v, p.x, psi_mid, "cut"))
-    out.append(make(hold_out.v, hold_out.x, psi_mid, "cut"))
-    # 3) xoay nốt về mặt phẳng kế tiếp, mỏ bám điểm vừa cắt xong
+    a_prev = hold_in.theta
+    v_prev, x_prev = hold_in.v, hold_in.x
+    for part, target in zip(parts, targets):
+        if not part:
+            continue
+        a_target = target + 360.0 * round((a_prev - target) / 360.0)
+        for k in range(1, steps + 1):
+            a = a_prev + (a_target - a_prev) * k / steps
+            out.append(make(v_prev, x_prev, a, "index"))
+        for q in part:
+            out.append(make(q.v, q.x, a_target, "cut"))
+        a_prev = a_target
+        v_prev, x_prev = part[-1].v, part[-1].x
+
+    # xoay nốt về mặt phẳng kế tiếp, mỏ bám điểm vừa cắt xong
+    out.append(make(hold_out.v, hold_out.x, a_prev, "cut"))
+    a_end = _psi_near(section, hold_out.v, a_prev)
     for k in range(1, steps):
-        a = psi_mid + (hold_out.theta - psi_mid) * k / steps
+        a = a_prev + (a_end - a_prev) * k / steps
         out.append(make(hold_out.v, hold_out.x, a, "index"))
     return out
 
@@ -620,6 +649,28 @@ def _smooth(
 # --------------------------------------------------------------------------
 # Toàn bộ chuỗi xử lý
 # --------------------------------------------------------------------------
+# Những thông số đường dẫn mồi mà từng nguyên công được phép ghi đè riêng.
+LEAD_OVERRIDES = ("lead_in", "lead_out", "lead_type", "lead_angle",
+                  "lead_start", "lead_side", "overcut")
+
+
+def apply_lead_overrides(process: ProcessSpec, meta: Dict[str, Any]) -> ProcessSpec:
+    """Áp thông số đường dẫn mồi riêng của một nguyên công lên tiến trình chung.
+
+    Mỗi nhát cắt có chỗ vào dao hợp lý khác nhau: lỗ thì vào từ trong lòng, cắt
+    đứt thì vào từ phía phế liệu, rãnh dài thì nên vào ở đầu nào tuỳ chỗ kẹp.
+    Vì vậy ngoài thiết lập chung ở hồ sơ máy, từng nguyên công còn ghi đè được.
+    Ô nào để trống (hoặc ghi ``theo mặc định``) thì vẫn dùng số của tiến trình.
+    """
+    over = meta.get("lead") if meta else None
+    if not over:
+        return process
+    changed = {k: v for k, v in over.items() if k in LEAD_OVERRIDES and v is not None}
+    if not changed:
+        return process
+    return replace(process, **changed)
+
+
 def process_contour(
     contour: Contour,
     section: Section,
@@ -636,6 +687,8 @@ def process_contour(
     """
     if len(contour.points) < 2:
         raise ValueError(f"Biên dạng '{contour.name}' có ít hơn 2 điểm.")
+    # Từng nguyên công được ghi đè riêng chỗ vào dao (xem apply_lead_overrides)
+    process = apply_lead_overrides(process, contour.meta)
     kerf = process.kerf if kerf_override is None else kerf_override
     side = contour.kerf_side if contour.kerf_side != "auto" else process.kerf_side
 

@@ -8,6 +8,7 @@ from pipecut import shapes
 from pipecut.config import MachineProfile, ROLE_ALONG, ROLE_CROSS, ROLE_ROTARY
 from pipecut.gcode import build_program
 from pipecut.jobs import Job
+from pipecut.pathops import process_contour
 from pipecut.section import BoxSection, RoundSection, SectionError, make_section
 
 
@@ -372,6 +373,118 @@ class TestCornerIndexing(unittest.TestCase):
                     self.section.surface_height(state["A"], state["X"])
                 self.assertAlmostEqual(gap, self.p.process.cut_height, delta=0.1)
 
+
+
+def _box_profile() -> MachineProfile:
+    """Hồ sơ máy ống hộp 50x50 dùng chung cho các bài kiểm thử bên dưới."""
+    p = MachineProfile()
+    p.pipe.shape = "square"
+    p.pipe.width = p.pipe.height = 50.0
+    p.pipe.wall_thickness = 3.0
+    p.pipe.length = 500.0
+    cross = p.axis(ROLE_CROSS)
+    cross.min_travel, cross.max_travel = -200.0, 200.0
+    return p
+
+
+class TestSeamContinuity(unittest.TestCase):
+    """Góc trục xoay phải liên tục khi đi qua mốc chu vi.
+
+    Đây là chỗ đã từng sai: với ``v`` âm cực nhỏ (vụn dấu phẩy động kiểu
+    -9e-16), phần dư bị làm tròn lên đúng bằng chu vi, ``normal_angle`` quy nó
+    về 0 độ của vòng sau trong khi bộ đếm vòng vẫn ở vòng trước - góc nhảy trọn
+    360 độ và phôi quay hẳn một vòng ngay giữa nhát cắt.
+    """
+
+    def _sections(self):
+        return [BoxSection(50.0, 50.0, 6.0, 3.0),
+                BoxSection(60.0, 40.0, 5.0, 2.0),
+                RoundSection(60.0)]
+
+    def test_khong_nhay_360_do_quanh_moc_chu_vi(self):
+        for sec in self._sections():
+            per = sec.perimeter
+            for centre in (0.0, per, -per, 2 * per):
+                prev = None
+                for k in range(-400, 401):
+                    s = centre + k * 1e-9
+                    th = sec.contact_at(s).theta
+                    if prev is not None:
+                        self.assertLess(abs(th - prev), 1.0,
+                                        f"{sec.describe()} nhảy tại s={s!r}")
+                    prev = th
+
+    def test_vun_dau_phay_dong_am_van_ra_goc_0(self):
+        sec = BoxSection(50.0, 50.0, 6.0, 3.0)
+        for s in (-8.881784197001252e-16, -1e-15, -1e-12, -1e-9, 0.0, 1e-15):
+            self.assertAlmostEqual(sec.contact_at(s).theta, 0.0, places=6,
+                                   msg=f"s={s!r}")
+
+    def test_ranh_tren_mat_phang_khong_lam_phoi_quay_vong(self):
+        """Rãnh nằm gọn trong một mặt phẳng thì trục xoay phải đứng yên."""
+        profile = _box_profile()
+        job = Job(name="ranh")
+        job.add("slot", x=120.0, theta=0.0, length=60.0, width_deg=45.0, corner=5.0)
+        toolpath, _ = job.build_toolpath(profile)
+        program = build_program(profile, toolpath, job.name)
+        letter = profile.letter(ROLE_ROTARY)
+        angles = [float(m.group(1))
+                  for line in program.lines
+                  for m in [re.search(rf"\b{letter}(-?[\d.]+)", line)] if m]
+        self.assertTrue(angles)
+        self.assertLess(max(abs(a) for a in angles), 1.0,
+                        "trục xoay không được quay khi cắt rãnh trên mặt phẳng")
+
+
+class TestCornerPivotArcs(unittest.TestCase):
+    """Chia cung góc làm nhiều lần xoay thì mặt cắt gần vuông góc hơn."""
+
+    def _worst_tilt(self, arcs: int) -> float:
+        profile = _box_profile()
+        profile.pipe.corner_radius = 6.0
+        profile.motion.corner_mode = "pivot"
+        profile.motion.corner_pivot_arcs = arcs
+        section = profile.pipe.section()
+        job = Job(name="cat"); job.add("cutoff", x=300.0, angle=0.0, bevel_axis=False)
+        toolpath, _ = job.build_toolpath(profile)
+        ps = process_contour(toolpath.contours[0], section,
+                             profile.motion, profile.process)
+        worst = 0.0
+        for p in ps.points:
+            if p.kind != "cut":
+                continue
+            psi = section.normal_angle(p.v % section.perimeter)
+            psi += 360.0 * round((p.theta - psi) / 360.0)
+            worst = max(worst, abs(psi - p.theta))
+        return worst
+
+    def test_chia_k_lan_thi_lech_toi_da_con_45_chia_k(self):
+        for arcs, expect in ((1, 45.0), (2, 22.5), (3, 15.0), (6, 7.5)):
+            self.assertAlmostEqual(self._worst_tilt(arcs), expect, delta=1.0,
+                                   msg=f"chia {arcs}")
+
+    def test_khe_ho_mo_phoi_giu_nguyen_du_chia_may_lan(self):
+        """Chia nhỏ thế nào thì mỏ vẫn phải cách phôi đúng chiều cao cắt."""
+        from pipecut.config import ROLE_CROSS, ROLE_RADIAL
+        from pipecut.kinematics import Kinematics
+        for arcs in (1, 3, 6):
+            profile = _box_profile()
+            profile.pipe.corner_radius = 6.0
+            profile.motion.corner_mode = "pivot"
+            profile.motion.corner_pivot_arcs = arcs
+            section = profile.pipe.section()
+            kin = Kinematics(profile)
+            job = Job(name="cat"); job.add("cutoff", x=300.0, angle=0.0, bevel_axis=False)
+            toolpath, _ = job.build_toolpath(profile)
+            ps = process_contour(toolpath.contours[0], section,
+                                 profile.motion, profile.process)
+            xl, zl = profile.letter(ROLE_CROSS), profile.letter(ROLE_RADIAL)
+            for p in ps.points:
+                vals = kin.axis_values(p, profile.process.cut_height)
+                gap = (vals.get(zl, 0.0) + section.reference_height
+                       - section.surface_height(p.theta, vals.get(xl, 0.0)))
+                self.assertAlmostEqual(gap, profile.process.cut_height, places=3,
+                                       msg=f"chia {arcs}")
 
 if __name__ == "__main__":
     unittest.main()

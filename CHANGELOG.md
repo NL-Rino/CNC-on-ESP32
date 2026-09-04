@@ -1,5 +1,75 @@
 # Nhật ký thay đổi
 
+## v1.6.0 — 2026-09-04
+
+### Sửa lỗi phôi quay trọn một vòng giữa nhát cắt
+
+Cắt rãnh trên mặt phẳng mà mâm cặp lại quay hẳn 360° rồi quay về — G-code có
+`X0 A-360 F4000` ngay giữa đường cắt.
+
+Nguyên nhân nằm ở phép gỡ cuộn góc trong `Section.contact_at`. Với `v` âm cực
+nhỏ (kiểu `-8.9e-16`, vụn dấu phẩy động sinh ra khi bù bề rộng mạch cắt), phần
+dư `v - lap*chu_vi` bị làm tròn lên **đúng bằng chu vi**; `normal_angle` quy giá
+trị đó về 0° của vòng **sau**, trong khi bộ đếm vòng vẫn ở vòng **trước** — lệch
+trọn 360°. Lỗi chỉ hiện ra với biên dạng vắt qua mốc chu vi, tức mọi thứ nằm
+quanh vị trí 12 giờ.
+
+Nay phần dư chạm mốc được đưa hẳn về 0 và cộng vòng lên cho khớp. Có bài kiểm
+thử quét dày quanh mọi bội số của chu vi cho cả ống tròn lẫn ống hộp.
+
+Cùng nguyên nhân, phần vượt góc cũng đổi sang lấy **đại diện góc gần góc quay
+hiện tại nhất** thay vì dò theo phép chia dư.
+
+### Đặt đường vào dao riêng cho từng nguyên công
+
+Trước đây chỗ vào dao chỉ đặt được chung ở hồ sơ máy, nên không chỉnh được cho
+từng nhát cắt. Nay mỗi nguyên công có riêng khối ô: bật **Tự đặt đường vào dao**
+rồi chọn phía vào dao, dời điểm mồi theo % chu vi, kiểu (`arc`/`line`/`none`),
+chiều dài, góc và chạy vượt. Tắt thì vẫn dùng thiết lập chung.
+
+Ghi đè chỉ áp cho đúng nguyên công đó, không đụng tới hồ sơ máy hay nguyên công
+khác.
+
+### Cắt góc gần vuông hơn: chia cung làm nhiều lần xoay
+
+Kiểu `pivot` trước đây luôn xoay **một lần** đưa giữa cung lên đỉnh, nên ở hai
+đầu cung mỏ nghiêng tới 45° so với pháp tuyến. Thêm ô **Chia cung góc mấy lần
+xoay**: chia làm `k` lần thì độ nghiêng lớn nhất chỉ còn `45/k`.
+
+Đo trên nhát cắt đứt ống 50×50 R6, 1600 mm/phút:
+
+| Chia | Mỏ nghiêng tối đa | Tốc độ cắt | Số lần mồi | Thời gian |
+|---|---|---|---|---|
+| 1 *(mặc định)* | 45° | 1600 mm/ph | 9 | 29 s |
+| 2 | 22,5° | 1600 mm/ph | 13 | 34 s |
+| 3 | 15° | 1600 mm/ph | 17 | 38 s |
+| 6 | 7,5° | 1600 mm/ph | 29 | 51 s |
+
+Tốc độ cắt không đổi; cái phải trả là **số lần mồi** — mỗi lần xoay là một lần
+tắt mỏ rồi mồi lại. Ban đầu tôi định lấy 3 làm mặc định vì tưởng không tốn gì,
+nhưng bài kiểm thử cũ bắt được rằng số lần mồi tăng từ 9 lên 17. Mồi là thứ hại
+phôi và hao vật tư nhất nên mặc định giữ ở 1.
+
+Khe hở mỏ–phôi giữ đúng 1,600 mm ở mọi cách chia, có bài kiểm thử.
+
+### Bán kính góc lượn ghi 0 không còn gây hiểu nhầm
+
+Ghi 0 nghĩa là "để phần mềm tự lấy" (2 lần chiều dày thành), không phải "góc
+nhọn tuyệt đối" — góc nhọn thì pháp tuyến đổi hướng 90° trong quãng đường bằng
+0, máy phải xoay tại chỗ, không cắt được. Trước đây phần mềm thay số âm thầm nên
+gõ 0 rồi thấy máy báo R6 thì rất dễ tưởng nó bỏ qua.
+
+Nay số thật được **ghi thẳng vào ô nhập**, và dòng mô tả phôi nói rõ "phần mềm
+tự lấy vì ô bán kính để 0". Muốn góc nhỏ hơn thì gõ số cụ thể, phần mềm dùng
+đúng số đó.
+
+### Khác
+
+* Bỏ hai cục kê tròn trong khung mô phỏng máy — chỉ để làm mốc nhìn, mà nhìn xấu.
+* Nhãn phôi trong khung mô phỏng ghi đúng dạng tiết diện: ống hộp ghi `□50×50`
+  chứ không ghi `⌀60` như trước.
+* Thêm 10 bài kiểm thử. Tổng cộng **185**.
+
 ## v1.5.0 — 2026-09-04
 
 ### Làm lại toàn bộ giao diện: thêm màu và có nền tối

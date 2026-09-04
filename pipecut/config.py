@@ -104,6 +104,19 @@ class PipeSpec:
         return f"□{self.width:g}×{self.height:g}"
 
     @property
+    def effective_corner_radius(self) -> float:
+        """Bán kính góc lượn **thật sự được dùng** khi tính toán.
+
+        Ghi 0 nghĩa là "để phần mềm tự lấy", không phải "góc nhọn tuyệt đối":
+        góc nhọn thì tại đó pháp tuyến bề mặt đổi hướng 90 độ trong quãng
+        đường bằng 0, máy phải xoay tại chỗ - không cắt được.  Ống hộp thật
+        cũng luôn có góc lượn, thường 1,5-2,5 lần chiều dày thành.
+        """
+        if self.is_round:
+            return 0.0
+        return self.section().rc
+
+    @property
     def inner_radius(self) -> float:
         return max(0.1, self.radius - self.wall_thickness)
 
@@ -214,7 +227,13 @@ class MotionSpec:
                                       # index  = dừng cắt, xoay 90 độ tại chỗ rồi cắt tiếp
                                       # pivot  = xoay 45 độ đưa góc bo lên đỉnh, cắt hết
                                       #          cung ở tốc độ chuẩn, rồi xoay nốt 45 độ
-    corner_pivot_steps: int = 12      # số bước chia cho mỗi lần xoay 45 độ
+    corner_pivot_steps: int = 12      # số bước chia cho mỗi lần xoay
+    corner_pivot_arcs: int = 1        # chia cung góc làm mấy lần xoay.
+                                      # 1 = một lần: mỏ nghiêng tối đa 45 độ
+                                      # k = k lần : nghiêng tối đa 45/k độ,
+                                      #     nhưng nếu tắt mỏ khi xoay thì mỗi
+                                      #     lần chia thêm 4 lần mồi (đo được:
+                                      #     chia 3 -> 17 lần mồi thay vì 9)
     corner_torch_off: bool = True     # tắt nguồn cắt trong lúc xoay góc (chế độ index)
     corner_lift: float = 6.0          # nhấc thêm bao nhiêu mm khi xoay góc (nếu tắt mỏ)
     corner_rotate_rate: float = 0.0   # tốc độ xoay khi index (độ/phút, 0 = tối đa của trục)

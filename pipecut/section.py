@@ -85,9 +85,22 @@ class Section:
         Xoay phôi đi một góc bằng góc pháp tuyến là pháp tuyến hướng thẳng
         lên; điểm chạm khi đó nằm ở toạ độ ngang ``X`` và chiều cao ``Z``.
         """
-        # gỡ cuộn: đi hết một vòng chu vi là quay đúng 360 độ
-        lap = math.floor(s / self.perimeter)
-        psi = self.normal_angle(s - lap * self.perimeter) + 360.0 * lap
+        # Gỡ cuộn: đi hết một vòng chu vi là quay đúng 360 độ.
+        #
+        # Phải rất cẩn thận ngay tại mốc chu vi.  Với ``s`` âm cực nhỏ (kiểu
+        # -9e-16 do sai số dấu phẩy động), phần dư ``s - lap*perimeter`` bị làm
+        # tròn lên *đúng bằng* chu vi; ``normal_angle`` quy giá trị đó về 0 độ
+        # của vòng SAU, trong khi bộ đếm vòng vẫn là vòng TRƯỚC - thành ra góc
+        # xoay nhảy trọn 360 độ, phôi quay hẳn một vòng giữa nhát cắt.
+        per = self.perimeter
+        lap = math.floor(s / per)
+        base = s - lap * per
+        if base >= per - 1e-9:      # phần dư chạm mốc: nó thuộc vòng sau
+            base = 0.0              # đặt hẳn về 0, đừng để lọt xuống số âm
+            lap += 1
+        elif base < 0.0:            # phòng xa cho phía bên kia
+            base = 0.0
+        psi = self.normal_angle(base) + 360.0 * lap
         cx, cy = self.point_at(s)
         a = math.radians(psi)
         # quay điểm đi -psi (cùng chiều với cách đo góc pháp tuyến)

@@ -216,19 +216,34 @@ install-wifi    ← firmware bản WiFi
 nên không chạy WiFi và Bluetooth cùng lúc; FluidNC vì thế tách thành hai bản
 firmware riêng. Nạp bản `bt` là mất chức năng nối qua mạng LAN dưới đây.
 
-Phần cứng: **ESP32 gốc (WROOM-32, 4 MB flash)** — bo được FluidNC hỗ trợ đầy đủ nhất.
+### Bo gốc hay bo S3 — nạp khác nhau
 
-Rồi nạp tệp cấu hình máy: WebUI → **Files** → tải lên
-[`firmware/fluidnc_pipe4axis.yaml`](firmware/fluidnc_pipe4axis.yaml) → gõ
-`$Config/Filename=fluidnc_pipe4axis.yaml` → khởi động lại → gõ `$Config/Validate`
-để chắc không còn dòng nào FluidNC không hiểu.
+Hai dòng chip dùng **firmware khác nhau và bảng chân khác nhau**, nạp lẫn là không chạy:
 
-> **Đối chiếu chân GPIO trước khi cấp điện động lực.** Trên ESP32 không phải chân
-> nào cũng dùng được: chân 6–11 nối vào chip nhớ flash, chân 34–39 chỉ vào và
+| Bo | Bản firmware | Tệp cấu hình dùng kèm |
+|---|---|---|
+| **ESP32 gốc** (WROOM-32) | `wifi` | [`fluidnc_pipe4axis.yaml`](firmware/fluidnc_pipe4axis.yaml) |
+| **ESP32-S3** (S3-DevKitC-1...) | `wifi_s3` | [`fluidnc_pipe4axis_s3.yaml`](firmware/fluidnc_pipe4axis_s3.yaml) |
+
+S3 không có bản `bt` vì chip này không có Bluetooth Classic. Muốn biết một tệp
+`.bin` đã tải là bản nào: `esptool.py image_info --version 2 firmware.bin` — mã
+chương trình nạp ở `0x42000000` là S3, ở `0x400D0000` là ESP32 gốc.
+
+Rồi nạp tệp cấu hình máy: WebUI → **Files** → tải lên tệp YAML tương ứng ở bảng
+trên → gõ `$Config/Filename=<tên tệp>.yaml` → khởi động lại → gõ
+`$Config/Validate` để chắc không còn dòng nào FluidNC không hiểu.
+
+> **Đối chiếu chân GPIO trước khi cấp điện động lực.** Không phải chân nào cũng
+> dùng được, và hai dòng chip khác nhau hẳn.
+> Trên **ESP32 gốc**: chân 6–11 nối vào chip nhớ flash, chân 34–39 chỉ vào và
 > **không có điện trở treo bên trong**, chân 12 kéo cao là máy không khởi động,
-> chân 0/2/5/14/15 dính tới chế độ khởi động hoặc phát xung ngay lúc bật nguồn —
-> **không bao giờ đặt rơ-le mỏ cắt vào đó**. Bảng chân đầy đủ ở cuối tệp YAML và
-> trong [mục 2.4 của hướng dẫn](docs/HUONG_DAN.md#24-những-chân-esp32-không-được-dùng).
+> chân 0/2/5/14/15 dính tới chế độ khởi động hoặc phát xung ngay lúc bật nguồn.
+> Trên **ESP32-S3**: chân **22–25 không tồn tại**, chân 26–32 là flash, 33–37 là
+> PSRAM octal, 19/20 là USB, 43/44 là UART0.
+> **Không bao giờ đặt rơ-le mỏ cắt vào chân dính tới khởi động.** Bảng chân đầy
+> đủ ở cuối mỗi tệp YAML và trong
+> [mục 2.4](docs/HUONG_DAN.md#24-những-chân-esp32-gốc-không-được-dùng) /
+> [2.5](docs/HUONG_DAN.md#25-những-chân-esp32-s3-không-được-dùng) của hướng dẫn.
 
 ---
 
@@ -424,7 +439,7 @@ pipecut/
   cli.py         giao diện dòng lệnh
   ui/            giao diện đồ hoạ Tkinter (kèm khung mô phỏng máy 3D)
 config/          hồ sơ máy mẫu (ống tròn, ống hộp, xoay góc, trục vát, laser)
-firmware/        cấu hình FluidNC cho ESP32
+firmware/        cấu hình FluidNC cho ESP32 gốc và ESP32-S3
 examples/        tệp công việc mẫu + bản vẽ mẫu (DXF, SVG, G-code phẳng)
 docs/            hướng dẫn sử dụng và tài liệu kỹ thuật
 tests/           160 bài kiểm thử (chạy bằng thư viện chuẩn)

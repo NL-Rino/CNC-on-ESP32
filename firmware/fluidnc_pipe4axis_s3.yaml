@@ -1,0 +1,225 @@
+# =====================================================================
+#  FluidNC - máy cắt ống 4 trục, bản dành cho **ESP32-S3**
+#  (bo ESP32-S3-DevKitC-1 hoặc tương đương, 4 driver rời)
+#
+#  Nạp bằng WebUI (Files -> Upload) rồi:
+#      $Config/Filename=fluidnc_pipe4axis_s3.yaml
+#
+#  FIRMWARE CẦN NẠP: FluidNC bản **wifi_s3**.  Bản 'wifi' thường là cho
+#  ESP32 gốc, nạp vào S3 không chạy.  Lưu ý S3 KHÔNG có bản 'bt' vì chip
+#  này không có Bluetooth Classic.
+#
+#  Vai trò trục (khớp với config/machine_default.json của PipeCut Studio):
+#    Y = ỐNG RA VÀO - bàn mang mâm cặp chạy dọc theo trục ống   (mm)
+#    A = MÂM CẶP XOAY ống                                       (ĐỘ)
+#    X = MỎ CẮT CHẠY NGANG, vuông góc với trục Y                (mm)
+#    Z = MỎ CẮT LÊN XUỐNG                                       (mm)
+#
+#  --- KHÁC BIỆT SO VỚI ESP32 GỐC -------------------------------------
+#
+#  Bảng chân ở đây KHÁC HẲN tệp fluidnc_pipe4axis.yaml, không dùng lẫn
+#  được, vì S3 có bản đồ chân riêng:
+#
+#    gpio 22, 23, 24, 25   KHÔNG TỒN TẠI trên S3.  Espressif loại hẳn bốn
+#                          số này; khai vào là FluidNC báo "Unavailable GPIO".
+#    gpio 26..32           chip nhớ flash chiếm (CS1 HD WP CS0 CLK MISO MOSI).
+#    gpio 33..37           PSRAM loại octal chiếm (D4..D7, DQS) - các bo
+#                          N8R8/N16R8 đều dùng.  Tránh cho chắc.
+#    gpio 19, 20           cổng USB-Serial-JTAG trên bo.
+#    gpio 43, 44           TX/RX của cổng UART0.
+#    gpio 0, 3, 45, 46     chân quyết định chế độ khởi động.
+#    gpio 38, 48           đèn LED RGB trên bo DevKitC-1.
+#
+#  ĐIỂM TỐT HƠN ESP32 GỐC: S3 không có chân "chỉ vào".  Mọi chân dùng được
+#  đều treo được bên trong, nên ba công tắc hành trình ghi ':pu' bình thường
+#  và **không phải hàn điện trở 10k bên ngoài** như bên ESP32 gốc.
+#
+#  Số kênh RMT trên S3 chỉ có 4, vừa đủ cho 4 trục.  Nếu FluidNC báo hết
+#  kênh RMT thì đổi 'engine: RMT' thành 'engine: Timed'.
+# =====================================================================
+
+name: "May cat ong 4 truc"
+board: "ESP32-S3-DevKitC-1 + 4 driver roi"
+
+stepping:
+  engine: RMT          # RMT cho xung sạch nhất trên ESP32
+  idle_ms: 250         # giữ dòng 250 ms sau khi dừng rồi mới nhả
+  pulse_us: 4
+  dir_delay_us: 1
+  disable_delay_us: 0
+
+# Bộ đệm và tốc độ nạp lệnh -------------------------------------------
+# PipeCut Studio nạp lệnh theo kiểu đếm ký tự, luôn giữ bộ đệm gần đầy
+# nên planner của FluidNC lúc nào cũng có nhiều block để nhìn trước.
+planner_blocks: 32
+
+axes:
+  shared_stepper_disable_pin: NO_PIN
+
+  # --- X: mỏ cắt chạy ngang (vuông góc với trục ống) --------------------
+  x:
+    steps_per_mm: 80.000
+    max_rate_mm_per_min: 3000.000
+    acceleration_mm_per_sec2: 200.000
+    max_travel_mm: 200.000
+    soft_limits: true
+    homing:
+      cycle: 3
+      positive_direction: false
+      mpos_mm: 0.000
+      feed_mm_per_min: 300.000
+      seek_mm_per_min: 1500.000
+      settle_ms: 250
+      pulloff_mm: 3.000
+    motor0:
+      # S3 treo được bên trong, không cần điện trở ngoài.
+      limit_neg_pin: gpio.8:low:pu
+      hard_limits: false
+      pulloff_mm: 3.000
+      stepstick:
+        step_pin: gpio.4
+        direction_pin: gpio.5
+        disable_pin: gpio.21
+
+  # --- Y: ống ra vào (bàn mang mâm cặp chạy dọc trục ống) ---------------
+  # Đây là trục chịu tải nặng nhất: nó kéo cả phôi ống.  Đặt gia tốc vừa
+  # phải để ống không bị trượt trong mâm cặp khi đảo chiều.
+  y:
+    steps_per_mm: 80.000          # vitme 5 mm/vòng, 1/16 vi bước - hãy tự tính lại
+    max_rate_mm_per_min: 4000.000
+    acceleration_mm_per_sec2: 250.000
+    max_travel_mm: 1200.000
+    soft_limits: true
+    homing:
+      cycle: 2
+      positive_direction: false
+      mpos_mm: 0.000
+      feed_mm_per_min: 300.000
+      seek_mm_per_min: 1000.000
+      settle_ms: 250
+    motor0:
+      limit_neg_pin: gpio.9:low:pu
+      hard_limits: false
+      pulloff_mm: 2.000
+      stepstick:
+        step_pin: gpio.6
+        direction_pin: gpio.7
+        disable_pin: gpio.21
+
+  # --- Z: nâng hạ mỏ cắt ----------------------------------------------
+  z:
+    steps_per_mm: 400.000
+    max_rate_mm_per_min: 2000.000
+    acceleration_mm_per_sec2: 200.000
+    max_travel_mm: 150.000
+    soft_limits: true
+    homing:
+      cycle: 1                    # Z về gốc trước để mỏ cắt không vướng phôi
+      positive_direction: true
+      mpos_mm: 150.000
+      feed_mm_per_min: 300.000
+      seek_mm_per_min: 1000.000
+      settle_ms: 250
+    motor0:
+      limit_pos_pin: gpio.10:low:pu
+      hard_limits: false
+      pulloff_mm: 2.000
+      stepstick:
+        step_pin: gpio.15
+        direction_pin: gpio.16
+        disable_pin: gpio.21
+
+  # --- A: mâm cặp xoay ống (ĐƠN VỊ = ĐỘ) --------------------------------
+  #
+  #  steps_per_mm của trục A chính là "số xung cho mỗi ĐỘ quay":
+  #
+  #      steps_per_deg = (bước_động_cơ * vi_bước * tỉ_số_truyền) / 360
+  #
+  #  Ví dụ: động cơ 1.8 độ (200 xung/vòng), vi bước 1/8, hộp giảm tốc 6:1
+  #      = (200 * 8 * 6) / 360 = 26.667 xung/độ
+  #
+  #  Không đặt max_travel/soft_limits cho trục xoay: nó quay vô hạn, và
+  #  PipeCut Studio quay dồn góc liên tục để đường cắt không bị đứt đoạn.
+  a:
+    steps_per_mm: 26.667
+    max_rate_mm_per_min: 3600.000   # 3600 độ/phút = 10 vòng/phút
+    acceleration_mm_per_sec2: 400.000
+    max_travel_mm: 0.000
+    soft_limits: false
+    homing:
+      cycle: 0                      # 0 = không về gốc (mâm cặp không cần)
+    motor0:
+      hard_limits: false
+      stepstick:
+        step_pin: gpio.17
+        direction_pin: gpio.18
+        disable_pin: gpio.21
+
+# --- Nguồn cắt --------------------------------------------------------
+# Plasma / oxy-gas: dùng rơ-le, M3 bật - M5 tắt.
+#
+# !! AN TOÀN: KHÔNG đặt rơ-le mỏ cắt vào gpio 0, 2, 5, 14, 15.  Đó là những
+#    chân quyết định chế độ khởi động hoặc phát xung PWM ngay khi cấp điện -
+#    mỏ cắt có thể phụt một nhát lúc bật nguồn.  gpio 21 dưới đây là chân
+#    thường, không dính gì tới khởi động.
+#
+#    Dù chọn chân nào cũng nên dùng rơ-le **thường hở** (normally open) và
+#    lắp thêm một công tắc cắt tay nối tiếp trên đường mồi của nguồn cắt.
+spindle:
+  relay:
+    output_pin: gpio.12
+    enable_pin: NO_PIN
+    disable_with_s0: true
+    s0_with_disable: true
+    spinup_ms: 0
+    spindown_ms: 0
+    tool_num: 0
+    speed_map: 0=0% 1=100%
+
+# Nếu dùng LASER thì thay khối trên bằng:
+# spindle:
+#   PWM:
+#     pwm_hz: 5000
+#     output_pin: gpio.12
+#     enable_pin: NO_PIN
+#     disable_with_s0: false
+#     s0_with_disable: true
+#     tool_num: 0
+#     speed_map: 0=0.000% 1000=100.000%
+# và bật chế độ laser:  $GCode/LaserMode=true
+
+# --- Cổng vào ra khác --------------------------------------------------
+control:
+  feed_hold_pin: NO_PIN
+  cycle_start_pin: NO_PIN
+  reset_pin: NO_PIN
+  safety_door_pin: NO_PIN
+
+probe:
+  pin: gpio.11:low:pu       # dò chạm bề mặt ống để đặt gốc Z
+  check_mode_start: true
+
+start:
+  must_home: false          # đặt true nếu máy có đủ công tắc hành trình
+
+# =====================================================================
+#  BẢNG CHÂN TỔNG HỢP (ESP32-S3) - nối dây theo bảng này
+# =====================================================================
+#   Trục / thiết bị        STEP      DIR       Hành trình
+#   ---------------------  --------  --------  --------------
+#   X  mỏ cắt ngang        gpio  4   gpio  5   gpio  8
+#   Y  ống ra vào          gpio  6   gpio  7   gpio  9
+#   Z  mỏ lên xuống        gpio 15   gpio 16   gpio 10
+#   A  mâm cặp xoay        gpio 17   gpio 18   (không có)
+#
+#   ENABLE chung cả 4 driver : gpio 21
+#   Dò chạm (probe)          : gpio 11
+#   Rơ-le nguồn cắt          : gpio 12
+#
+#  Cả 14 chân trên đều treo được bên trong, không cần điện trở ngoài.
+#
+# --- Ghi chú cấu hình có trục vát -------------------------------------
+# Nếu dùng trục X làm TRỤC VÁT (nghiêng mỏ cắt) thay cho bàn chạy ngang:
+#   1. Đổi steps_per_mm của X sang "xung mỗi độ" (công thức như trục A)
+#   2. Đặt max_travel_mm theo góc nghiêng cơ khí cho phép, ví dụ 50 độ
+#   3. Bên PipeCut Studio dùng tệp config/machine_bevel.json

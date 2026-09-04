@@ -1,5 +1,34 @@
 # Nhật ký thay đổi
 
+## v1.4.2 — 2026-09-04
+
+### Thêm cấu hình FluidNC cho ESP32-S3
+
+Bản đồ chân của ESP32-S3 khác hẳn ESP32 gốc nên tệp cấu hình cũ không dùng lẫn
+được. Thêm `firmware/fluidnc_pipe4axis_s3.yaml`, giữ nguyên toàn bộ thông số
+chuyển động, chỉ đổi bảng chân:
+
+* **`gpio 22, 23, 24, 25` không tồn tại trên S3** — Espressif loại hẳn bốn số
+  này (`SOC_GPIO_VALID_GPIO_MASK` che đúng bốn bit đó). Tệp cấu hình cho ESP32
+  gốc dùng `gpio 22` làm chân dò chạm và `gpio 23` làm ENABLE chung, nạp vào S3
+  là FluidNC báo "Unavailable GPIO".
+* `gpio 26..32` chip nhớ flash chiếm, `gpio 33..37` PSRAM loại octal chiếm — tệp
+  cho ESP32 gốc dùng 34/35/36 làm công tắc hành trình nên cũng xung đột.
+* Bảng chân mới cho S3: X = 4/5, Y = 6/7, Z = 15/16, A = 17/18, ENABLE chung =
+  21, hành trình = 8/9/10, dò chạm = 11, rơ-le = 12.
+* S3 **không có chân "chỉ vào"** nên ba công tắc hành trình treo được bên trong,
+  không phải hàn điện trở 10k như bên ESP32 gốc.
+
+### Hướng dẫn phân biệt hai dòng chip
+
+Bổ sung mục 2.5 trong hướng dẫn và bảng đối chiếu trong README: bo nào nạp bản
+firmware nào (`wifi` cho ESP32 gốc, `wifi_s3` cho S3 — S3 không có bản `bt` vì
+không có Bluetooth Classic), dùng tệp cấu hình nào, cách nhận ra bo mình đang
+có, và cách kiểm tra một tệp `.bin` đã tải là dựng cho chip nào (`esptool.py
+image_info`; mã chương trình nạp ở `0x42000000` là S3, ở `0x400D0000` là gốc).
+
+Ghi rõ S3 chỉ có 4 kênh RMT, vừa đủ 4 trục, hết thì đổi sang `engine: Timed`.
+
 ## v1.4.1 — 2026-09-04
 
 ### Sửa lỗi chân GPIO trong tệp cấu hình FluidNC mẫu

@@ -57,8 +57,32 @@ chạy WiFi và Bluetooth cùng lúc được; hai phần mã lại đều rất
 tách hẳn thành hai bản firmware riêng. Nạp bản `bt` thì **mất chức năng nối qua
 mạng LAN** của PipeCut Studio.
 
-Phần cứng: dùng **ESP32 gốc (WROOM-32, 4 MB flash)**. Đây là bo mà FluidNC hỗ
-trợ chính thức và đầy đủ nhất.
+### Bo của bạn là ESP32 gốc hay ESP32-S3?
+
+Đây là chỗ **rất dễ nạp sai**, vì hai dòng chip dùng firmware khác nhau **và**
+bảng chân khác nhau. FluidNC phát hành riêng cho từng dòng:
+
+| Bo | Bản firmware | Tệp cấu hình dùng kèm |
+|---|---|---|
+| **ESP32 gốc** (WROOM-32) | `wifi` | [`fluidnc_pipe4axis.yaml`](../firmware/fluidnc_pipe4axis.yaml) |
+| **ESP32-S3** (S3-DevKitC-1...) | `wifi_s3` | [`fluidnc_pipe4axis_s3.yaml`](../firmware/fluidnc_pipe4axis_s3.yaml) |
+
+Nạp lẫn là **không chạy**: ảnh firmware của hai dòng nạp mã vào những vùng địa
+chỉ khác nhau hẳn. Hai tệp cấu hình cũng **không dùng lẫn được** (xem 2.5).
+
+Chưa rõ bo mình là gì thì cắm cáp USB rồi kết nối, FluidNC in ra dòng chào có
+tên chip. Hoặc nhìn con nhôm vuông trên bo: chữ *ESP32-WROOM-32* là dòng gốc,
+*ESP32-S3-WROOM-1* là S3.
+
+Muốn biết một tệp `.bin` đã tải là bản nào thì gõ:
+
+```bash
+esptool.py image_info --version 2 firmware.bin
+```
+
+Dòng `Chip ID` và các địa chỉ `Segment` sẽ cho biết ảnh đó dựng cho chip nào.
+Trên ESP32-S3, đoạn mã chương trình nạp ở vùng `0x42000000`; trên ESP32 gốc là
+`0x400D0000`.
 
 ### 2.2 Trình tự nạp
 
@@ -84,7 +108,7 @@ thành `--baud 115200` rồi chạy lại. Cáp USB dài hoặc rẻ tiền hay 
 4. **Đối chiếu chân GPIO** trong tệp YAML với bo mạch thực tế. Xem bảng chân
    tổng hợp ở cuối tệp YAML.
 
-### 2.4 Những chân ESP32 không được dùng
+### 2.4 Những chân ESP32 gốc không được dùng
 
 Đây là chỗ hay hỏng việc nhất khi tự đặt chân. Không phải chân nào cũng dùng
 được như nhau:
@@ -106,6 +130,30 @@ chân đó lên 3V3**, vì chúng không treo được bên trong.
 > khởi động. Đừng đổi sang 0, 2, 5, 14 hay 15. Dù chọn chân nào cũng nên dùng
 > rơ-le **thường hở** và lắp thêm một công tắc cắt tay nối tiếp trên đường mồi
 > của nguồn cắt.
+
+### 2.5 Những chân ESP32-S3 không được dùng
+
+Bản đồ chân của S3 **khác hẳn** ESP32 gốc, nên tệp cấu hình cũng khác:
+
+| Chân | Vấn đề | Hệ quả nếu dùng sai |
+|---|---|---|
+| **22, 23, 24, 25** | **Không tồn tại trên S3** — Espressif loại hẳn bốn số này | FluidNC báo "Unavailable GPIO" |
+| 26–32 | Chip nhớ flash chiếm (CS1, HD, WP, CS0, CLK, MISO, MOSI) | Máy không khởi động |
+| 33–37 | PSRAM loại octal chiếm (D4–D7, DQS) — các bo N8R8/N16R8 đều dùng | Máy không khởi động trên bo có PSRAM octal |
+| 19, 20 | Cổng USB-Serial-JTAG trên bo | Mất cổng nạp/terminal |
+| 43, 44 | TX/RX của UART0 | Mất cổng terminal |
+| 0, 3, 45, 46 | Chân quyết định chế độ khởi động | Không nạp được firmware |
+| 38, 48 | Đèn LED RGB trên bo DevKitC-1 | Chỉ xung đột với đèn, không nguy hiểm |
+
+**Điểm tốt hơn ESP32 gốc:** S3 không có chân "chỉ vào" nào. Mọi chân dùng được
+đều treo được bên trong, nên ba công tắc hành trình ghi `:pu` bình thường và
+**không phải hàn điện trở 10k bên ngoài**.
+
+Bảng chân trong `fluidnc_pipe4axis_s3.yaml`: X = 4/5, Y = 6/7, Z = 15/16,
+A = 17/18, ENABLE chung = 21, hành trình = 8/9/10, dò chạm = 11, rơ-le = 12.
+
+S3 chỉ có **4 kênh RMT**, vừa đủ cho 4 trục. Nếu FluidNC báo hết kênh RMT thì
+đổi `engine: RMT` thành `engine: Timed` trong tệp cấu hình.
 
 Kiểm tra nhanh bằng PipeCut Studio:
 

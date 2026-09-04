@@ -7,6 +7,8 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
+from . import theme
+
 PAD = 6
 
 
@@ -66,9 +68,8 @@ class ParamForm(ttk.Frame):
                 w.bind("<Return>", lambda _e: self._changed())
             self._vars[name] = var
             if spec.get("hint"):
-                ttk.Label(self, text=spec["hint"], foreground="#5a646e",
-                          font=("TkDefaultFont", 8)).grid(row=row, column=2, sticky="w",
-                                                          padx=(PAD, 0))
+                ttk.Label(self, text=spec["hint"], style="Hint.TLabel").grid(
+                    row=row, column=2, sticky="w", padx=(PAD, 0))
 
     def _pick_file(self, var: tk.StringVar) -> None:
         """Hộp thoại chọn tệp biên dạng, lọc sẵn theo các định dạng đọc được."""
@@ -181,16 +182,18 @@ class Console(ttk.Frame):
         self.on_send = on_send
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
+        p = theme.current()
         self.text = tk.Text(self, height=10, wrap="none", state="disabled",
-                            background="#11161b", foreground="#d6dde4",
-                            insertbackground="#d6dde4", font=("Consolas", 9))
+                            background=p.console_bg, foreground=p.console_fg,
+                            insertbackground=p.console_fg, relief="flat",
+                            highlightthickness=1, highlightbackground=p.border,
+                            font=("Consolas", 9))
         self.text.grid(row=0, column=0, sticky="nsew")
         sb = ttk.Scrollbar(self, orient="vertical", command=self.text.yview)
         sb.grid(row=0, column=1, sticky="ns")
         self.text.configure(yscrollcommand=sb.set)
-        for tag, color in (("tx", "#7fc8ff"), ("rx", "#b9c4ce"), ("err", "#ff8a7a"),
-                           ("ok", "#8ddf9f"), ("info", "#f2c66d")):
-            self.text.tag_configure(tag, foreground=color)
+        self._apply_tags(p)
+        theme.on_change(self._on_theme)
 
         bar = ttk.Frame(self)
         bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
@@ -204,6 +207,21 @@ class Console(ttk.Frame):
         self._hist_idx = 0
         self.entry.bind("<Up>", self._history_up)
         self.entry.bind("<Down>", self._history_down)
+
+    def _apply_tags(self, p) -> None:
+        for tag, color in (("tx", p.console_tx), ("rx", p.console_rx),
+                           ("err", p.console_err), ("ok", p.console_ok),
+                           ("info", p.console_info)):
+            self.text.tag_configure(tag, foreground=color)
+
+    def _on_theme(self, p) -> None:
+        try:
+            self.text.configure(background=p.console_bg, foreground=p.console_fg,
+                                insertbackground=p.console_fg,
+                                highlightbackground=p.border)
+            self._apply_tags(p)
+        except tk.TclError:          # widget đã bị huỷ
+            pass
 
     def _send(self, _event=None) -> None:
         cmd = self.entry.get().strip()
@@ -263,9 +281,9 @@ class DRO(ttk.LabelFrame):
             wv = tk.StringVar(value="0.000")
             mv = tk.StringVar(value="0.000")
             ttk.Label(self, textvariable=wv, anchor="e", width=14,
-                      font=("Consolas", 13)).grid(row=i, column=1, padx=4, sticky="e")
+                      style="Dro.TLabel").grid(row=i, column=1, padx=4, sticky="e")
             ttk.Label(self, textvariable=mv, anchor="e", width=14,
-                      font=("Consolas", 10), foreground="#5a646e").grid(row=i, column=2, padx=4, sticky="e")
+                      style="MonoDim.TLabel").grid(row=i, column=2, padx=4, sticky="e")
             self._work[c] = wv
             self._machine[c] = mv
 
@@ -280,21 +298,34 @@ class DRO(ttk.LabelFrame):
 class StatusBadge(ttk.Label):
     """Nhãn trạng thái đổi màu theo tình trạng máy."""
 
-    COLORS = {
-        "Idle": ("#1f7a3d", "#e8f7ec"),
-        "Run": ("#1667b3", "#e6f1fb"),
-        "Jog": ("#1667b3", "#e6f1fb"),
-        "Hold": ("#9a6b00", "#fdf3e0"),
-        "Home": ("#9a6b00", "#fdf3e0"),
-        "Alarm": ("#b3261e", "#fdeceb"),
-        "Door": ("#b3261e", "#fdeceb"),
+    # Mỗi trạng thái lấy một cặp (màu chữ, màu nền) từ bảng màu, nên đổi chế
+    # độ sáng/tối là huy hiệu tự đổi theo mà vẫn giữ đúng ý nghĩa màu.
+    ROLES = {
+        "Idle": "ok",
+        "Run": "accent",
+        "Jog": "accent",
+        "Hold": "warn",
+        "Home": "warn",
+        "Alarm": "danger",
+        "Door": "danger",
     }
 
     def __init__(self, master, **kw):
         super().__init__(master, text="Chưa kết nối", anchor="center", width=16,
                          font=("TkDefaultFont", 10, "bold"), **kw)
+        self._state: Optional[str] = None
+        self._text: Optional[str] = None
         self.set_state(None)
+        theme.on_change(lambda _p: self.set_state(self._state, self._text))
 
     def set_state(self, state: Optional[str], text: Optional[str] = None) -> None:
-        fg, bg = self.COLORS.get(state or "", ("#39424b", "#eceff1"))
+        self._state, self._text = state, text
+        p = theme.current()
+        role = self.ROLES.get(state or "")
+        if role == "accent":
+            fg, bg = p.accent, p.accent_soft
+        elif role:
+            fg, bg = getattr(p, role), getattr(p, role + "_soft")
+        else:
+            fg, bg = p.fg_dim, p.surface_alt
         self.configure(text=text or state or "Chưa kết nối", foreground=fg, background=bg)

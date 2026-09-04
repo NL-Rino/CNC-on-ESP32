@@ -21,8 +21,22 @@ from ..machinescene import (
     scene_bounds,
 )
 
-COLOR_BG = "#f4f6f8"
-COLOR_TEXT = "#39424b"
+from . import theme
+
+COLOR_BG = COLOR_TEXT = COLOR_EDGE = COLOR_DIM = ""
+
+
+def _sync_colors(p=None) -> None:
+    global COLOR_BG, COLOR_TEXT, COLOR_EDGE, COLOR_DIM
+    p = p or theme.current()
+    COLOR_BG = p.view_flat
+    COLOR_TEXT = p.fg
+    COLOR_EDGE = p.border
+    COLOR_DIM = p.fg_dim
+
+
+_sync_colors()
+theme.on_change(_sync_colors)
 
 
 class MachineView(ttk.Frame):
@@ -45,7 +59,7 @@ class MachineView(ttk.Frame):
         self.show_trace = tk.BooleanVar(value=True)
 
         self.canvas = tk.Canvas(self, background=COLOR_BG, highlightthickness=1,
-                                highlightbackground="#dde2e7")
+                                highlightbackground=COLOR_EDGE)
         self.canvas.pack(fill="both", expand=True)
         self.canvas.bind("<Configure>", lambda _e: self.refit())
         self.canvas.bind("<ButtonPress-1>", lambda e: self._press(e, "orbit"))
@@ -134,9 +148,20 @@ class MachineView(ttk.Frame):
         return (self._ox + p[0] * self._scale, self._oy + p[1] * self._scale)
 
     # ==================================================================
+    def apply_theme(self) -> None:
+        """Đổi màu khung nhìn khi người dùng chuyển chế độ hiển thị."""
+        _sync_colors()
+        self.canvas.configure(background=COLOR_BG, highlightbackground=COLOR_EDGE)
+        self.redraw()
+
     def redraw(self) -> None:
         c = self.canvas
         c.delete("all")
+        # Nền chuyển sắc dọc như khung nhìn 3D của FreeCAD: đậm ở trên, nhạt
+        # dần xuống dưới, giúp nhìn ra chiều sâu mà không cần đổ bóng.
+        pal = theme.current()
+        theme.paint_gradient(c, c.winfo_width(), c.winfo_height(),
+                             pal.view_top, pal.view_bottom)
         if not self.profile:
             c.create_text(16, 16, anchor="nw", fill=COLOR_TEXT,
                           text="Chưa có chương trình để mô phỏng")
@@ -175,5 +200,5 @@ class MachineView(ttk.Frame):
             c.create_text(12, y + 20, anchor="nw", fill=COLOR_TORCH_HOT,
                           font=("TkDefaultFont", 9, "bold"), text="● NGUỒN CẮT ĐANG BẬT")
         w = max(self.canvas.winfo_width(), 100)
-        c.create_text(w - 10, 12, anchor="ne", fill="#8a949e", font=("TkDefaultFont", 8),
+        c.create_text(w - 10, 12, anchor="ne", fill=COLOR_DIM, font=("TkDefaultFont", 8),
                       text="kéo trái: xoay góc nhìn · kéo phải: dịch · lăn chuột: phóng to")

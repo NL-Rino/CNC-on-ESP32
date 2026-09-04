@@ -36,6 +36,7 @@ from ..gsim import Playback, SimState, TracePoint
 from ..jobs import OP_CATALOG, Job, Operation, default_params, ops_for_shape
 from ..protocol import MachineStatus
 from ..transport import list_ports
+from . import theme
 from .canvasview import PreviewCanvas
 from .machineview import MachineView
 from .widgets import PAD, Console, DRO, FieldGrid, ParamForm, StatusBadge
@@ -81,10 +82,8 @@ class MainWindow:
         root.title(APP_TITLE)
         root.geometry("1280x820")
         root.minsize(1024, 680)
-        try:
-            ttk.Style().theme_use("clam")
-        except tk.TclError:
-            pass
+        self.theme_name = theme.load_preference()
+        theme.apply(root, self.theme_name)
 
         self._build_layout()
         self._wire_controller()
@@ -104,10 +103,16 @@ class MainWindow:
         top.pack(side="top", fill="x")
         self.badge = StatusBadge(top)
         self.badge.pack(side="left")
-        self.lbl_conn = ttk.Label(top, text="Chưa kết nối", foreground="#5a646e")
+        # Huy hiệu bên trái đã báo trạng thái rồi, nhãn này nói chi tiết hơn
+        # (cổng nào, kiểu kết nối gì) chứ không lặp lại chữ y hệt.
+        self.lbl_conn = ttk.Label(top, text="Chọn cổng ở thẻ 1 rồi bấm Kết nối",
+                                  style="Dim.TLabel")
         self.lbl_conn.pack(side="left", padx=10)
-        self.lbl_pos = ttk.Label(top, text="", font=("Consolas", 10))
-        self.lbl_pos.pack(side="right")
+        self.lbl_pos = ttk.Label(top, text="", style="Mono.TLabel")
+        self.lbl_pos.pack(side="right", padx=(0, 12))
+        self.btn_theme = ttk.Button(top, width=12, command=self.toggle_theme)
+        self.btn_theme.pack(side="right")
+        self._update_theme_button()
 
         self.nb = ttk.Notebook(self.root)
         self.nb.pack(side="top", fill="both", expand=True, padx=PAD, pady=PAD)
@@ -132,8 +137,8 @@ class MainWindow:
         self._build_run_tab()
 
         self.status_var = tk.StringVar(value="Sẵn sàng.")
-        ttk.Label(self.root, textvariable=self.status_var, relief="sunken",
-                  anchor="w", padding=(6, 3)).pack(side="bottom", fill="x")
+        ttk.Label(self.root, textvariable=self.status_var, style="Status.TLabel",
+                  relief="flat", anchor="w", padding=(8, 4)).pack(side="bottom", fill="x")
 
     # ------------------------------------------------------------------
     def _build_machine_tab(self) -> None:
@@ -159,9 +164,10 @@ class MainWindow:
                                          values=["1", "5", "20", "100"])
         self.cmb_simspeed.set(f"{self.profile.connection.simulator_speed:g}")
         self.cmb_simspeed.grid(row=0, column=7)
-        self.btn_connect = ttk.Button(conn, text="Kết nối", command=self.toggle_connection, width=12)
+        self.btn_connect = ttk.Button(conn, text="Kết nối", command=self.toggle_connection,
+                                      width=12, style="Accent.TButton")
         self.btn_connect.grid(row=0, column=8, padx=10)
-        self.lbl_fw = ttk.Label(conn, text="", foreground="#5a646e")
+        self.lbl_fw = ttk.Label(conn, text="", style="Dim.TLabel")
         self.lbl_fw.grid(row=1, column=0, columnspan=9, sticky="w", pady=(6, 0))
 
         body = ttk.Frame(t)
@@ -185,10 +191,10 @@ class MainWindow:
             ("material", "Vật liệu", p.material, "str"),
         ], columns=1)
         self.f_pipe.pack(fill="x")
-        self.lbl_pipe = ttk.Label(pipe, text="", foreground="#5a646e", wraplength=250,
+        self.lbl_pipe = ttk.Label(pipe, text="", style="Dim.TLabel", wraplength=250,
                                   justify="left")
         self.lbl_pipe.pack(fill="x", pady=(6, 0))
-        ttk.Label(pipe, foreground="#8a949e", wraplength=250, justify="left",
+        ttk.Label(pipe, style="Hint.TLabel", wraplength=250, justify="left",
                   font=("TkDefaultFont", 8),
                   text=("Ống tròn dùng ô đường kính; ống hộp dùng hai ô cạnh "
                         "(hộp vuông chỉ cần cạnh ngang). Góc lượn để 0 thì phần "
@@ -251,7 +257,7 @@ class MainWindow:
         side = ttk.Frame(axes)
         side.pack(side="left", padx=PAD)
         ttk.Label(side, text="Sửa vai trò trục trong tệp hồ sơ máy (.json)",
-                  foreground="#5a646e", wraplength=200).pack(anchor="w")
+                  style="Dim.TLabel", wraplength=200).pack(anchor="w")
 
         bar = ttk.Frame(t)
         bar.pack(side="top", fill="x", pady=(PAD, 0))
@@ -334,17 +340,20 @@ class MainWindow:
 
         ops = ttk.LabelFrame(left, text="Lệnh máy", padding=PAD)
         ops.pack(side="top", fill="x")
+        # Lệnh làm máy chạy hoặc mồi lửa được tô màu để không bấm nhầm.
         buttons = [
-            ("Về gốc ($H)", self.controller.home),
-            ("Mở khoá ($X)", self.controller.unlock),
-            ("Reset mềm", self.controller.soft_reset),
-            ("Đặt gốc chi tiết", lambda: self.controller.set_work_zero()),
-            ("Về gốc chi tiết", lambda: self.controller.goto_work_zero()),
-            ("Bật nguồn cắt", lambda: self.controller.send(self.profile.process.on_command)),
-            ("Tắt nguồn cắt", lambda: self.controller.send(self.profile.process.off_command)),
+            ("Về gốc ($H)", self.controller.home, "Accent.TButton"),
+            ("Mở khoá ($X)", self.controller.unlock, ""),
+            ("Reset mềm", self.controller.soft_reset, ""),
+            ("Đặt gốc chi tiết", lambda: self.controller.set_work_zero(), ""),
+            ("Về gốc chi tiết", lambda: self.controller.goto_work_zero(), "Accent.TButton"),
+            ("Bật nguồn cắt", lambda: self.controller.send(self.profile.process.on_command),
+             "Danger.TButton"),
+            ("Tắt nguồn cắt", lambda: self.controller.send(self.profile.process.off_command), ""),
         ]
-        for i, (text, cmd) in enumerate(buttons):
-            ttk.Button(ops, text=text, command=cmd, width=20).grid(
+        for i, (text, cmd, style) in enumerate(buttons):
+            ttk.Button(ops, text=text, command=cmd, width=20,
+                       style=style or "TButton").grid(
                 row=i // 2, column=i % 2, padx=2, pady=2, sticky="ew")
 
         right = ttk.Frame(t)
@@ -382,7 +391,7 @@ class MainWindow:
         ttk.Checkbutton(order, text="Tự sắp xếp thứ tự cắt",
                         variable=self.var_optimize,
                         command=self.on_toggle_order).pack(side="left")
-        self.lbl_order = ttk.Label(order, foreground="#5a646e",
+        self.lbl_order = ttk.Label(order, style="Dim.TLabel",
                                    text="đang cắt đúng thứ tự trong bảng")
         self.lbl_order.pack(side="left", padx=8)
 
@@ -405,12 +414,12 @@ class MainWindow:
 
         right = ttk.LabelFrame(t, text="Thông số nguyên công", padding=PAD)
         right.pack(side="left", fill="both", padx=(PAD, 0))
-        self.lbl_op_desc = ttk.Label(right, text="", wraplength=330, foreground="#5a646e")
+        self.lbl_op_desc = ttk.Label(right, text="", wraplength=330, style="Dim.TLabel")
         self.lbl_op_desc.pack(anchor="w", pady=(0, PAD))
         self.form = ParamForm(right, on_change=self.apply_operation_params)
         self.form.pack(fill="x")
-        ttk.Button(right, text="Sinh G-code", command=self.generate).pack(
-            side="bottom", fill="x", pady=(PAD, 0))
+        ttk.Button(right, text="Sinh G-code", command=self.generate,
+                   style="Accent.TButton").pack(side="bottom", fill="x", pady=(PAD, 0))
 
     # ------------------------------------------------------------------
     def _build_preview_tab(self) -> None:
@@ -419,9 +428,10 @@ class MainWindow:
         self.preview.pack(side="top", fill="both", expand=True)
         bar = ttk.Frame(t)
         bar.pack(side="bottom", fill="x", pady=(PAD, 0))
-        ttk.Button(bar, text="Sinh lại G-code", command=self.generate).pack(side="left")
+        ttk.Button(bar, text="Sinh lại G-code", command=self.generate,
+                   style="Accent.TButton").pack(side="left")
         ttk.Button(bar, text="Xuất SVG...", command=self.export_svg).pack(side="left", padx=6)
-        self.lbl_stats = ttk.Label(bar, text="", foreground="#39424b")
+        self.lbl_stats = ttk.Label(bar, text="", style="Head.TLabel")
         self.lbl_stats.pack(side="left", padx=14)
 
     # ------------------------------------------------------------------
@@ -465,7 +475,7 @@ class MainWindow:
         self.lbl_sim_time = ttk.Label(line2, text="0.0 / 0.0 s", width=18,
                                       font=("Consolas", 9))
         self.lbl_sim_time.pack(side="left", padx=8)
-        self.lbl_sim_info = ttk.Label(t, text="", foreground="#5a646e")
+        self.lbl_sim_info = ttk.Label(t, text="", style="Dim.TLabel")
         self.lbl_sim_info.pack(side="bottom", anchor="w", pady=(4, 0))
 
     # ---- điều khiển mô phỏng ----
@@ -553,12 +563,13 @@ class MainWindow:
         t = self.tab_run
         bar = ttk.Frame(t)
         bar.pack(side="top", fill="x")
-        self.btn_start = ttk.Button(bar, text="BẮT ĐẦU CẮT", command=self.start_job, width=16)
+        self.btn_start = ttk.Button(bar, text="BẮT ĐẦU CẮT", command=self.start_job,
+                                    width=16, style="Accent.TButton")
         self.btn_start.pack(side="left")
         self.btn_pause = ttk.Button(bar, text="Tạm dừng", command=self.toggle_pause,
                                     width=12, state="disabled")
         self.btn_pause.pack(side="left", padx=6)
-        self.btn_stop = ttk.Button(bar, text="DỪNG", command=self.stop_job,
+        self.btn_stop = ttk.Button(bar, text="DỪNG", command=self.stop_job, style="Danger.TButton",
                                    width=10, state="disabled")
         self.btn_stop.pack(side="left")
         ttk.Button(bar, text="Lưu G-code...", command=self.save_gcode).pack(side="left", padx=(20, 0))
@@ -579,17 +590,59 @@ class MainWindow:
 
         gc = ttk.LabelFrame(body, text="Chương trình G-code", padding=4)
         gc.grid(row=0, column=0, sticky="nsew", padx=(0, PAD))
-        self.txt_gcode = tk.Text(gc, wrap="none", font=("Consolas", 9), background="#fbfcfd")
+        _p = theme.current()
+        self.txt_gcode = tk.Text(gc, wrap="none", font=("Consolas", 9),
+                                 background=_p.field, foreground=_p.fg,
+                                 insertbackground=_p.fg, relief="flat",
+                                 highlightthickness=1, highlightbackground=_p.border)
         self.txt_gcode.pack(side="left", fill="both", expand=True)
         sb = ttk.Scrollbar(gc, orient="vertical", command=self.txt_gcode.yview)
         sb.pack(side="right", fill="y")
         self.txt_gcode.configure(yscrollcommand=sb.set)
-        self.txt_gcode.tag_configure("cur", background="#fff3bf")
+        self.txt_gcode.tag_configure("cur", background=_p.highlight)
 
         info = ttk.LabelFrame(body, text="Theo dõi", padding=PAD)
         info.grid(row=0, column=1, sticky="nsew")
         self.run_console = Console(info, on_send=self.send_manual)
         self.run_console.pack(fill="both", expand=True)
+
+    # ==================================================================
+    # Chế độ hiển thị
+    # ==================================================================
+    def _update_theme_button(self) -> None:
+        other = theme.DARK if self.theme_name == "light" else theme.LIGHT
+        self.btn_theme.configure(text=f"◐  Nền {other.label.lower()}")
+
+    def toggle_theme(self) -> None:
+        """Đổi qua lại giữa nền sáng và nền tối."""
+        self.set_theme("dark" if self.theme_name == "light" else "light")
+
+    def set_theme(self, name: str) -> None:
+        self.theme_name = name
+        theme.apply(self.root, name)
+        theme.notify()                 # báo cho mọi lớp vẽ tự đổi màu
+        theme.save_preference(name)
+        self._update_theme_button()
+        self._retheme_widgets()
+
+    def _retheme_widgets(self) -> None:
+        """Đổi màu những widget Tk thuần - ttk.Style không với tới được."""
+        p = theme.current()
+        try:
+            self.txt_gcode.configure(background=p.field, foreground=p.fg,
+                                     insertbackground=p.fg,
+                                     highlightbackground=p.border)
+            self.txt_gcode.tag_configure("cur", background=p.highlight)
+        except tk.TclError:
+            pass
+        for view in (getattr(self, "preview", None), getattr(self, "machine_view", None),
+                     getattr(self, "sim_view", None)):
+            if view is not None and hasattr(view, "apply_theme"):
+                try:
+                    view.apply_theme()
+                except tk.TclError:
+                    pass
+        self.status_var.set(f"Đã chuyển sang nền {p.label.lower()}.")
 
     # ==================================================================
     # Kết nối và sự kiện
@@ -651,9 +704,9 @@ class MainWindow:
     def toggle_connection(self) -> None:
         if self.controller.is_connected:
             self.controller.disconnect()
-            self.btn_connect.configure(text="Kết nối")
+            self.btn_connect.configure(text="Kết nối", style="Accent.TButton")
             self.badge.set_state(None)
-            self.lbl_conn.configure(text="Chưa kết nối")
+            self.lbl_conn.configure(text="Chọn cổng ở thẻ 1 rồi bấm Kết nối")
             return
         raw = self.cmb_port.get()
         port = raw.split(" - ")[0].strip() if raw else ""
@@ -672,7 +725,7 @@ class MainWindow:
             return
         from ..transport import parse_address
         how = "qua mạng LAN" if parse_address(port) else "qua cổng COM"
-        self.btn_connect.configure(text="Ngắt kết nối")
+        self.btn_connect.configure(text="Ngắt kết nối", style="TButton")
         self.lbl_conn.configure(text=f"Đã kết nối {port} ({how})")
         self.root.after(400, self.controller.query_firmware)
 

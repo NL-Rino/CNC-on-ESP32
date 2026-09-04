@@ -202,6 +202,22 @@ Nạp STL không phải là "chỉ nhận dạng rồi để đấy". Trình t�
 
 ---
 
+## Giao diện
+
+Hai chế độ hiển thị, đổi bằng nút **◐** ở góc trên bên phải và được ghi nhớ cho
+lần mở sau. Tông màu lấy theo **FreeCAD**: khung nhìn nền chuyển sắc xanh lam,
+khung điều khiển xám trung tính, điểm nhấn xanh dương; phôi và máy giữ màu kim
+loại ở cả hai chế độ.
+
+Màu có nghĩa chứ không phải trang trí: **đỏ cam** là đường cắt, **xanh dương**
+là vạch dấu, **xanh lá** là vào/ra dao, **xám nét đứt** là chạy không; nút
+**xanh dương** là lệnh làm máy chạy, nút **đỏ** là lệnh nguy hiểm. Mọi cặp
+chữ/nền ở cả hai chế độ đều đã soát theo tiêu chuẩn tương phản **WCAG AA**.
+
+Bản vẽ SVG xuất ra theo đúng tông màu đang xem (`--theme light|dark`).
+
+---
+
 ## Nạp firmware FluidNC nào cho ESP32
 
 Tải ở https://github.com/bdring/FluidNC/releases — lấy bản gắn nhãn **Latest**,
@@ -442,12 +458,13 @@ pipecut/
   controller.py  nạp lệnh đếm ký tự, jog, tạm dừng, dừng khẩn
   svgview.py     xuất bản vẽ xem trước SVG
   cli.py         giao diện dòng lệnh
+  palette.py     bảng màu dùng chung (nền sáng / nền tối, tông FreeCAD)
   ui/            giao diện đồ hoạ Tkinter (kèm khung mô phỏng máy 3D)
 config/          hồ sơ máy mẫu (ống tròn, ống hộp, xoay góc, trục vát, laser)
 firmware/        cấu hình FluidNC cho ESP32 gốc và ESP32-S3
 examples/        tệp công việc mẫu + bản vẽ mẫu (DXF, SVG, G-code phẳng)
 docs/            hướng dẫn sử dụng và tài liệu kỹ thuật
-tests/           160 bài kiểm thử (chạy bằng thư viện chuẩn)
+tests/           175 bài kiểm thử (chạy bằng thư viện chuẩn)
 ```
 
 Chạy kiểm thử:

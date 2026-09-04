@@ -32,6 +32,19 @@ from .transport import discover_lan, list_ports
 
 
 # --------------------------------------------------------------------------
+def _apply_theme(name: Optional[str]) -> None:
+    """Đặt tông màu cho bản vẽ SVG xuất ra từ dòng lệnh."""
+    if not name:
+        return
+    from . import palette
+    if name not in palette.THEMES:
+        print(f"  [!] Không có tông màu '{name}'. Chọn: "
+              + ", ".join(palette.THEMES), file=sys.stderr)
+        return
+    palette.set_palette(name)
+    palette.notify()
+
+
 def _load_profile(path: Optional[str]) -> MachineProfile:
     profile = MachineProfile.load(path) if path else find_profile()
     for w in profile.validate():
@@ -124,6 +137,7 @@ def cmd_profile(args: argparse.Namespace) -> int:
 
 
 def cmd_gen(args: argparse.Namespace) -> int:
+    _apply_theme(getattr(args, "theme", None))
     profile = _load_profile(args.profile)
     job = Job.load(args.job)
     if getattr(args, "shape", None):
@@ -179,6 +193,7 @@ def cmd_gen(args: argparse.Namespace) -> int:
 
 
 def cmd_preview(args: argparse.Namespace) -> int:
+    _apply_theme(getattr(args, "theme", None))
     args.output = os.devnull
     args.svg = args.svg or os.path.splitext(args.job)[0] + ".svg"
     return cmd_gen(args)
@@ -316,6 +331,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_ui(args: argparse.Namespace) -> int:
+    _apply_theme(getattr(args, "theme", None))
     try:
         from .ui.app import main as ui_main
     except ImportError as exc:
@@ -402,6 +418,8 @@ def build_parser() -> argparse.ArgumentParser:
     sg.add_argument("--feed", type=float, help="ghi đè tốc độ cắt")
     sg.add_argument("--kerf", type=float, help="ghi đè bề rộng mạch cắt")
     _add_profile_arg(sg)
+    sg.add_argument("--theme", choices=["light", "dark"],
+                    help="tông màu: sáng hoặc tối")
     sg.set_defaults(func=cmd_gen)
 
     spv = sub.add_parser("preview", help="chỉ xuất bản vẽ xem trước")
@@ -417,6 +435,8 @@ def build_parser() -> argparse.ArgumentParser:
     spv.add_argument("--feed", type=float)
     spv.add_argument("--kerf", type=float)
     _add_profile_arg(spv)
+    spv.add_argument("--theme", choices=["light", "dark"],
+                    help="tông màu: sáng hoặc tối")
     spv.set_defaults(func=cmd_preview)
 
     ss = sub.add_parser("send", help="nạp tệp G-code xuống máy")
@@ -450,6 +470,8 @@ def build_parser() -> argparse.ArgumentParser:
     su = sub.add_parser("ui", help="mở giao diện đồ hoạ")
     su.add_argument("--job", help="mở sẵn một tệp công việc")
     _add_profile_arg(su)
+    su.add_argument("--theme", choices=["light", "dark"],
+                    help="tông màu: sáng hoặc tối")
     su.set_defaults(func=cmd_ui)
 
     sd = sub.add_parser("demo", help="tạo tệp cấu hình và công việc mẫu")

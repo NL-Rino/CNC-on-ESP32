@@ -19,16 +19,36 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from ..config import MachineProfile
 from ..pathops import Pass
+from . import theme
 
-COLOR_BG = "#ffffff"
-COLOR_CUT = "#e2452a"
-COLOR_MARK = "#2b7fd4"
-COLOR_LEAD = "#22a06b"
-COLOR_RAPID = "#b6bec6"
-COLOR_PIPE = "#cfd6dd"
-COLOR_GRID = "#eef1f4"
-COLOR_TOOL = "#111111"
-COLOR_TEXT = "#5a646e"
+# Màu lấy từ bảng màu đang dùng và tự cập nhật khi người dùng đổi chế độ
+# hiển thị, nên phần vẽ bên dưới không phải biết gì về chuyện sáng/tối.
+COLOR_BG = COLOR_CUT = COLOR_MARK = COLOR_LEAD = COLOR_RAPID = ""
+COLOR_PIPE = COLOR_GRID = COLOR_TOOL = COLOR_TEXT = COLOR_FILL = ""
+COLOR_EDGE = COLOR_GRID_MAJOR = ""
+
+
+def _sync_colors(p: Optional[theme.Palette] = None) -> None:
+    global COLOR_BG, COLOR_CUT, COLOR_MARK, COLOR_LEAD, COLOR_RAPID
+    global COLOR_PIPE, COLOR_GRID, COLOR_TOOL, COLOR_TEXT, COLOR_FILL
+    global COLOR_EDGE, COLOR_GRID_MAJOR
+    p = p or theme.current()
+    COLOR_BG = p.view_flat
+    COLOR_CUT = p.cut
+    COLOR_MARK = p.mark
+    COLOR_LEAD = p.lead
+    COLOR_RAPID = p.rapid
+    COLOR_PIPE = p.pipe_line
+    COLOR_GRID = p.grid
+    COLOR_GRID_MAJOR = p.grid_major
+    COLOR_TOOL = p.tool
+    COLOR_TEXT = p.fg_dim
+    COLOR_FILL = p.pipe_fill
+    COLOR_EDGE = p.border
+
+
+_sync_colors()
+theme.on_change(_sync_colors)
 
 
 class _Camera:
@@ -70,6 +90,10 @@ class PreviewCanvas(ttk.Frame):
         self._oy = 0.0
         self._drag: Optional[Tuple[int, int]] = None
         self._tool: Optional[Tuple[float, float]] = None
+        # Lúc nạp dữ liệu, thẻ chứa khung vẽ thường chưa hiện nên canvas mới
+        # chỉ 1x1 px - căn khung lúc đó ra tỉ lệ vô nghĩa.  Cờ này để căn lại
+        # đúng một lần khi canvas có kích thước thật.
+        self._fitted = False
 
         bar = ttk.Frame(self)
         bar.pack(side="top", fill="x", pady=(0, 4))
@@ -84,9 +108,9 @@ class PreviewCanvas(ttk.Frame):
         self.info.pack(side="right", padx=10)
 
         self.canvas = tk.Canvas(self, background=COLOR_BG, highlightthickness=1,
-                                highlightbackground="#dde2e7")
+                                highlightbackground=COLOR_EDGE)
         self.canvas.pack(side="top", fill="both", expand=True)
-        self.canvas.bind("<Configure>", lambda _e: self.redraw())
+        self.canvas.bind("<Configure>", self._on_configure)
         self.canvas.bind("<ButtonPress-1>", self._on_press)
         self.canvas.bind("<B1-Motion>", self._on_drag)
         self.canvas.bind("<ButtonRelease-1>", lambda _e: setattr(self, "_drag", None))
@@ -100,6 +124,7 @@ class PreviewCanvas(ttk.Frame):
         self.section = profile.pipe.section()
         self.passes = list(passes)
         self._tool = None
+        self._fitted = False
         self.refit()
 
     def set_tool_position(self, x: float, v: float) -> None:
@@ -130,10 +155,29 @@ class PreviewCanvas(ttk.Frame):
                     pts.append(self.cam.project(_surface(sec, p.x, p.v)))
         return pts
 
+    def apply_theme(self) -> None:
+        """Đổi màu khung vẽ khi người dùng chuyển chế độ hiển thị."""
+        _sync_colors()
+        self.canvas.configure(background=COLOR_BG, highlightbackground=COLOR_EDGE)
+        self.info.configure(foreground=COLOR_TEXT)
+        self.redraw()
+
+    def _on_configure(self, _event=None) -> None:
+        """Canvas đổi kích thước: căn khung lần đầu, sau đó chỉ vẽ lại.
+
+        Chỉ tự căn một lần, để người dùng phóng to hay kéo lệch đi rồi thì
+        chỉnh cửa sổ không làm mất khung nhìn họ đang đặt.
+        """
+        if not self._fitted and self.canvas.winfo_width() > 80:
+            self.refit()
+        else:
+            self.redraw()
+
     def refit(self) -> None:
         pts = self._world_points()
         w = max(self.canvas.winfo_width(), 50)
         h = max(self.canvas.winfo_height(), 50)
+        self._fitted = self.canvas.winfo_width() > 80
         if not pts:
             self._scale, self._ox, self._oy = 1.0, 20.0, 20.0
             self.redraw()
@@ -202,11 +246,11 @@ class PreviewCanvas(ttk.Frame):
         length = max(pf.pipe.length, 1.0)
         a = self._to_screen(0, 0)
         b = self._to_screen(length, circ)
-        c.create_rectangle(a[0], a[1], b[0], b[1], outline=COLOR_PIPE, fill="#fbfcfd")
+        c.create_rectangle(a[0], a[1], b[0], b[1], outline=COLOR_PIPE, fill=COLOR_FILL)
         for k in range(1, 4):
             vk = sec.s_of_theta(90.0 * k)
             y = self._to_screen(0, vk)[1]
-            c.create_line(a[0], y, b[0], y, fill=COLOR_GRID)
+            c.create_line(a[0], y, b[0], y, fill=COLOR_GRID_MAJOR)
             c.create_text(a[0] - 4, y, anchor="e", text=f"{90 * k}°", fill=COLOR_TEXT,
                           font=("TkDefaultFont", 7))
         for br in sec.breakpoints():      # cạnh của ống hộp

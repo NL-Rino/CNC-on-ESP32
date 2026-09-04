@@ -20,13 +20,31 @@ from .toolpath import CutPoint
 
 Vec3 = Tuple[float, float, float]
 
-COLOR_CUT = "#e2452a"
-COLOR_MARK = "#2b7fd4"
-COLOR_LEAD = "#22a06b"
-COLOR_RAPID = "#9aa4ad"
-COLOR_PIPE = "#c9d1d9"
-COLOR_GRID = "#e6eaee"
-COLOR_TEXT = "#39424b"
+from . import palette as _pal
+
+COLOR_CUT = COLOR_MARK = COLOR_LEAD = COLOR_RAPID = ""
+COLOR_PIPE = COLOR_GRID = COLOR_TEXT = COLOR_BG = COLOR_FILL = COLOR_VIEW = ""
+
+
+def _sync_colors(p=None) -> None:
+    """Bản vẽ xuất ra dùng đúng bảng màu đang xem trên giao diện."""
+    global COLOR_CUT, COLOR_MARK, COLOR_LEAD, COLOR_RAPID
+    global COLOR_PIPE, COLOR_GRID, COLOR_TEXT, COLOR_BG, COLOR_FILL, COLOR_VIEW
+    p = p or _pal.current()
+    COLOR_CUT = p.cut
+    COLOR_MARK = p.mark
+    COLOR_LEAD = p.lead
+    COLOR_RAPID = p.rapid
+    COLOR_PIPE = p.pipe_line
+    COLOR_GRID = p.grid
+    COLOR_TEXT = p.fg
+    COLOR_BG = p.view_flat
+    COLOR_FILL = p.pipe_fill
+    COLOR_VIEW = p.view_bottom
+
+
+_sync_colors()
+_pal.on_change(_sync_colors)
 
 
 class _Camera:
@@ -110,7 +128,7 @@ def render_svg(
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" '
         f'height="{total_h:.0f}" viewBox="0 0 {width:.0f} {total_h:.0f}">'
     )
-    out.append(f'<rect width="100%" height="100%" fill="#ffffff"/>')
+    out.append(f'<rect width="100%" height="100%" fill="{COLOR_BG}"/>')
     out.append(
         f'<text x="{margin}" y="26" font-family="sans-serif" font-size="15" '
         f'fill="{COLOR_TEXT}">{_esc(title or "PipeCut Studio")}</text>'
@@ -142,7 +160,7 @@ def _render_flat(passes, section, x_min, scale, margin, y0, span, circ, show_rap
     out.append(f'<text x="{margin}" y="{y0 - 10:.1f}" font-family="sans-serif" '
                f'font-size="12" fill="{COLOR_TEXT}">Trải phẳng (ngang: dọc ống, dọc: chu vi)</text>')
     out.append(f'<rect x="{margin:.1f}" y="{y0:.1f}" width="{span * scale:.1f}" '
-               f'height="{circ * scale:.1f}" fill="#fbfcfd" stroke="{COLOR_PIPE}"/>')
+               f'height="{circ * scale:.1f}" fill="{COLOR_FILL}" stroke="{COLOR_PIPE}"/>')
     # lưới 90 độ
     for k in range(1, 4):
         yy = y0 + section.s_of_theta(90.0 * k) * scale
@@ -319,9 +337,16 @@ def render_machine_svg(
     def px(p):
         return (ox + p[0] * scale, oy + p[1] * scale)
 
+    # Nền chuyển sắc dọc giống hệt khung nhìn trên màn hình, để ảnh xuất ra
+    # nhìn liền mạch với những gì người dùng vừa xem.
+    pal = _pal.current()
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
            f'viewBox="0 0 {width} {height}">',
-           '<rect width="100%" height="100%" fill="#f4f6f8"/>']
+           '<defs><linearGradient id="nen" x1="0" y1="0" x2="0" y2="1">'
+           f'<stop offset="0%" stop-color="{pal.view_top}"/>'
+           f'<stop offset="100%" stop-color="{pal.view_bottom}"/>'
+           '</linearGradient></defs>',
+           '<rect width="100%" height="100%" fill="url(#nen)"/>']
     for prim in prims:
         pts = [px(p) for p in prim.points]
         if prim.kind == "fill" and len(pts) >= 3:
@@ -343,7 +368,8 @@ def render_machine_svg(
                f'{profile.pipe.length:g} mm</text>')
     if getattr(state, "torch", False):
         out.append(f'<text x="16" y="{y + 26:.0f}" font-family="sans-serif" '
-                   f'font-size="12" font-weight="bold" fill="#ff7a1a">● NGUỒN CẮT ĐANG BẬT</text>')
+                   f'font-size="12" font-weight="bold" fill="{_pal.current().torch_on}">'
+                   f'● NGUỒN CẮT ĐANG BẬT</text>')
     if title:
         out.append(f'<text x="{width - 16}" y="24" text-anchor="end" '
                    f'font-family="sans-serif" font-size="13" fill="{COLOR_TEXT}">'

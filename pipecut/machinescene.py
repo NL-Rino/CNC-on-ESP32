@@ -30,17 +30,45 @@ from .gsim import SimState, TracePoint
 Vec3 = Tuple[float, float, float]
 Vec2 = Tuple[float, float]
 
-COLOR_PIPE_FILL = "#dfe5ea"
-COLOR_PIPE_EDGE = "#9aa6b1"
-COLOR_PIPE_LINE = "#c3ccd4"
-COLOR_SEAM = "#6f8899"
-COLOR_CHUCK = "#8d9aa6"
-COLOR_CHUCK_FILL = "#b9c3cc"
-COLOR_TRACE = "#d93a1f"
-COLOR_TORCH = "#3c4753"
-COLOR_TORCH_HOT = "#ff7a1a"
-COLOR_FRAME = "#aeb8c2"
-COLOR_ROLLER = "#7f8b96"
+from . import palette as _pal
+
+# Màu cảnh máy lấy từ bảng màu đang dùng; đổi chế độ sáng/tối là tự đổi theo.
+COLOR_PIPE_FILL = COLOR_PIPE_EDGE = COLOR_PIPE_LINE = COLOR_SEAM = ""
+COLOR_CHUCK = COLOR_CHUCK_FILL = COLOR_TRACE = COLOR_TORCH = ""
+COLOR_TORCH_HOT = COLOR_FRAME = COLOR_ROLLER = ""
+
+
+def _sync_colors(p=None) -> None:
+    """Dựng màu cảnh máy từ bảng màu.
+
+    Thân ống, mâm cặp và khung máy đều là sắc độ của một màu trung tính duy
+    nhất, pha dần về phía nền - nhờ vậy chuyển sang chế độ tối là cả cảnh tự
+    tối theo mà vẫn giữ đúng thứ tự đậm nhạt giữa các bộ phận.
+    """
+    global COLOR_PIPE_FILL, COLOR_PIPE_EDGE, COLOR_PIPE_LINE, COLOR_SEAM
+    global COLOR_CHUCK, COLOR_CHUCK_FILL, COLOR_TRACE, COLOR_TORCH
+    global COLOR_TORCH_HOT, COLOR_FRAME, COLOR_ROLLER
+    p = p or _pal.current()
+    # Khung nhìn 3D nền xanh lam ở cả chế độ sáng lẫn tối, nên phôi và máy giữ
+    # màu kim loại ở cả hai - y như FreeCAD, vật thể không đổi màu theo giao
+    # diện.  Nếu để chúng chạy theo màu nền thì sang chế độ tối thân ống hoá
+    # đen thui, nhìn không ra hình khối nữa.
+    metal = p.metal_edge
+    COLOR_PIPE_FILL = p.metal_fill
+    COLOR_PIPE_EDGE = metal
+    COLOR_PIPE_LINE = p.mix(metal, p.metal_fill, 0.55)
+    COLOR_SEAM = p.mix(metal, p.accent, 0.45)
+    COLOR_CHUCK = p.mix(metal, p.metal_fill, 0.15)
+    COLOR_CHUCK_FILL = p.mix(metal, p.metal_fill, 0.55)
+    COLOR_TRACE = p.cut
+    COLOR_TORCH = p.tool
+    COLOR_TORCH_HOT = p.torch_on
+    COLOR_FRAME = p.mix(metal, p.view_bottom, 0.45)
+    COLOR_ROLLER = p.mix(metal, p.metal_fill, 0.25)
+
+
+_sync_colors()
+_pal.on_change(_sync_colors)
 
 
 @dataclass

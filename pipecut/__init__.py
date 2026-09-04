@@ -11,5 +11,5 @@ Gói này gồm 3 lớp tách bạch:
 *   **Lớp giao diện** (`ui`, `cli`, `svgview`) - GUI Tkinter và CLI.
 """
 
-__version__ = "1.4.3"
+__version__ = "1.5.0"
 __all__ = ["__version__"]

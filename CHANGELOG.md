@@ -1,5 +1,55 @@
 # Nhật ký thay đổi
 
+## v1.5.0 — 2026-09-04
+
+### Làm lại toàn bộ giao diện: thêm màu và có nền tối
+
+Trước đây màu nằm rải rác trong sáu tệp, mỗi chỗ tự chọn một kiểu, và chỉ có
+một chế độ hiển thị xám nhạt. Nay gom hết vào **một bảng màu duy nhất**
+(`pipecut/palette.py`), nên đổi tông hay thêm chế độ mới chỉ phải sửa một chỗ.
+
+Tông màu lấy theo **FreeCAD**: khung nhìn nền chuyển sắc xanh lam đặc trưng,
+khung điều khiển xám trung tính, điểm nhấn xanh dương.
+
+* **Nút ◐ ở góc trên bên phải** đổi qua lại nền sáng / nền tối, có ghi nhớ cho
+  lần mở sau.
+* **Màu có nghĩa chứ không phải trang trí:** đỏ cam là đường cắt, xanh dương là
+  vạch dấu, xanh lá là vào/ra dao, xám nét đứt là chạy không. Nút xanh dương là
+  lệnh làm máy chạy (Kết nối, Về gốc, Sinh G-code, Bắt đầu cắt), nút đỏ là lệnh
+  nguy hiểm (Bật nguồn cắt, DỪNG) — trước đây mọi nút đều xám như nhau.
+* **Phôi và máy trong khung nhìn giữ màu kim loại ở cả hai chế độ.** Ban đầu tôi
+  cho chúng chạy theo màu nền, sang chế độ tối thì thân ống hoá đen thui không
+  nhìn ra hình khối; FreeCAD cũng không đổi màu vật thể theo giao diện.
+* **Bản vẽ SVG xuất ra theo đúng tông màu đang xem**, kèm nền chuyển sắc thật
+  cho ảnh chụp máy. Ở dòng lệnh chỉ định bằng `--theme light|dark`.
+
+Mọi cặp chữ/nền ở cả hai chế độ đều **đã soát theo tiêu chuẩn tương phản WCAG
+AA** (4,5:1 cho chữ, 3:1 cho nét vẽ), và có bài kiểm thử giữ mức đó về sau. Ba
+màu bị bắt lỗi ngay trong lúc làm và đã chỉnh lại: chữ mờ ở cả hai chế độ, chữ
+trắng trên nút xanh nền sáng, và nét chạy không ở nền sáng. Chữ trên nút màu
+giờ tự chọn đen hay trắng theo độ sáng của nền, vì cùng một màu "nguy hiểm"
+nhưng ở nền sáng thì đậm còn ở nền tối lại nhạt.
+
+### Sửa lỗi bản xem trước không tự căn khung
+
+Thẻ **Xem trước** luôn hiện biên dạng dồn vào góc trên bên trái, tỉ lệ báo
+`0.00 px/mm`. Nguyên nhân: khung vẽ căn khung ngay lúc nạp dữ liệu, mà lúc đó
+thẻ chưa hiện nên canvas mới chỉ 1×1 px. Nay căn lại đúng một lần khi khung vẽ
+có kích thước thật, và chỉ một lần — để người dùng phóng to hay kéo lệch rồi thì
+chỉnh cửa sổ không làm mất khung nhìn họ đang đặt.
+
+Lỗi này có từ trước, không liên quan tới việc đổi màu.
+
+### Khác
+
+* Nhãn cạnh huy hiệu trạng thái không còn lặp lại chữ "Chưa kết nối" nữa mà chỉ
+  đường cho người dùng biết làm gì tiếp.
+* `pipecut/palette.py` **không nạp Tkinter**, nên phần sinh G-code, xuất SVG và
+  các bài kiểm thử vẫn chạy được trên máy không có môi trường đồ hoạ — có bài
+  kiểm thử riêng giữ đúng điều này.
+* Thêm 11 bài kiểm thử cho bảng màu, trong đó có một bài quét mã nguồn để bắt
+  màu cứng lọt ra ngoài bảng màu. Tổng cộng **175**.
+
 ## v1.4.3 — 2026-09-04
 
 ### Nhận diện cổng USB gắn trong của ESP32-S3

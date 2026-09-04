@@ -13,7 +13,8 @@
 9. [Định dạng tệp công việc](#9-định-dạng-tệp-công-việc)
 10. [Nhập biên dạng từ tệp ngoài](#10-nhập-biên-dạng-từ-tệp-ngoài)
 11. [Kết nối qua WiFi / mạng LAN](#11-kết-nối-qua-wifi--mạng-lan)
-12. [Xử lý sự cố](#12-xử-lý-sự-cố)
+12. [Giao diện: nền sáng và nền tối](#12-giao-diện-nền-sáng-và-nền-tối)
+13. [Xử lý sự cố](#13-xử-lý-sự-cố)
 
 ---
 
@@ -562,7 +563,40 @@ python -m pipecut send ra.nc --port 127.0.0.1:2323
 
 ---
 
-## 12. Xử lý sự cố
+## 12. Giao diện: nền sáng và nền tối
+
+Bấm nút **◐ Nền tối / ◐ Nền sáng** ở góc trên bên phải để đổi qua lại. Lựa chọn
+được ghi nhớ, lần mở sau tự dùng lại.
+
+Tông màu lấy theo **FreeCAD**: khung nhìn nền chuyển sắc xanh lam, khung điều
+khiển xám trung tính, điểm nhấn xanh dương. Phôi và máy trong khung nhìn giữ
+màu kim loại ở cả hai chế độ, giống hệt cách FreeCAD hiển thị vật thể.
+
+Màu trong phần mềm đều có nghĩa, không phải trang trí:
+
+| Màu | Ý nghĩa |
+|---|---|
+| **Đỏ cam** | Đường cắt |
+| **Xanh dương** | Đường vạch dấu (không cắt đứt) |
+| **Xanh lá** | Đoạn vào dao / ra dao, và điểm mồi |
+| **Xám nhạt, nét đứt** | Đoạn chạy không (không cắt) |
+| **Nút xanh dương** | Lệnh làm máy chạy: Kết nối, Về gốc, Sinh G-code, Bắt đầu cắt |
+| **Nút đỏ** | Lệnh nguy hiểm: Bật nguồn cắt, DỪNG |
+
+Mọi cặp chữ/nền trong cả hai chế độ đều đã soát theo tiêu chuẩn tương phản
+**WCAG AA**, nên đọc được cả khi xưởng thiếu sáng lẫn khi nắng chiếu vào màn hình.
+
+Bản vẽ SVG xuất ra cũng theo tông màu đang xem. Ở dòng lệnh thì chỉ định bằng
+`--theme`:
+
+```bash
+python -m pipecut gen cong_viec.json -o ra.nc --svg xem.svg --theme dark
+python -m pipecut ui --theme dark
+```
+
+---
+
+## 13. Xử lý sự cố
 
 | Hiện tượng | Nguyên nhân thường gặp | Cách xử lý |
 |---|---|---|

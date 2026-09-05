@@ -43,6 +43,7 @@ from .config import (
     ROLE_CROSS,
     ROLE_RADIAL,
     ROLE_ROTARY,
+    ROLE_SWIVEL,
 )
 from .protocol import ProbeResult
 
@@ -79,6 +80,30 @@ class ProbeSpec:
     offset_x: float = 0.0           # que dò lệch bao nhiêu theo trục ngang (mm)
     offset_y: float = 0.0           # que dò lệch bao nhiêu theo trục dọc phôi (mm)
     probe_below: float = 0.0        # đầu que dò THẤP HƠN mũi cắt bao nhiêu (mm)
+
+    # --- Đầu đảo: một mô-tơ xoay qua lại giữa mỏ cắt và que dò ---------
+    # Hai đầu gắn lệch nhau 90 độ trên cùng một trục đảo, nên xoay 90 độ là
+    # đổi đầu nào chúc xuống.  Kiểu này có cái hay: khi mỗi đầu đã chúc
+    # xuống thì cả hai nằm **đúng cùng một chỗ theo X và Y**, chỉ khác chiều
+    # cao (bằng hiệu chiều dài hai đầu).  Vì vậy thường chỉ phải khai
+    # ``probe_below``, còn hai số lệch ngang/dọc để 0 - trừ khi hai đầu còn
+    # gắn lệch nhau dọc theo chính trục đảo.
+    swivel: bool = False            # máy có trục đảo đầu không
+    swivel_torch: float = 0.0       # góc trục đảo khi MỎ CẮT chúc xuống (độ)
+    swivel_probe: float = 90.0      # góc trục đảo khi QUE DÒ chúc xuống (độ)
+    swivel_z: float = 25.0          # nâng lên cao độ này rồi mới xoay đảo (mm)
+    swivel_feed: float = 0.0        # tốc độ xoay đảo (độ/phút, 0 = chạy nhanh)
+    swivel_dwell: float = 0.3       # chờ sau khi xoay xong cho hết rung (giây)
+
+    @property
+    def swing_radius(self) -> float:
+        """Bán kính quét lớn nhất của đầu đảo khi xoay, tính từ mũi cắt.
+
+        Lúc xoay, đầu nào dài hơn sẽ quét một cung; điểm thấp nhất của cung đó
+        nằm sâu hơn mũi cắt đúng bằng hiệu chiều dài hai đầu.  Đây là số tối
+        thiểu phải nâng lên trước khi xoay.
+        """
+        return max(0.0, self.probe_below)
 
     @property
     def has_offset(self) -> bool:
@@ -119,6 +144,18 @@ class ProbeSpec:
             )
         if self.probe_below < 0.0:
             msgs.append("Que dò phải THẤP HƠN mũi cắt: số này không được âm.")
+        if self.swivel:
+            if abs(self.swivel_probe - self.swivel_torch) < 1e-6:
+                msgs.append(
+                    "Góc đảo cho mỏ cắt và cho que dò đang trùng nhau - phần "
+                    "mềm sẽ không đổi được đầu."
+                )
+            if self.swivel_z < self.swing_radius:
+                msgs.append(
+                    f"Cao độ xoay đảo ({self.swivel_z:g} mm) thấp hơn tầm quét "
+                    f"của đầu dài ({self.swing_radius:g} mm) - xoay là đầu dò "
+                    f"quét vào phôi. Nâng cao độ xoay lên."
+                )
         return msgs
 
 
@@ -190,6 +227,49 @@ def _retract(spec: ProbeSpec, z_letter: str) -> Step:
 
 def _lift_to(spec: ProbeSpec, z_letter: str, z: float) -> Step:
     return Step([f"G0 {z_letter}{fmt(z)}"], note="lên cao độ an toàn")
+
+
+def swivel_steps(profile: MachineProfile, spec: ProbeSpec,
+                 to_probe: bool) -> List[Step]:
+    """Các bước xoay đầu đảo sang que dò (hoặc trả về mỏ cắt).
+
+    Trình tự bắt buộc: **nâng lên trước, xoay sau**.  Lúc xoay, đầu dài hơn
+    quét một cung quanh trục đảo; không nâng đủ cao là nó quét thẳng vào phôi.
+    """
+    if not spec.swivel:
+        return []
+    sl = profile.letter(ROLE_SWIVEL)
+    zl = profile.letter(ROLE_RADIAL)
+    if not sl:
+        raise ProbeError(
+            "Đã bật đầu đảo nhưng hồ sơ máy chưa khai trục nào có vai trò "
+            "'swivel'. Thêm một trục cho mô-tơ đảo đầu rồi thử lại."
+        )
+    angle = spec.swivel_probe if to_probe else spec.swivel_torch
+    what = "que dò" if to_probe else "mỏ cắt"
+    steps: List[Step] = []
+    if zl:
+        steps.append(Step([f"G0 {zl}{fmt(spec.swivel_z)}"],
+                          note=f"nâng lên {spec.swivel_z:g} mm trước khi xoay đảo"))
+    move = "G0" if spec.swivel_feed <= 0 else f"G1 F{fmt(spec.swivel_feed)}"
+    steps.append(Step([f"{move} {sl}{fmt(angle)}"],
+                      note=f"xoay đầu đảo về {what} ({angle:g}°)"))
+    if spec.swivel_dwell > 0:
+        steps.append(Step([f"G4 P{fmt(spec.swivel_dwell)}"], note="chờ hết rung"))
+    return steps
+
+
+def stow_lines(profile: MachineProfile, spec: ProbeSpec) -> List[str]:
+    """Lệnh trả đầu đảo về mỏ cắt.
+
+    Bộ điều khiển gửi chuỗi này **kể cả khi quy trình dò báo lỗi giữa chừng**,
+    để máy không bị bỏ lại ở tư thế que dò chúc xuống - lần cắt sau sẽ đâm que
+    vào phôi.
+    """
+    out: List[str] = []
+    for step in swivel_steps(profile, spec, to_probe=False):
+        out.extend(step.lines)
+    return out
 
 
 def _move_to(letter: str, value: float, feed: float) -> Step:
@@ -566,6 +646,27 @@ def find_all(profile: MachineProfile, spec: ProbeSpec,
     end = yield from find_end(profile, spec, set_zero=set_zero, start=pos)
     merge(end, "Đầu ống")
     return out
+
+
+def with_swivel(profile: MachineProfile, spec: ProbeSpec,
+                routine: Routine) -> Routine:
+    """Bọc một quy trình dò bằng hai bước đảo đầu.
+
+    Xoay sang que dò trước, chạy quy trình, rồi trả về mỏ cắt.  Máy không có
+    đầu đảo thì hàm này không thêm gì cả.
+
+    Nếu quy trình lỗi giữa chừng, bước trả về **không** chạy ở đây - việc đó
+    do ``controller.run_probe`` lo bằng chuỗi ``cleanup``, để nó chạy được cả
+    khi người dùng bấm dừng.
+    """
+    for step in swivel_steps(profile, spec, to_probe=True):
+        yield step
+    outcome = yield from routine
+    for step in swivel_steps(profile, spec, to_probe=False):
+        yield step
+    if spec.swivel and outcome is not None:
+        outcome.notes.append("Đã trả đầu đảo về mỏ cắt.")
+    return outcome
 
 
 ROUTINES: Dict[str, Tuple[str, Callable[..., Routine]]] = {

@@ -599,49 +599,80 @@ cả góc xoay cho mặt phẳng nằm ngang (A).
 ### Cần cảm biến gì
 
 Mỏ plasma kích bằng rơ-le thì bản thân nó không dò được — phải thêm **một tiếp
-điểm đóng khi mỏ chạm phôi**, nối vào chân `probe` đã khai trong FluidNC. Ba
-cách, xếp theo mức nên dùng:
+điểm đóng khi chạm phôi**, nối vào chân `probe` đã khai trong FluidNC.
+
+> **Mua kim dò không đủ.** Cái bán rời gồm **bi ruby + trục sứ** chỉ là *kim dò*
+> (stylus), vặn ren M2.5 vào **thân đầu dò**. Bi ruby và trục sứ đều **không dẫn
+> điện** — bản thân kim không đóng mạch được. Phải mua cả **thân đầu dò cảm ứng**
+> (touch probe body), bên trong có tiếp điểm; kim chỉ là phần mòn thay được.
+
+Ba cách, xếp theo mức nên dùng:
 
 | Cách | Cách hoạt động | Nhận xét |
 |---|---|---|
-| **Đầu cắt thả nổi + công tắc hành trình** *(nên dùng)* | Mỏ trượt trên ray hoặc lò xo; chạm phôi là mỏ bị đẩy lên, gạt công tắc | Rẻ, bền, không dính gì tới mạch plasma nên **không sợ cao tần**. Đây là cách phổ biến nhất cho plasma không có THC |
-| **Que dò riêng đặt cạnh mỏ** | Một que kim loại gắn cạnh mỏ, lệch một khoảng đã biết | Chính xác nhất, không hại mỏ. Phải đo và khai khoảng lệch |
+| **Đầu dò cảm ứng trên đầu đảo** *(đang dùng)* | Đầu dò gắn lệch 90° với mỏ cắt trên một trục đảo; một mô-tơ xoay qua lại đổi đầu nào chúc xuống | Chính xác nhất, không hại mỏ. Cần thêm một mô-tơ và một trục trong FluidNC |
+| **Đầu cắt thả nổi + công tắc hành trình** | Mỏ trượt trên ray hoặc lò xo; chạm phôi là mỏ bị đẩy lên, gạt công tắc | Rẻ, bền, không cần thêm trục. Nhưng chính mỏ chạm phôi nên hại béc |
 | **Dò dẫn điện qua chụp mỏ (ohmic)** | Đo thông mạch giữa chụp mỏ và phôi | **Rủi ro:** xung cao tần lúc mồi hồ quang phá chân vi điều khiển. Bắt buộc cách ly quang. Xỉ bám chụp mỏ là dò sai |
 
+> **Nguồn nuôi đầu dò:** đầu dò cảm ứng thường có 3 dây (nguồn, mát, tín hiệu).
+> Nếu tín hiệu ra 5 V hay 12 V thì **phải hạ áp hoặc cách ly quang về 3,3 V**
+> trước khi vào chân ESP32-S3 — chân S3 không chịu được 5 V.
+
 > **An toàn:** nguồn cắt phải **TẮT** suốt lúc dò. Phần mềm không bật mỏ khi dò,
-> nhưng hãy tự kiểm tra lần đầu. Nếu dùng kiểu ohmic, đừng đấu thẳng chụp mỏ vào
-> chân ESP32 — cao tần sẽ giết bo.
+> nhưng hãy tự kiểm tra lần đầu.
 
-Kiểm tra cảm biến trước: gõ `?` ở ô lệnh, lấy tay gạt công tắc (hoặc chạm que dò
-vào phôi), dòng trạng thái phải hiện `Pn:P`. Không thấy chữ `P` nghĩa là chưa nối
-đúng.
+Kiểm tra cảm biến trước: gõ `?` ở ô lệnh, lấy tay chạm kim dò vào phôi, dòng
+trạng thái phải hiện `Pn:P`. Không thấy chữ `P` nghĩa là chưa nối đúng.
 
-### Dùng que dò riêng: phải khai khoảng lệch
+### Đầu đảo: một mô-tơ xoay giữa mỏ cắt và đầu dò
 
-Đầu que dò **không nằm cùng chỗ với mũi cắt**, nên mọi số đo được là đo ở vị trí
-que dò. Không khai khoảng lệch thì gốc đặt ra sẽ sai đúng bằng khoảng cách giữa
-que và mỏ.
+Hai đầu gắn **lệch nhau 90°** trên cùng một trục đảo (khai là trục `B` trong
+FluidNC). Xoay 90° là đổi đầu nào chúc xuống.
 
-Ba ô trong khung **Dò cạnh** (thẻ Điều khiển):
+Kiểu này có một cái hay về hình học: **khi mỗi đầu đã chúc xuống thì cả hai nằm
+đúng cùng một chỗ theo X và Y**, chỉ khác chiều cao — bằng đúng hiệu chiều dài
+hai đầu. Nên thường chỉ phải khai một số duy nhất: *đầu dò thấp hơn mỏ bao
+nhiêu mm*.
 
-| Ô | Đo cái gì | Ví dụ |
-|---|---|---|
-| **Que dò thấp hơn mỏ** | Đầu que nhô xuống thấp hơn mũi cắt bao nhiêu mm | `12` |
-| **Que lệch ngang** | Que lệch khỏi mũi cắt bao nhiêu mm theo trục ngang (X). Số âm là lệch về phía âm | `-32` |
-| **Que lệch dọc** | Lệch theo chiều dọc phôi (Y) | `0` |
+Trình tự phần mềm tự làm, không phải gõ tay:
 
-Phần mềm quy kết quả về đúng mũi cắt khi đặt gốc. Ví dụ que thấp hơn mỏ 12 mm:
-que chạm mặt phôi thì mũi cắt đang ở **trên** mặt phôi 12 mm, nên gốc Z được đặt
-là **+12**, không phải 0.
+```
+nâng Z lên cao độ xoay  →  xoay B sang đầu dò  →  chờ hết rung
+   →  dò  →  nâng Z  →  xoay B về mỏ cắt
+```
 
-> Que dò **bắt buộc phải nhô xuống thấp hơn mũi cắt**, nếu không mỏ đâm vào phôi
-> trước khi que kịp chạm. Phần mềm chặn trước: khai lệch ngang mà để ô "thấp hơn
-> mỏ" bằng 0 là nó báo lỗi ngay, không cho chạy.
+**Nâng trước rồi mới xoay** là bắt buộc: lúc xoay, đầu dài hơn quét một cung
+quanh trục đảo, không nâng đủ cao là nó quét thẳng vào phôi. Phần mềm kiểm tra
+trước — đặt cao độ xoay thấp hơn tầm quét là nó báo lỗi, không cho chạy.
 
-Lúc dò, hãy rà sao cho **đầu que dò** (không phải mũi cắt) nằm ở khoảng giữa mặt
-trên phôi. Hộp thoại xác nhận nhắc lại điều này kèm số lệch đang khai.
+Hai chốt an toàn nữa:
 
-Dùng đầu cắt thả nổi thì để cả ba số bằng 0.
+* **Dò lỗi hay bấm dừng giữa chừng thì máy vẫn tự trả đầu về mỏ cắt.** Bỏ máy
+  lại ở tư thế đầu dò chúc xuống là lần cắt sau đâm kim vào phôi.
+* **Mọi chương trình cắt đều mở đầu bằng lệnh đưa đầu đảo về mỏ cắt**, đứng
+  trước mọi lệnh bật nguồn cắt. Mất điện xong máy không biết đầu nào đang chúc
+  xuống, mà đoán sai là mồi lửa ngay trên đầu dò.
+
+**Nên lắp công tắc về gốc cho trục đảo** (tệp cấu hình mẫu để ở `gpio 41`, chu
+kỳ về gốc 4 — sau khi Z đã nâng). Không có nó thì sau mỗi lần mất điện phải tự
+xoay về mỏ cắt rồi đặt lại gốc trục B bằng tay.
+
+### Các ô cần khai
+
+Khung **Dò cạnh** ở thẻ Điều khiển:
+
+| Ô | Ý nghĩa |
+|---|---|
+| **Đầu dò thấp hơn mỏ** | Hiệu chiều dài hai đầu, tính bằng mm. Đo trên máy thật |
+| **Quãng dò tối đa** | Giới hạn an toàn, cũng quyết định có tới được mép rộng nhất không |
+| **Đầu dò lệch ngang / lệch dọc** | Chỉ khác 0 khi hai đầu còn gắn lệch nhau *dọc theo chính trục đảo*. Kiểu đảo 90° thông thường thì để 0 |
+| **Có đầu đảo** | Tắt nếu dùng đầu cắt thả nổi |
+| **Cao độ xoay đảo** | Nâng lên tới đây rồi mới xoay. Phải lớn hơn tầm quét của đầu dài |
+| **Góc đảo: mỏ cắt / đầu dò** | Hai vị trí của trục B, thường là 0° và 90° |
+
+Phần mềm quy kết quả về đúng mũi cắt khi đặt gốc. Ví dụ đầu dò thấp hơn mỏ
+18 mm: kim chạm mặt phôi thì mũi cắt đang ở **trên** mặt phôi 18 mm, nên gốc Z
+được đặt là **+18**, không phải 0.
 
 ### Vì sao không dò ngang như máy phay
 

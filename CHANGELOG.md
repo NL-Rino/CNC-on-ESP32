@@ -1,5 +1,50 @@
 # Nhật ký thay đổi
 
+## v1.9.0 — 2026-09-04
+
+### Đầu đảo: một mô-tơ xoay giữa mỏ cắt và đầu dò
+
+Đầu dò cảm ứng gắn **lệch 90°** với mỏ cắt trên một trục đảo (khai là trục `B`),
+một mô-tơ xoay qua lại đổi đầu nào chúc xuống.
+
+Kiểu này có một cái hay về hình học: **khi mỗi đầu đã chúc xuống thì cả hai nằm
+đúng cùng một chỗ theo X và Y**, chỉ khác chiều cao. Nên thường chỉ phải khai
+một số duy nhất — *đầu dò thấp hơn mỏ bao nhiêu mm* — thay vì ba số lệch như
+kiểu que dò gắn cố định cạnh mỏ.
+
+Phần mềm tự lo trình tự, không phải gõ tay: nâng Z lên cao độ xoay → xoay sang
+đầu dò → chờ hết rung → dò → nâng Z → xoay về mỏ cắt.
+
+**Ba chốt an toàn**, mỗi chốt chặn một cách hỏng thật:
+
+1. **Nâng trước rồi mới xoay.** Lúc xoay, đầu dài hơn quét một cung quanh trục
+   đảo; không nâng đủ cao là nó quét thẳng vào phôi. Đặt cao độ xoay thấp hơn
+   tầm quét là phần mềm báo lỗi, không cho chạy.
+2. **Dò lỗi hay bấm dừng giữa chừng thì vẫn tự trả đầu về mỏ cắt.** Bỏ máy lại ở
+   tư thế đầu dò chúc xuống là lần cắt sau đâm kim vào phôi. Chuỗi lệnh trả về
+   chạy cả khi đã bật cờ dừng.
+3. **Mọi chương trình cắt đều mở đầu bằng lệnh đưa đầu đảo về mỏ cắt**, đứng
+   trước mọi lệnh bật nguồn cắt. Mất điện xong máy không biết đầu nào đang chúc
+   xuống, mà đoán sai là mồi lửa ngay trên đầu dò.
+
+Thêm vai trò trục `swivel`, hồ sơ máy mẫu `config/machine_s3_dau_do.json`, trục
+`B` trong tệp cấu hình FluidNC cho S3 (chân 39/40, công tắc về gốc 41, chu kỳ về
+gốc 4 — sau khi Z đã nâng), và các ô khai báo trong khung Dò cạnh.
+
+### Ghi chú về kim dò
+
+Cái bán rời gồm **bi ruby + trục sứ** chỉ là *kim dò* (stylus), vặn ren M2.5 vào
+thân đầu dò. Bi ruby và trục sứ đều **không dẫn điện** nên bản thân kim không
+đóng mạch được — phải mua cả **thân đầu dò cảm ứng**, bên trong mới có tiếp
+điểm. Đã ghi rõ trong hướng dẫn và trong tệp cấu hình FluidNC.
+
+Kèm cảnh báo về mức điện áp: đầu dò cảm ứng thường ra tín hiệu 5 V hoặc 12 V,
+phải hạ áp hoặc cách ly quang về 3,3 V trước khi vào chân ESP32-S3.
+
+### Khác
+
+* Thêm 9 bài kiểm thử, tổng cộng **230**.
+
 ## v1.8.0 — 2026-09-04
 
 ### Sửa hai lỗi trong tệp cấu hình FluidNC mẫu

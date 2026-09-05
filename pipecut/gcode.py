@@ -18,7 +18,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from .config import MachineProfile, ROLE_BEVEL, ROLE_RADIAL, ROLE_ROTARY
+from .config import (MachineProfile, ROLE_BEVEL, ROLE_RADIAL, ROLE_ROTARY,
+                     ROLE_SWIVEL)
 from .kinematics import AxisValues, Kinematics
 from .pathops import Pass, process_contour
 from .toolpath import Contour, CutPoint, Toolpath
@@ -201,6 +202,14 @@ class PostProcessor:
         b.comment("Truc: " + ", ".join(f"{a.letter}={a.role}" for a in pf.axes if a.enabled))
         for line in pf.preamble:
             b.raw(line)
+
+        # Máy có đầu đảo thì BẮT BUỘC đưa về mỏ cắt trước khi cắt.  Nếu lần
+        # trước dừng lúc đang dò, hoặc vừa mất điện, đầu dò có thể đang chúc
+        # xuống - mồi lửa lúc đó là cháy ngay đầu dò.
+        swivel = pf.axis(ROLE_SWIVEL)
+        if swivel is not None:
+            b.comment("Dua dau dao ve mo cat truoc khi cat")
+            b.raw(f"G0 {swivel.letter}{fmt(pf.probe.swivel_torch, pf.motion.decimals)}")
         b.blank()
 
         passes: List[Pass] = []

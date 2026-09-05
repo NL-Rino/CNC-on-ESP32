@@ -233,17 +233,23 @@ Không phải rà tay từng trục nữa. Máy tự dò ra **cả bốn gốc**
 đường tâm phôi (X), mặt đầu ống (Y), và với ống hộp là cả góc xoay cho mặt phẳng
 nằm ngang (A).
 
-**Cần thêm gì:** một tiếp điểm đóng khi mỏ chạm phôi, nối vào chân `probe` của
-FluidNC. Hai cách hợp với plasma kích rơ-le: **que dò riêng đặt cạnh mỏ**
-(chính xác nhất, không hại mỏ) hoặc **đầu cắt thả nổi + công tắc hành trình**
-(rẻ, bền). Cả hai đều không dính gì tới mạch plasma nên không sợ cao tần — khác
-với kiểu dò dẫn điện qua chụp mỏ, xung cao tần lúc mồi hồ quang dễ giết bo.
+**Cần thêm gì:** một tiếp điểm đóng khi chạm phôi, nối vào chân `probe` của
+FluidNC. Lưu ý cái bán rời gồm bi ruby + trục sứ chỉ là **kim dò** — bi ruby và
+trục sứ đều không dẫn điện, phải mua cả **thân đầu dò cảm ứng** thì mới có tiếp
+điểm.
 
-Dùng que dò riêng thì phải **khai khoảng lệch** của que so với mũi cắt (thấp hơn
-bao nhiêu, lệch ngang/dọc bao nhiêu). Phần mềm quy kết quả về đúng mũi cắt khi
-đặt gốc: que thấp hơn mỏ 12 mm thì lúc que chạm mặt phôi, gốc Z được đặt là
-**+12** chứ không phải 0. Que bắt buộc phải nhô xuống thấp hơn mũi cắt, nếu
-không mỏ đâm vào phôi trước — phần mềm chặn trước và báo lỗi.
+**Đầu đảo** — cách đang dùng: đầu dò gắn lệch **90°** với mỏ cắt trên một trục
+đảo (trục `B`), một mô-tơ xoay qua lại đổi đầu nào chúc xuống. Cái hay về hình
+học: khi mỗi đầu đã chúc xuống thì cả hai nằm **đúng cùng một chỗ theo X-Y**,
+chỉ khác chiều cao — nên thường chỉ phải khai một số duy nhất, *đầu dò thấp hơn
+mỏ bao nhiêu mm*.
+
+Phần mềm tự lo trình tự: nâng Z → xoay sang đầu dò → dò → xoay về mỏ cắt. Ba
+chốt an toàn: **nâng trước rồi mới xoay** (không thì đầu dài quét vào phôi, phần
+mềm chặn nếu cao độ xoay quá thấp); **dò lỗi hay bấm dừng vẫn tự trả đầu về mỏ
+cắt**; và **mọi chương trình cắt đều mở đầu bằng lệnh đưa đầu đảo về mỏ cắt**,
+đứng trước mọi lệnh bật nguồn — mất điện xong máy không biết đầu nào đang chúc
+xuống, đoán sai là mồi lửa ngay trên đầu dò.
 
 **Vì sao không dò ngang như máy phay:** mỏ treo thẳng đứng, đâm ngang vào ống là
 gãy mỏ. Nên cách làm ở đây chỉ cần **dò xuống**:
@@ -530,11 +536,12 @@ pipecut/
   cli.py         giao diện dòng lệnh
   palette.py     bảng màu dùng chung (nền sáng / nền tối, tông FreeCAD)
   ui/            giao diện đồ hoạ Tkinter (kèm khung mô phỏng máy 3D)
-config/          hồ sơ máy mẫu (ống tròn, ống hộp, xoay góc, trục vát, laser)
+config/          hồ sơ máy mẫu (ống tròn, ống hộp, xoay góc, trục vát,
+                 laser, và bản ESP32-S3 có đầu đảo dò)
 firmware/        cấu hình FluidNC cho ESP32 gốc và ESP32-S3
 examples/        tệp công việc mẫu + bản vẽ mẫu (DXF, SVG, G-code phẳng)
 docs/            hướng dẫn sử dụng và tài liệu kỹ thuật
-tests/           221 bài kiểm thử (chạy bằng thư viện chuẩn)
+tests/           230 bài kiểm thử (chạy bằng thư viện chuẩn)
 ```
 
 Chạy kiểm thử:

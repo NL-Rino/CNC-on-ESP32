@@ -8,7 +8,8 @@ import math
 import unittest
 
 from pipecut import probing, protocol
-from pipecut.config import MachineProfile, ROLE_ALONG, ROLE_CROSS, ROLE_RADIAL
+from pipecut.config import (AxisSpec, MachineProfile, ROLE_ALONG, ROLE_CROSS,
+                            ROLE_RADIAL, ROLE_SWIVEL)
 from pipecut.probing import ProbeError, ProbeSpec, extent_range, section_extent
 from pipecut.simulator import FluidNCSimulator, VirtualPipe
 
@@ -304,6 +305,131 @@ class TestProbeOffset(unittest.TestCase):
         self.assertAlmostEqual(again.probe.offset_x, -32.0)
         self.assertAlmostEqual(again.probe.probe_below, 12.0)
         self.assertTrue(again.probe.has_offset)
+
+
+class TestSwivelHead(unittest.TestCase):
+    """Đầu đảo: một mô-tơ xoay qua lại giữa mỏ cắt và đầu dò."""
+
+    def _profile_with_swivel(self):
+        p = _profile()
+        p.axes.append(AxisSpec(letter="B", role=ROLE_SWIVEL, max_rate=6000.0,
+                               accel=800.0, max_travel=180.0))
+        return p
+
+    def _spec(self, **kw):
+        base = dict(swivel=True, probe_below=18.0, swivel_z=45.0,
+                    swivel_torch=0.0, swivel_probe=90.0)
+        base.update(kw)
+        return ProbeSpec(**base)
+
+    def test_nang_len_truoc_roi_moi_xoay(self):
+        """Xoay khi chưa nâng là đầu dài quét thẳng vào phôi."""
+        steps = probing.swivel_steps(self._profile_with_swivel(), self._spec(),
+                                     to_probe=True)
+        lines = [l for st in steps for l in st.lines]
+        self.assertTrue(lines[0].startswith("G0 Z"), lines)
+        z_index = next(i for i, l in enumerate(lines) if l.startswith("G0 Z"))
+        b_index = next(i for i, l in enumerate(lines) if " B" in l or l.endswith("B90"))
+        self.assertLess(z_index, b_index, "phải nâng Z trước khi xoay B")
+
+    def test_xoay_dung_goc_cho_tung_dau(self):
+        p, spec = self._profile_with_swivel(), self._spec()
+        to_probe = [l for st in probing.swivel_steps(p, spec, True) for l in st.lines]
+        to_torch = [l for st in probing.swivel_steps(p, spec, False) for l in st.lines]
+        self.assertTrue(any("B90" in l for l in to_probe), to_probe)
+        self.assertTrue(any("B0" in l for l in to_torch), to_torch)
+
+    def test_khong_co_dau_dao_thi_khong_them_lenh_nao(self):
+        p = _profile()
+        self.assertEqual(probing.swivel_steps(p, ProbeSpec(), True), [])
+        self.assertEqual(probing.stow_lines(p, ProbeSpec()), [])
+
+    def test_bat_dau_dao_ma_thieu_truc_thi_bao_loi(self):
+        with self.assertRaises(ProbeError) as ctx:
+            probing.swivel_steps(_profile(), self._spec(), True)
+        self.assertIn("swivel", str(ctx.exception))
+
+    def test_boc_quy_trinh_thi_xoay_di_roi_xoay_ve(self):
+        p, spec = self._profile_with_swivel(), self._spec()
+        inner = probing.probe_surface(p, spec, start={"X": 0, "Y": 100, "Z": 30})
+        gen = probing.with_swivel(p, spec, inner)
+        first = gen.send(None)
+        self.assertIn("Z45", first.lines[0])
+        # chạy nốt trên phôi ảo rồi xem lệnh cuối cùng
+        lines = list(first.lines)
+        result = None
+        sim_lines = []
+        try:
+            while True:
+                step = gen.send(result)
+                sim_lines.extend(step.lines)
+                result = None
+                if step.probe:
+                    result = protocol.ProbeResult(position={"X": 0, "Y": 100, "Z": -15},
+                                                  touched=True)
+        except StopIteration:
+            pass
+        self.assertTrue(any("B90" in l for l in sim_lines), "phải xoay sang đầu dò")
+        self.assertTrue(any("B0" in l for l in sim_lines), "phải trả về mỏ cắt")
+        self.assertLess(max(i for i, l in enumerate(sim_lines) if "B90" in l),
+                        max(i for i, l in enumerate(sim_lines) if "B0" in l),
+                        "trả về mỏ cắt phải là bước sau cùng")
+
+    def test_soat_cao_do_xoay_qua_thap(self):
+        """Nâng chưa quá tầm quét của đầu dài là xoay đâm vào phôi."""
+        self.assertTrue(self._spec(swivel_z=10.0, probe_below=40.0).validate())
+        self.assertFalse(self._spec(swivel_z=60.0, probe_below=40.0).validate())
+
+    def test_soat_hai_goc_dao_trung_nhau(self):
+        self.assertTrue(self._spec(swivel_torch=0.0, swivel_probe=0.0).validate())
+
+    def test_luu_va_nap_lai_cau_hinh_dau_dao(self):
+        p = self._profile_with_swivel()
+        p.probe.swivel = True
+        p.probe.swivel_probe = 92.5
+        p.probe.swivel_z = 47.0
+        again = MachineProfile.from_dict(p.to_dict())
+        self.assertTrue(again.probe.swivel)
+        self.assertAlmostEqual(again.probe.swivel_probe, 92.5)
+        self.assertAlmostEqual(again.probe.swivel_z, 47.0)
+        self.assertEqual(again.letter(ROLE_SWIVEL), "B")
+
+    def test_chuong_trinh_cat_luon_dua_dau_dao_ve_mo_cat(self):
+        """Chốt an toàn: mất điện xong đầu dò có thể đang chúc xuống."""
+        from pipecut.gcode import build_program
+        from pipecut.jobs import Job
+        p = self._profile_with_swivel()
+        p.probe.swivel = True
+        job = Job(name="cat"); job.add("cutoff", x=300.0, angle=0.0, bevel_axis=False)
+        toolpath, _ = job.build_toolpath(p)
+        program = build_program(p, toolpath, job.name)
+        head = [l for l in program.lines[:16]]
+        self.assertTrue(any(l.strip() == "G0 B0" for l in head),
+                        f"phần mở đầu phải đưa đầu đảo về mỏ cắt:\n{head}")
+        # và phải đứng TRƯỚC mọi lệnh bật nguồn cắt
+        first_b = next(i for i, l in enumerate(program.lines) if l.strip() == "G0 B0")
+        fires = [i for i, l in enumerate(program.lines) if l.startswith("M3")]
+        self.assertTrue(fires)
+        self.assertLess(first_b, fires[0])
+
+    def test_may_khong_co_dau_dao_thi_khong_them_lenh_thua(self):
+        from pipecut.gcode import build_program
+        from pipecut.jobs import Job
+        p = _profile()
+        job = Job(name="cat"); job.add("cutoff", x=300.0, angle=0.0, bevel_axis=False)
+        toolpath, _ = job.build_toolpath(p)
+        program = build_program(p, toolpath, job.name)
+        self.assertFalse([l for l in program.lines if l.strip().startswith("G0 B")])
+
+    def test_ho_so_may_mau_co_du_truc_dao(self):
+        import os
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "config", "machine_s3_dau_do.json")
+        p = MachineProfile.load(path)
+        self.assertEqual(p.letter(ROLE_SWIVEL), "B")
+        self.assertTrue(p.probe.swivel)
+        self.assertFalse(p.validate())
+        self.assertFalse(p.probe.validate())
 
 if __name__ == "__main__":
     unittest.main()

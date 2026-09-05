@@ -190,13 +190,19 @@ class DeviceController:
     # ==================================================================
     # Chế độ dò cạnh
     # ==================================================================
-    def run_probe(self, routine, on_done=None, on_step=None) -> None:
+    def run_probe(self, routine, on_done=None, on_step=None,
+                  cleanup: Optional[Sequence[str]] = None) -> None:
         """Chạy một quy trình dò cạnh ở luồng nền.
 
         Quy trình là một generator: nó phát ra từng bước, mình gửi xuống máy,
         **chờ máy chạy xong hẳn**, rồi đưa kết quả dò ngược lại cho nó quyết
         định bước sau.  Phải chờ máy về trạng thái rảnh chứ không chỉ chờ chữ
         'ok': Grbl trả 'ok' ngay khi *nhận* dòng lệnh, chưa chạy xong.
+
+        ``cleanup`` là chuỗi lệnh **luôn được gửi khi kết thúc**, kể cả khi dò
+        lỗi hay bị dừng giữa chừng.  Máy có đầu đảo thì đây là chỗ trả đầu về
+        mỏ cắt - bỏ máy lại ở tư thế que dò chúc xuống là lần cắt sau đâm que
+        vào phôi.
         """
         if not self.is_connected:
             raise RuntimeError("Chưa kết nối máy.")
@@ -234,11 +240,30 @@ class DeviceController:
                     on_done(outcome, None)
             except Exception as exc:
                 self._emit_event("error", f"Dò cạnh dừng: {exc}")
+                self._run_cleanup(cleanup)
                 if on_done:
                     on_done(None, exc)
 
         self._probe_thread = threading.Thread(target=work, daemon=True)
         self._probe_thread.start()
+
+    def _run_cleanup(self, cleanup: Optional[Sequence[str]]) -> None:
+        """Gửi chuỗi lệnh dọn dẹp, bỏ qua cờ dừng để nó luôn chạy được."""
+        if not cleanup:
+            return
+        was_stopped, self._probe_stop = self._probe_stop, False
+        try:
+            for line in cleanup:
+                self.send(line)
+            self._wait_idle(timeout=30.0)
+            self._emit_event("info", "Đã trả đầu đảo về mỏ cắt.")
+        except Exception as exc:
+            self._emit_event(
+                "error",
+                f"KHÔNG trả được đầu đảo về mỏ cắt: {exc}. Hãy tự xoay về "
+                f"trước khi cắt, nếu không que dò sẽ đâm vào phôi.")
+        finally:
+            self._probe_stop = was_stopped
 
     def stop_probe(self) -> None:
         """Dừng quy trình dò đang chạy."""

@@ -19,12 +19,14 @@ ROLE_CROSS = "cross"    # chạy ngang, vuông góc trục ống (thường là 
 ROLE_RADIAL = "radial"  # nâng/hạ đầu cắt theo phương bán kính (thường là Z)
 ROLE_ROTARY = "rotary"  # mâm cặp xoay ống (thường là A) - đơn vị ĐỘ
 ROLE_BEVEL = "bevel"    # trục nghiêng đầu cắt để vát mép - đơn vị ĐỘ
+ROLE_SWIVEL = "swivel"  # trục đảo đầu: xoay qua lại giữa mỏ cắt và que dò - ĐỘ
 
-ALL_ROLES = (ROLE_ALONG, ROLE_CROSS, ROLE_RADIAL, ROLE_ROTARY, ROLE_BEVEL)
+ALL_ROLES = (ROLE_ALONG, ROLE_CROSS, ROLE_RADIAL, ROLE_ROTARY, ROLE_BEVEL,
+             ROLE_SWIVEL)
 
 if TYPE_CHECKING:  # tránh phụ thuộc vòng khi chạy thật
     from .section import Section
-ANGULAR_ROLES = (ROLE_ROTARY, ROLE_BEVEL)
+ANGULAR_ROLES = (ROLE_ROTARY, ROLE_BEVEL, ROLE_SWIVEL)
 
 
 def _filter(cls, data: Dict[str, Any]) -> Dict[str, Any]:

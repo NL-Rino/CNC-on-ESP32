@@ -374,16 +374,24 @@ class MainWindow:
         self.btn_probe = ttk.Button(probe, text="Bắt đầu dò", width=12,
                                     style="Accent.TButton", command=self.start_probe)
         self.btn_probe.grid(row=1, column=1, padx=(4, 0))
+        sp0 = self.profile.probe
         self.f_probe = FieldGrid(probe, [
-            ("probe_below", "Que dò thấp hơn mỏ [mm]", self.profile.probe.probe_below),
-            ("offset_x", "Que lệch ngang [mm]", self.profile.probe.offset_x),
-            ("offset_y", "Que lệch dọc [mm]", self.profile.probe.offset_y),
-            ("max_depth", "Quãng dò tối đa [mm]", self.profile.probe.max_depth),
+            ("probe_below", "Đầu dò thấp hơn mỏ [mm]", sp0.probe_below),
+            ("max_depth", "Quãng dò tối đa [mm]", sp0.max_depth),
+            ("offset_x", "Đầu dò lệch ngang [mm]", sp0.offset_x),
+            ("offset_y", "Đầu dò lệch dọc [mm]", sp0.offset_y),
+            ("swivel", "Có đầu đảo", sp0.swivel, "bool"),
+            ("swivel_z", "Cao độ xoay đảo [mm]", sp0.swivel_z),
+            ("swivel_torch", "Góc đảo: mỏ cắt [độ]", sp0.swivel_torch),
+            ("swivel_probe", "Góc đảo: đầu dò [độ]", sp0.swivel_probe),
         ], columns=2)
         self.f_probe.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         ttk.Label(probe, style="Hint.TLabel", wraplength=300, justify="left",
-                  text="Dùng đầu cắt thả nổi (chính mỏ chạm phôi) thì để cả ba số "
-                       "lệch bằng 0.").grid(row=3, column=0, columnspan=2, sticky="w")
+                  text="Đầu đảo gắn hai đầu lệch nhau 90° nên khi mỗi đầu chúc "
+                       "xuống, cả hai ở cùng chỗ theo X-Y — thường chỉ phải khai "
+                       "ô đầu tiên. Dùng đầu cắt thả nổi thì để mọi số lệch bằng "
+                       "0 và tắt ô 'Có đầu đảo'.").grid(
+            row=3, column=0, columnspan=2, sticky="w")
         self.lbl_probe = ttk.Label(probe, style="Dim.TLabel", wraplength=300,
                                    justify="left", text="")
         self.lbl_probe.grid(row=4, column=0, columnspan=2, sticky="w", pady=(4, 0))
@@ -651,10 +659,10 @@ class MainWindow:
         label, factory = ROUTINES[key]
         self.apply_profile(silent=True)
         sp = self.profile.probe
-        sp.probe_below = self.f_probe.get("probe_below", sp.probe_below)
-        sp.offset_x = self.f_probe.get("offset_x", sp.offset_x)
-        sp.offset_y = self.f_probe.get("offset_y", sp.offset_y)
-        sp.max_depth = self.f_probe.get("max_depth", sp.max_depth)
+        for name in ("probe_below", "offset_x", "offset_y", "max_depth",
+                     "swivel_z", "swivel_torch", "swivel_probe"):
+            setattr(sp, name, self.f_probe.get(name, getattr(sp, name)))
+        sp.swivel = bool(self.f_probe.get("swivel", sp.swivel))
         warns = self.profile.probe.validate()
         if warns:
             messagebox.showerror("Thông số dò không hợp lệ", "\n".join(warns))
@@ -672,25 +680,32 @@ class MainWindow:
                 f"{label}\n\nMáy sẽ hạ xuống dò phôi. Hãy chắc chắn:\n"
                 f"  • nguồn cắt ĐANG TẮT\n"
                 f"  • cảm biến chạm nối đúng và thử được\n"
-                + ("  • ĐẦU QUE DÒ (không phải mũi cắt) đang ở khoảng giữa\n"
-                   "    mặt trên phôi\n"
-                   f"  • que dò thấp hơn mũi cắt {sp.probe_below:g} mm, "
-                   f"lệch ngang {sp.offset_x:g} mm\n\n"
-                   if sp.has_offset else
-                   "  • mỏ đang ở khoảng giữa mặt trên phôi\n\n")
+                + ((f"  • máy sẽ NÂNG LÊN {sp.swivel_z:g} mm rồi XOAY ĐẦU ĐẢO\n"
+                    f"    sang đầu dò ({sp.swivel_probe:g}°), xong tự trả về\n"
+                    f"    mỏ cắt ({sp.swivel_torch:g}°)\n"
+                    if sp.swivel else "")
+                   + ("  • ĐẦU DÒ (không phải mũi cắt) đang ở khoảng giữa\n"
+                      "    mặt trên phôi\n"
+                      f"  • đầu dò thấp hơn mũi cắt {sp.probe_below:g} mm\n\n"
+                      if sp.has_offset else
+                      "  • mỏ đang ở khoảng giữa mặt trên phôi\n\n"))
                 +
                 f"Vị trí hiện tại: "
                 + ", ".join(f"{k}{v:.1f}" for k, v in start.items())):
             return
         try:
-            routine = factory(self.profile, self.profile.probe, start=start)
+            from ..probing import stow_lines, with_swivel
+            routine = with_swivel(
+                self.profile, sp,
+                factory(self.profile, sp, start=start))
+            cleanup = stow_lines(self.profile, sp)
         except ProbeError as exc:
             messagebox.showerror("Không dò được", str(exc))
             return
         self.btn_probe.configure(state="disabled", text="Đang dò...")
         self.lbl_probe.configure(text="Đang dò...")
         self.controller.run_probe(
-            routine,
+            routine, cleanup=cleanup,
             on_done=lambda out, err: self.events.put(("probe", out, err)),
             on_step=lambda note: self.events.put(("probe_step", note)))
 

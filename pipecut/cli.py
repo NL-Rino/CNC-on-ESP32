@@ -165,8 +165,12 @@ def cmd_probe(args: argparse.Namespace) -> int:
         done.set()
 
     try:
-        routine = factory(profile, spec, set_zero=not args.no_zero, start=start)
-        controller.run_probe(routine, on_done=finished,
+        from .probing import stow_lines, with_swivel
+        routine = with_swivel(
+            profile, spec,
+            factory(profile, spec, set_zero=not args.no_zero, start=start))
+        controller.run_probe(routine, cleanup=stow_lines(profile, spec),
+                             on_done=finished,
                              on_step=lambda note: print(f"  · {note}")
                              if args.verbose else None)
     except ProbeError as exc:

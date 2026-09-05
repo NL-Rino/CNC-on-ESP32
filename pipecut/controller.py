@@ -256,12 +256,13 @@ class DeviceController:
             for line in cleanup:
                 self.send(line)
             self._wait_idle(timeout=30.0)
-            self._emit_event("info", "Đã trả đầu đảo về mỏ cắt.")
+            self._emit_event("info", "Đã đưa máy về tư thế cắt (tắt mỏ, ngắt dây dò).")
         except Exception as exc:
             self._emit_event(
                 "error",
-                f"KHÔNG trả được đầu đảo về mỏ cắt: {exc}. Hãy tự xoay về "
-                f"trước khi cắt, nếu không que dò sẽ đâm vào phôi.")
+                f"KHÔNG đưa được máy về tư thế cắt: {exc}. Hãy tự kiểm tra "
+                f"trước khi cắt: nguồn cắt đã tắt, dây dò đã ngắt, và đầu đảo "
+                f"(nếu có) đã về phía mỏ cắt.")
         finally:
             self._probe_stop = was_stopped
 

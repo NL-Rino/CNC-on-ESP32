@@ -380,6 +380,10 @@ class MainWindow:
             ("max_depth", "Quãng dò tối đa [mm]", sp0.max_depth),
             ("offset_x", "Đầu dò lệch ngang [mm]", sp0.offset_x),
             ("offset_y", "Đầu dò lệch dọc [mm]", sp0.offset_y),
+            ("ohmic", "Dò bằng chính mỏ cắt", sp0.ohmic, "bool"),
+            ("ohmic_output", "Ngõ ra rơ-le dây dò", float(sp0.ohmic_output)),
+            ("seek_feed", "Tốc độ dò [mm/ph]", sp0.seek_feed),
+            ("latch_feed", "Tốc độ dò lại [mm/ph]", sp0.latch_feed),
             ("swivel", "Có đầu đảo", sp0.swivel, "bool"),
             ("swivel_z", "Cao độ xoay đảo [mm]", sp0.swivel_z),
             ("swivel_torch", "Góc đảo: mỏ cắt [độ]", sp0.swivel_torch),
@@ -387,10 +391,10 @@ class MainWindow:
         ], columns=2)
         self.f_probe.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         ttk.Label(probe, style="Hint.TLabel", wraplength=300, justify="left",
-                  text="Đầu đảo gắn hai đầu lệch nhau 90° nên khi mỗi đầu chúc "
-                       "xuống, cả hai ở cùng chỗ theo X-Y — thường chỉ phải khai "
-                       "ô đầu tiên. Dùng đầu cắt thả nổi thì để mọi số lệch bằng "
-                       "0 và tắt ô 'Có đầu đảo'.").grid(
+                  text="Dò bằng chính mỏ cắt: kẹp dây vào béc, mọi số lệch để 0. "
+                       "Ngõ ra rơ-le = -1 nếu đấu chết không có rơ-le tách dây. "
+                       "Dùng đầu dò riêng trên đầu đảo thì bật ô 'Có đầu đảo' và "
+                       "khai đầu dò thấp hơn mỏ bao nhiêu.").grid(
             row=3, column=0, columnspan=2, sticky="w")
         self.lbl_probe = ttk.Label(probe, style="Dim.TLabel", wraplength=300,
                                    justify="left", text="")
@@ -660,9 +664,12 @@ class MainWindow:
         self.apply_profile(silent=True)
         sp = self.profile.probe
         for name in ("probe_below", "offset_x", "offset_y", "max_depth",
-                     "swivel_z", "swivel_torch", "swivel_probe"):
+                     "swivel_z", "swivel_torch", "swivel_probe",
+                     "seek_feed", "latch_feed"):
             setattr(sp, name, self.f_probe.get(name, getattr(sp, name)))
         sp.swivel = bool(self.f_probe.get("swivel", sp.swivel))
+        sp.ohmic = bool(self.f_probe.get("ohmic", sp.ohmic))
+        sp.ohmic_output = int(self.f_probe.get("ohmic_output", sp.ohmic_output))
         warns = self.profile.probe.validate()
         if warns:
             messagebox.showerror("Thông số dò không hợp lệ", "\n".join(warns))
@@ -675,30 +682,34 @@ class MainWindow:
                 "Chưa biết vị trí mỏ",
                 "Chưa nhận được toạ độ từ máy. Chờ vài giây rồi thử lại.")
             return
-        if not messagebox.askokcancel(
-                "Bắt đầu dò cạnh",
-                f"{label}\n\nMáy sẽ hạ xuống dò phôi. Hãy chắc chắn:\n"
-                f"  • nguồn cắt ĐANG TẮT\n"
-                f"  • cảm biến chạm nối đúng và thử được\n"
-                + ((f"  • máy sẽ NÂNG LÊN {sp.swivel_z:g} mm rồi XOAY ĐẦU ĐẢO\n"
-                    f"    sang đầu dò ({sp.swivel_probe:g}°), xong tự trả về\n"
-                    f"    mỏ cắt ({sp.swivel_torch:g}°)\n"
-                    if sp.swivel else "")
-                   + ("  • ĐẦU DÒ (không phải mũi cắt) đang ở khoảng giữa\n"
-                      "    mặt trên phôi\n"
-                      f"  • đầu dò thấp hơn mũi cắt {sp.probe_below:g} mm\n\n"
-                      if sp.has_offset else
-                      "  • mỏ đang ở khoảng giữa mặt trên phôi\n\n"))
-                +
-                f"Vị trí hiện tại: "
-                + ", ".join(f"{k}{v:.1f}" for k, v in start.items())):
+        checks = [f"{label}", "", "Máy sẽ hạ xuống dò phôi. Hãy chắc chắn:",
+                  "  • nguồn cắt ĐANG TẮT",
+                  "  • cảm biến chạm nối đúng và thử được"]
+        if sp.ohmic:
+            checks.append("  • dây dò đã kẹp vào đầu mỏ — mỏ CHÍNH LÀ đầu dò")
+            if sp.ohmic_output >= 0:
+                checks.append(f"  • rơ-le dây dò ở ngõ ra {sp.ohmic_output} "
+                              f"(phần mềm tự đóng/ngắt)")
+        if sp.swivel:
+            checks.append(f"  • máy sẽ NÂNG LÊN {sp.swivel_z:g} mm rồi xoay đầu "
+                          f"đảo sang đầu dò ({sp.swivel_probe:g}°), xong tự trả "
+                          f"về mỏ cắt ({sp.swivel_torch:g}°)")
+        if sp.has_offset:
+            checks.append("  • ĐẦU DÒ (không phải mũi cắt) đang ở khoảng giữa "
+                          "mặt trên phôi")
+            checks.append(f"  • đầu dò thấp hơn mũi cắt {sp.probe_below:g} mm")
+        else:
+            checks.append("  • mũi cắt đang ở khoảng giữa mặt trên phôi")
+        checks += ["", "Vị trí hiện tại: "
+                   + ", ".join(f"{k}{v:.1f}" for k, v in start.items())]
+        if not messagebox.askokcancel("Bắt đầu dò cạnh", "\n".join(checks)):
             return
         try:
-            from ..probing import stow_lines, with_swivel
-            routine = with_swivel(
+            from ..probing import disarm_lines, with_probe_setup
+            routine = with_probe_setup(
                 self.profile, sp,
                 factory(self.profile, sp, start=start))
-            cleanup = stow_lines(self.profile, sp)
+            cleanup = disarm_lines(self.profile, sp)
         except ProbeError as exc:
             messagebox.showerror("Không dò được", str(exc))
             return

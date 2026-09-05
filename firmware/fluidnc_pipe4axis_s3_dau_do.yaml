@@ -1,8 +1,6 @@
 # =====================================================================
-#  FluidNC - máy cắt ống 4 trục, bản đầy đủ cho ESP32-S3
-#  (dò cạnh bằng CHÍNH MỎ CẮT - kẹp dây vào béc, không cần đầu dò riêng.
-#   Muốn dùng đầu dò cảm ứng trên trục đảo thì lấy tệp
-#   fluidnc_pipe4axis_s3_dau_do.yaml)
+#  FluidNC - máy cắt ống 4 trục + ĐẦU ĐẢO DÒ, cho ESP32-S3
+#  (bản 5 trục: dùng đầu dò cảm ứng riêng gắn trên trục đảo B)
 #  Bo: ESP32-S3-DevKitC-1 (hoặc tương đương) + 4 driver bước rời
 #
 #  NẠP THẾ NÀO
@@ -29,11 +27,11 @@
 #    Y  ống ra vào          gpio  6   gpio  7   gpio  9
 #    Z  mỏ lên xuống        gpio 15   gpio 16   gpio 10
 #    A  mâm cặp xoay        gpio 17   gpio 18   (không có)
+#    B  ĐẢO ĐẦU mỏ/que dò    gpio 39   gpio 40   gpio 41
 #
-#    ENABLE chung cả 4 driver : gpio 21
+#    ENABLE chung cả 5 driver : gpio 21
 #    Que dò chạm (probe)      : gpio 11
 #    Rơ-le nguồn cắt          : gpio 12
-#    Rơ-le tách dây dò        : gpio 47   (xem mục user_outputs)
 #    Nút DỪNG KHẨN (E-stop)   : gpio 13   (thường đóng - xem mục control)
 #    Nút tạm dừng / chạy tiếp : gpio 14 / gpio 42
 #
@@ -51,7 +49,7 @@
 #  hàn điện trở 10k ra ngoài.
 # =====================================================================
 
-name: "May cat ong 4 truc (ESP32-S3)"
+name: "May cat ong 4 truc + dau dao do (ESP32-S3)"
 board: "ESP32-S3-DevKitC-1 + 4 driver roi"
 meta: "PipeCut Studio - https://github.com/NL-Rino/CNC-on-ESP32"
 
@@ -186,6 +184,39 @@ axes:
         step_pin: gpio.17
         direction_pin: gpio.18
 
+  # --- B: ĐẢO ĐẦU - xoay qua lại giữa mỏ cắt và que dò (ĐƠN VỊ = ĐỘ) ---
+  #
+  #  Hai đầu gắn lệch nhau 90 độ trên cùng một trục, nên xoay 90 độ là đổi
+  #  đầu nào chúc xuống.  Cái hay của kiểu này: khi mỗi đầu đã chúc xuống
+  #  thì cả hai nằm ĐÚNG CÙNG MỘT CHỖ theo X và Y, chỉ khác chiều cao - nên
+  #  bên PipeCut Studio thường chỉ phải khai mỗi ô "que dò thấp hơn mỏ".
+  #
+  #  steps_per_mm ở đây cũng là "số xung mỗi ĐỘ", công thức như trục A.
+  #
+  #  NÊN LẮP CÔNG TẮC VỀ GỐC cho trục này: mất điện xong máy không biết đầu
+  #  nào đang chúc xuống, mà đoán sai là mồi lửa ngay trên đầu que dò.
+  #  Về gốc ở chu kỳ 4 (sau cùng) - lúc đó Z đã nâng lên rồi nên xoay an toàn.
+  b:
+    steps_per_mm: 8.889          # 1,8 độ, vi bước 1/8, giảm tốc 2:1 - TỰ TÍNH LẠI
+    max_rate_mm_per_min: 6000.000
+    acceleration_mm_per_sec2: 800.000
+    max_travel_mm: 180.000
+    soft_limits: true
+    homing:
+      cycle: 4
+      positive_direction: false
+      mpos_mm: 0.000
+      feed_mm_per_min: 200.000
+      seek_mm_per_min: 800.000
+      settle_ms: 250
+    motor0:
+      limit_neg_pin: gpio.41:low:pu
+      hard_limits: false
+      pulloff_mm: 2.000
+      standard_stepper:
+        step_pin: gpio.39
+        direction_pin: gpio.40
+
 # =====================================================================
 #  NGUỒN CẮT - CHỖ NÀY TỰ CHỈNH THEO MÁY CỦA BẠN
 # =====================================================================
@@ -242,52 +273,28 @@ Relay:
 # =====================================================================
 #  DÒ CHẠM - cho chế độ "Dò cạnh" của PipeCut Studio
 # =====================================================================
-#  Cần một tiếp điểm đóng khi chạm phôi.  Bản này dùng CHÍNH MỎ CẮT làm
-#  đầu dò: kẹp một dây vào đầu mỏ plasma, cho Z hạ xuống từ từ tới khi béc
-#  chạm phôi là đóng mạch qua chính phôi (phôi đã nối mát máy cắt).
+#  Cần một tiếp điểm đóng khi chạm phôi.
 #
-#  !! PHẢI ĐỌC TRƯỚC KHI ĐẤU DÂY !!
+#  Dùng ĐẦU DÒ CẢM ỨNG (touch probe) gắn trên đầu đảo B: đầu dò có sẵn
+#  tiếp điểm bên trong, chạm phôi là nó ngắt/đóng mạch.  Chỉ mua mỗi cái
+#  KIM DÒ (bi ruby + trục sứ) thì KHÔNG dùng được - bi ruby và trục sứ đều
+#  không dẫn điện, kim chỉ là phần vặn vào thân đầu dò.
 #
-#  1. Máy plasma của bạn mồi hồ quang kiểu gì?
-#     - MỒI CHẠM (blowback / contact start): đa số máy cắt rẻ tiền.  An toàn
-#       tương đối cho kiểu dò này.
-#     - MỒI CAO TẦN (HF start): có bộ phóng tia lửa điện, phát xung hàng
-#       chục nghìn vôn ở tần số MHz.  Xung đó chạy ngược theo dây dò vào
-#       chân vi điều khiển là **cháy bo ngay**.  Máy HF thì ĐỪNG đấu kiểu
-#       này, dùng bản đầu dò riêng (fluidnc_pipe4axis_s3_dau_do.yaml).
-#     Cách nhận biết: bấm mồi trong không khí (không chạm phôi) mà vẫn ra
-#     tia lửa xanh lét kèm tiếng rè rè -> mồi cao tần.
+#  Đầu dò cảm ứng thường có 3 dây: nguồn (5V hoặc 12V), mát, và tín hiệu.
+#  Nếu tín hiệu ra 5V hoặc 12V thì PHẢI hạ áp/cách ly quang về 3,3V trước
+#  khi vào chân ESP32-S3 - chân S3 không chịu được 5V.
 #
-#  2. Dù là máy mồi chạm, lúc cắt đầu mỏ vẫn mang điện hồ quang (100-300 V).
-#     BẮT BUỘC phải có RƠ-LE TÁCH DÂY DÒ: chỉ nối dây dò vào mỏ trong lúc
-#     dò, ngắt hẳn trước khi cắt.  Rơ-le đó khai ở mục user_outputs bên
-#     dưới; phần mềm tự đóng (M62) lúc dò và ngắt (M63) trước khi cắt.
+#  Nhớ khai "que dò thấp hơn mỏ bao nhiêu mm" trong PipeCut Studio (thẻ
+#  Điều khiển -> khung Dò cạnh), nếu không gốc Z đặt ra sẽ lệch đúng bằng
+#  hiệu chiều dài giữa đầu dò và mỏ cắt.
 #
-#  3. Vẫn nên cách ly quang cho chân probe.  Một con opto rẻ tiền đứng giữa
-#     là ranh giới duy nhất giữa mạch hồ quang và con ESP32.
-#
-#  4. Béc là đồ tiêu hao: chạm nhiều thì móp lỗ.  Để tốc độ dò chậm
-#     (150-300 mm/ph) và bật dò hai lần trong PipeCut Studio.
-#
-#  Kiểm tra trước: gõ '?' rồi lấy tay chạm dây dò vào phôi, dòng trạng thái
+#  Kiểm tra trước: gõ '?' rồi lấy tay chạm que vào phôi, dòng trạng thái
 #  phải hiện  Pn:P
 # ---------------------------------------------------------------------
 probe:
   pin: gpio.11:low:pu
   check_mode_start: true
   hard_stop: false
-
-# =====================================================================
-#  RƠ-LE TÁCH DÂY DÒ
-# =====================================================================
-#  Chỉ nối dây dò vào đầu mỏ trong lúc dò, ngắt hẳn trước khi cắt.  Đây là
-#  thứ đứng giữa mạch dò và điện hồ quang - đừng bỏ.
-#
-#  PipeCut Studio tự điều khiển: M62 P0 đóng lúc dò, M63 P0 ngắt khi xong.
-#  Khai số 0 vào ô "Ngõ ra rơ-le dây dò" trong khung Dò cạnh.
-# ---------------------------------------------------------------------
-user_outputs:
-  digital0_pin: gpio.47
 
 # =====================================================================
 #  CÔNG TẮC ĐIỀU KHIỂN NGOÀI (tuỳ chọn - để NO_PIN nếu chưa lắp)

@@ -88,6 +88,19 @@ class ProbeSpec:
     # cao (bằng hiệu chiều dài hai đầu).  Vì vậy thường chỉ phải khai
     # ``probe_below``, còn hai số lệch ngang/dọc để 0 - trừ khi hai đầu còn
     # gắn lệch nhau dọc theo chính trục đảo.
+    # --- Dò bằng chính mỏ cắt (ohmic) ---------------------------------
+    # Kẹp một dây vào đầu mỏ plasma, cho Z hạ xuống tới khi béc chạm phôi là
+    # đóng mạch.  Không cần đầu dò riêng, không cần trục đảo - đầu dò chính
+    # là mũi cắt nên **mọi số lệch đều bằng 0**.
+    #
+    # Đổi lại phải lo phần điện: xem mục 12 trong hướng dẫn.  Nếu có rơ-le
+    # tách dây dò ra khỏi mạch lúc cắt thì khai số ngõ ra ở đây, phần mềm sẽ
+    # tự đóng lúc dò và ngắt trước khi cắt.
+    ohmic: bool = False             # dò bằng chính mỏ cắt
+    ohmic_output: int = -1          # ngõ ra số điều khiển rơ-le tách dây dò
+                                    # (-1 = đấu chết, không có rơ-le)
+    ohmic_settle: float = 0.3       # chờ rơ-le đóng/ngắt xong (giây)
+
     swivel: bool = False            # máy có trục đảo đầu không
     swivel_torch: float = 0.0       # góc trục đảo khi MỎ CẮT chúc xuống (độ)
     swivel_probe: float = 90.0      # góc trục đảo khi QUE DÒ chúc xuống (độ)
@@ -144,6 +157,24 @@ class ProbeSpec:
             )
         if self.probe_below < 0.0:
             msgs.append("Que dò phải THẤP HƠN mũi cắt: số này không được âm.")
+        if self.ohmic:
+            if self.has_offset:
+                msgs.append(
+                    "Dò bằng chính mỏ cắt thì đầu dò CHÍNH LÀ mũi cắt, mọi số "
+                    "lệch phải bằng 0."
+                )
+            if self.swivel:
+                msgs.append(
+                    "Đã chọn dò bằng chính mỏ cắt thì không cần đầu đảo nữa - "
+                    "tắt một trong hai."
+                )
+            if self.ohmic_output >= 8:
+                msgs.append("Số ngõ ra phải trong khoảng 0..7 (M62/M63 của FluidNC).")
+            if self.seek_feed > 400.0:
+                msgs.append(
+                    f"Dò bằng chính mỏ cắt nên đi chậm: {self.seek_feed:g} mm/ph "
+                    f"là nhanh quá, béc đập vào phôi sẽ móp lỗ. Nên để 150-300."
+                )
         if self.swivel:
             if abs(self.swivel_probe - self.swivel_torch) < 1e-6:
                 msgs.append(
@@ -259,17 +290,44 @@ def swivel_steps(profile: MachineProfile, spec: ProbeSpec,
     return steps
 
 
-def stow_lines(profile: MachineProfile, spec: ProbeSpec) -> List[str]:
-    """Lệnh trả đầu đảo về mỏ cắt.
+def arm_steps(profile: MachineProfile, spec: ProbeSpec) -> List[Step]:
+    """Chuẩn bị dò: tắt mỏ, đóng dây dò, đưa đầu dò vào tư thế.
 
-    Bộ điều khiển gửi chuỗi này **kể cả khi quy trình dò báo lỗi giữa chừng**,
-    để máy không bị bỏ lại ở tư thế que dò chúc xuống - lần cắt sau sẽ đâm que
-    vào phôi.
+    Bước **tắt nguồn cắt luôn được gửi**, bất kể phần cứng kiểu gì.  Dò với mỏ
+    đang cháy là hỏng phôi và hỏng cả đầu dò.
+    """
+    steps: List[Step] = [Step([profile.process.off_command], note="tắt nguồn cắt")]
+    if spec.ohmic and spec.ohmic_output >= 0:
+        steps.append(Step([f"M62 P{int(spec.ohmic_output)}"],
+                          note="đóng rơ-le nối dây dò vào mỏ"))
+        if spec.ohmic_settle > 0:
+            steps.append(Step([f"G4 P{fmt(spec.ohmic_settle)}"], note="chờ rơ-le đóng"))
+    steps.extend(swivel_steps(profile, spec, to_probe=True))
+    return steps
+
+
+def disarm_lines(profile: MachineProfile, spec: ProbeSpec) -> List[str]:
+    """Lệnh kết thúc dò: trả đầu về mỏ cắt, ngắt dây dò, tắt mỏ cho chắc.
+
+    Bộ điều khiển gửi chuỗi này **kể cả khi quy trình dò báo lỗi giữa chừng**.
+    Bỏ máy lại ở tư thế đầu dò chúc xuống, hoặc còn nối dây dò vào mỏ, là lần
+    cắt sau hỏng ngay: đâm kim vào phôi, hoặc điện hồ quang chạy ngược vào
+    mạch dò.
     """
     out: List[str] = []
     for step in swivel_steps(profile, spec, to_probe=False):
         out.extend(step.lines)
+    if spec.ohmic and spec.ohmic_output >= 0:
+        out.append(f"M63 P{int(spec.ohmic_output)}")
+        if spec.ohmic_settle > 0:
+            out.append(f"G4 P{fmt(spec.ohmic_settle)}")
+    out.append(profile.process.off_command)
     return out
+
+
+# tên cũ, giữ cho mã đang gọi
+def stow_lines(profile: MachineProfile, spec: ProbeSpec) -> List[str]:
+    return disarm_lines(profile, spec)
 
 
 def _move_to(letter: str, value: float, feed: float) -> Step:
@@ -648,25 +706,33 @@ def find_all(profile: MachineProfile, spec: ProbeSpec,
     return out
 
 
-def with_swivel(profile: MachineProfile, spec: ProbeSpec,
-                routine: Routine) -> Routine:
-    """Bọc một quy trình dò bằng hai bước đảo đầu.
+def with_probe_setup(profile: MachineProfile, spec: ProbeSpec,
+                     routine: Routine) -> Routine:
+    """Bọc một quy trình dò bằng bước chuẩn bị và bước kết thúc.
 
-    Xoay sang que dò trước, chạy quy trình, rồi trả về mỏ cắt.  Máy không có
-    đầu đảo thì hàm này không thêm gì cả.
+    Chuẩn bị (tắt mỏ, đóng dây dò, xoay đầu đảo) -> chạy quy trình -> kết thúc.
+    Phần cứng kiểu nào cũng đi qua đây; máy đơn giản thì chỉ còn mỗi lệnh tắt
+    nguồn cắt.
 
-    Nếu quy trình lỗi giữa chừng, bước trả về **không** chạy ở đây - việc đó
+    Nếu quy trình lỗi giữa chừng, bước kết thúc **không** chạy ở đây - việc đó
     do ``controller.run_probe`` lo bằng chuỗi ``cleanup``, để nó chạy được cả
     khi người dùng bấm dừng.
     """
-    for step in swivel_steps(profile, spec, to_probe=True):
+    for step in arm_steps(profile, spec):
         yield step
     outcome = yield from routine
-    for step in swivel_steps(profile, spec, to_probe=False):
-        yield step
-    if spec.swivel and outcome is not None:
-        outcome.notes.append("Đã trả đầu đảo về mỏ cắt.")
+    for line in disarm_lines(profile, spec):
+        yield Step([line], note="kết thúc dò")
+    if outcome is not None:
+        if spec.swivel:
+            outcome.notes.append("Đã trả đầu đảo về mỏ cắt.")
+        if spec.ohmic and spec.ohmic_output >= 0:
+            outcome.notes.append("Đã ngắt rơ-le dây dò khỏi mỏ cắt.")
     return outcome
+
+
+# tên cũ, giữ cho mã đang gọi
+with_swivel = with_probe_setup
 
 
 ROUTINES: Dict[str, Tuple[str, Callable[..., Routine]]] = {

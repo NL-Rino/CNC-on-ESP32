@@ -596,83 +596,100 @@ Thay vì rà tay từng trục rồi đặt gốc bằng mắt, để máy tự 
 bốn gốc**: mặt phôi (Z), đường tâm phôi (X), mặt đầu ống (Y), và với ống hộp là
 cả góc xoay cho mặt phẳng nằm ngang (A).
 
-### Cần cảm biến gì
+### Chọn cách dò: hai đường
 
-Mỏ plasma kích bằng rơ-le thì bản thân nó không dò được — phải thêm **một tiếp
-điểm đóng khi chạm phôi**, nối vào chân `probe` đã khai trong FluidNC.
+| | **Dò bằng chính mỏ cắt** *(đơn giản hơn)* | **Đầu dò riêng trên trục đảo** |
+|---|---|---|
+| Phần cứng thêm | 1 dây kẹp vào béc + 1 rơ-le tách dây | Thân đầu dò cảm ứng + kim dò + 1 mô-tơ + 1 trục |
+| Cấu hình FluidNC | `fluidnc_pipe4axis_s3.yaml` (4 trục) | `fluidnc_pipe4axis_s3_dau_do.yaml` (5 trục) |
+| Hồ sơ máy | `config/machine_s3_do_bang_mo.json` | `config/machine_s3_dau_do.json` |
+| Rủi ro | Điện hồ quang / cao tần chạy ngược vào mạch dò | Không dính gì tới mạch plasma |
+| Hao mòn | Béc chạm phôi mỗi lần dò | Không đụng tới béc |
+
+### Dò bằng chính mỏ cắt: phải đọc trước khi đấu dây
+
+Kẹp một dây vào đầu mỏ plasma, cho Z hạ xuống từ từ tới khi béc chạm phôi là
+đóng mạch qua chính phôi (phôi đã nối mát máy cắt). Không cần đầu dò riêng.
+
+Đổi lại phải lo phần điện cho đúng. **Bốn việc, không bỏ việc nào:**
+
+**1. Máy plasma của bạn mồi hồ quang kiểu gì?** Đây là câu quyết định.
+
+* **Mồi chạm** (blowback / contact start) — đa số máy cắt rẻ tiền. Béc bị đẩy ra
+  để tạo hồ quang, không có xung cao áp. **Kiểu dò này dùng được.**
+* **Mồi cao tần** (HF start) — có bộ phóng tia lửa điện, phát xung **hàng chục
+  nghìn vôn ở tần số MHz**. Xung đó chạy ngược theo dây dò vào chân vi điều
+  khiển là **cháy bo ngay**. Máy HF thì **đừng đấu kiểu này**, chuyển sang
+  đường đầu dò riêng.
+
+  *Cách nhận biết:* bấm mồi trong không khí, không chạm phôi. Vẫn ra tia lửa
+  xanh lét kèm tiếng rè rè liên tục → mồi cao tần. Không ra gì cả, phải chạm
+  phôi mới có hồ quang → mồi chạm.
+
+**2. Bắt buộc có rơ-le tách dây dò.** Dù là máy mồi chạm, lúc cắt đầu mỏ vẫn
+mang điện hồ quang 100–300 V. Rơ-le này chỉ nối dây dò vào mỏ **trong lúc dò**,
+ngắt hẳn trước khi cắt.
+
+Phần mềm tự lo: `M62 P0` đóng lúc bắt đầu dò, `M63 P0` ngắt khi xong — kể cả khi
+dò lỗi hay bấm dừng giữa chừng. Khai chân rơ-le ở mục `user_outputs` trong tệp
+cấu hình FluidNC (mẫu để ở `gpio 47`), và điền số ngõ ra vào ô **Ngõ ra rơ-le
+dây dò** (mẫu là `0`). Đấu chết không có rơ-le thì để `-1`, nhưng **không nên**.
+
+**3. Nên cách ly quang cho chân probe.** Một con opto rẻ tiền đứng giữa là ranh
+giới duy nhất giữa mạch hồ quang và con ESP32-S3.
+
+**4. Béc là đồ tiêu hao.** Chạm nhiều thì móp lỗ, mà lỗ béc móp là mạch cắt hỏng
+theo. Để **tốc độ dò chậm** (150–300 mm/ph) và bật **dò hai lần** — lần đầu
+nhanh để tìm, lần sau chậm để lấy số chính xác. Phần mềm cảnh báo nếu đặt tốc độ
+dò quá 400 mm/ph ở chế độ này.
+
+Trong hồ sơ máy mẫu: dò 250 mm/ph, dò lại 40 mm/ph, nhấc 3 mm sau khi chạm.
+
+Vì đầu dò **chính là mũi cắt** nên mọi số lệch đều bằng 0 — không phải đo đạc gì,
+gốc Z rơi đúng mặt phôi.
+
+### Đầu dò riêng trên trục đảo
 
 > **Mua kim dò không đủ.** Cái bán rời gồm **bi ruby + trục sứ** chỉ là *kim dò*
 > (stylus), vặn ren M2.5 vào **thân đầu dò**. Bi ruby và trục sứ đều **không dẫn
 > điện** — bản thân kim không đóng mạch được. Phải mua cả **thân đầu dò cảm ứng**
 > (touch probe body), bên trong có tiếp điểm; kim chỉ là phần mòn thay được.
 
-Ba cách, xếp theo mức nên dùng:
+> **Nguồn nuôi đầu dò:** thường có 3 dây (nguồn, mát, tín hiệu). Nếu tín hiệu ra
+> 5 V hay 12 V thì **phải hạ áp hoặc cách ly quang về 3,3 V** trước khi vào chân
+> ESP32-S3 — chân S3 không chịu được 5 V.
 
-| Cách | Cách hoạt động | Nhận xét |
-|---|---|---|
-| **Đầu dò cảm ứng trên đầu đảo** *(đang dùng)* | Đầu dò gắn lệch 90° với mỏ cắt trên một trục đảo; một mô-tơ xoay qua lại đổi đầu nào chúc xuống | Chính xác nhất, không hại mỏ. Cần thêm một mô-tơ và một trục trong FluidNC |
-| **Đầu cắt thả nổi + công tắc hành trình** | Mỏ trượt trên ray hoặc lò xo; chạm phôi là mỏ bị đẩy lên, gạt công tắc | Rẻ, bền, không cần thêm trục. Nhưng chính mỏ chạm phôi nên hại béc |
-| **Dò dẫn điện qua chụp mỏ (ohmic)** | Đo thông mạch giữa chụp mỏ và phôi | **Rủi ro:** xung cao tần lúc mồi hồ quang phá chân vi điều khiển. Bắt buộc cách ly quang. Xỉ bám chụp mỏ là dò sai |
+Đầu dò gắn **lệch 90°** với mỏ cắt trên một trục đảo (trục `B`), một mô-tơ xoay
+qua lại đổi đầu nào chúc xuống. Kiểu này có một cái hay về hình học: **khi mỗi
+đầu đã chúc xuống thì cả hai nằm đúng cùng một chỗ theo X và Y**, chỉ khác chiều
+cao — nên chỉ phải khai một số duy nhất, *đầu dò thấp hơn mỏ bao nhiêu mm*.
 
-> **Nguồn nuôi đầu dò:** đầu dò cảm ứng thường có 3 dây (nguồn, mát, tín hiệu).
-> Nếu tín hiệu ra 5 V hay 12 V thì **phải hạ áp hoặc cách ly quang về 3,3 V**
-> trước khi vào chân ESP32-S3 — chân S3 không chịu được 5 V.
-
-> **An toàn:** nguồn cắt phải **TẮT** suốt lúc dò. Phần mềm không bật mỏ khi dò,
-> nhưng hãy tự kiểm tra lần đầu.
-
-Kiểm tra cảm biến trước: gõ `?` ở ô lệnh, lấy tay chạm kim dò vào phôi, dòng
-trạng thái phải hiện `Pn:P`. Không thấy chữ `P` nghĩa là chưa nối đúng.
-
-### Đầu đảo: một mô-tơ xoay giữa mỏ cắt và đầu dò
-
-Hai đầu gắn **lệch nhau 90°** trên cùng một trục đảo (khai là trục `B` trong
-FluidNC). Xoay 90° là đổi đầu nào chúc xuống.
-
-Kiểu này có một cái hay về hình học: **khi mỗi đầu đã chúc xuống thì cả hai nằm
-đúng cùng một chỗ theo X và Y**, chỉ khác chiều cao — bằng đúng hiệu chiều dài
-hai đầu. Nên thường chỉ phải khai một số duy nhất: *đầu dò thấp hơn mỏ bao
-nhiêu mm*.
-
-Trình tự phần mềm tự làm, không phải gõ tay:
+Trình tự phần mềm tự làm:
 
 ```
-nâng Z lên cao độ xoay  →  xoay B sang đầu dò  →  chờ hết rung
-   →  dò  →  nâng Z  →  xoay B về mỏ cắt
+tắt mỏ → nâng Z → xoay B sang đầu dò → chờ hết rung
+      → dò → nâng Z → xoay B về mỏ cắt
 ```
 
 **Nâng trước rồi mới xoay** là bắt buộc: lúc xoay, đầu dài hơn quét một cung
-quanh trục đảo, không nâng đủ cao là nó quét thẳng vào phôi. Phần mềm kiểm tra
-trước — đặt cao độ xoay thấp hơn tầm quét là nó báo lỗi, không cho chạy.
+quanh trục đảo, không nâng đủ cao là nó quét thẳng vào phôi. Đặt cao độ xoay
+thấp hơn tầm quét là phần mềm báo lỗi, không cho chạy.
 
-Hai chốt an toàn nữa:
+**Nên lắp công tắc về gốc cho trục đảo** (mẫu để ở `gpio 41`, chu kỳ về gốc 4 —
+sau khi Z đã nâng). Không có nó thì sau mỗi lần mất điện phải tự xoay về mỏ cắt
+rồi đặt lại gốc trục B bằng tay.
 
-* **Dò lỗi hay bấm dừng giữa chừng thì máy vẫn tự trả đầu về mỏ cắt.** Bỏ máy
-  lại ở tư thế đầu dò chúc xuống là lần cắt sau đâm kim vào phôi.
-* **Mọi chương trình cắt đều mở đầu bằng lệnh đưa đầu đảo về mỏ cắt**, đứng
-  trước mọi lệnh bật nguồn cắt. Mất điện xong máy không biết đầu nào đang chúc
-  xuống, mà đoán sai là mồi lửa ngay trên đầu dò.
+### Ba chốt an toàn, chung cho cả hai đường
 
-**Nên lắp công tắc về gốc cho trục đảo** (tệp cấu hình mẫu để ở `gpio 41`, chu
-kỳ về gốc 4 — sau khi Z đã nâng). Không có nó thì sau mỗi lần mất điện phải tự
-xoay về mỏ cắt rồi đặt lại gốc trục B bằng tay.
+1. **Luôn tắt nguồn cắt trước khi dò** — lệnh đầu tiên của mọi quy trình dò.
+2. **Dò lỗi hay bấm dừng giữa chừng thì máy vẫn tự về tư thế cắt**: ngắt dây dò,
+   trả đầu đảo về mỏ cắt, tắt mỏ lần nữa cho chắc.
+3. **Mọi chương trình cắt đều mở đầu bằng lệnh đưa đầu đảo về mỏ cắt**, đứng
+   trước mọi lệnh bật nguồn cắt.
 
-### Các ô cần khai
-
-Khung **Dò cạnh** ở thẻ Điều khiển:
-
-| Ô | Ý nghĩa |
-|---|---|
-| **Đầu dò thấp hơn mỏ** | Hiệu chiều dài hai đầu, tính bằng mm. Đo trên máy thật |
-| **Quãng dò tối đa** | Giới hạn an toàn, cũng quyết định có tới được mép rộng nhất không |
-| **Đầu dò lệch ngang / lệch dọc** | Chỉ khác 0 khi hai đầu còn gắn lệch nhau *dọc theo chính trục đảo*. Kiểu đảo 90° thông thường thì để 0 |
-| **Có đầu đảo** | Tắt nếu dùng đầu cắt thả nổi |
-| **Cao độ xoay đảo** | Nâng lên tới đây rồi mới xoay. Phải lớn hơn tầm quét của đầu dài |
-| **Góc đảo: mỏ cắt / đầu dò** | Hai vị trí của trục B, thường là 0° và 90° |
-
-Phần mềm quy kết quả về đúng mũi cắt khi đặt gốc. Ví dụ đầu dò thấp hơn mỏ
-18 mm: kim chạm mặt phôi thì mũi cắt đang ở **trên** mặt phôi 18 mm, nên gốc Z
-được đặt là **+18**, không phải 0.
+Kiểm tra cảm biến trước khi dò lần đầu: gõ `?` ở ô lệnh, lấy tay chạm dây dò (hay
+kim dò) vào phôi — dòng trạng thái phải hiện `Pn:P`. Không thấy chữ `P` nghĩa là
+chưa nối đúng.
 
 ### Vì sao không dò ngang như máy phay
 

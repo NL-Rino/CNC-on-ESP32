@@ -339,10 +339,12 @@ class TestSwivelHead(unittest.TestCase):
         self.assertTrue(any("B90" in l for l in to_probe), to_probe)
         self.assertTrue(any("B0" in l for l in to_torch), to_torch)
 
-    def test_khong_co_dau_dao_thi_khong_them_lenh_nao(self):
+    def test_khong_co_dau_dao_thi_khong_them_lenh_xoay_nao(self):
         p = _profile()
         self.assertEqual(probing.swivel_steps(p, ProbeSpec(), True), [])
-        self.assertEqual(probing.stow_lines(p, ProbeSpec()), [])
+        # nhưng lệnh tắt nguồn cắt thì luôn có, bất kể phần cứng kiểu gì
+        self.assertEqual(probing.disarm_lines(p, ProbeSpec()),
+                         [p.process.off_command])
 
     def test_bat_dau_dao_ma_thieu_truc_thi_bao_loi(self):
         with self.assertRaises(ProbeError) as ctx:
@@ -352,9 +354,11 @@ class TestSwivelHead(unittest.TestCase):
     def test_boc_quy_trinh_thi_xoay_di_roi_xoay_ve(self):
         p, spec = self._profile_with_swivel(), self._spec()
         inner = probing.probe_surface(p, spec, start={"X": 0, "Y": 100, "Z": 30})
-        gen = probing.with_swivel(p, spec, inner)
+        gen = probing.with_probe_setup(p, spec, inner)
         first = gen.send(None)
-        self.assertIn("Z45", first.lines[0])
+        # việc đầu tiên luôn là tắt nguồn cắt - dò với mỏ đang cháy là hỏng cả
+        # phôi lẫn đầu dò
+        self.assertEqual(first.lines[0], p.process.off_command)
         # chạy nốt trên phôi ảo rồi xem lệnh cuối cùng
         lines = list(first.lines)
         result = None
@@ -369,6 +373,7 @@ class TestSwivelHead(unittest.TestCase):
                                                   touched=True)
         except StopIteration:
             pass
+        self.assertTrue(any("Z45" in l for l in sim_lines), "phải nâng trước khi xoay")
         self.assertTrue(any("B90" in l for l in sim_lines), "phải xoay sang đầu dò")
         self.assertTrue(any("B0" in l for l in sim_lines), "phải trả về mỏ cắt")
         self.assertLess(max(i for i, l in enumerate(sim_lines) if "B90" in l),
@@ -430,6 +435,67 @@ class TestSwivelHead(unittest.TestCase):
         self.assertTrue(p.probe.swivel)
         self.assertFalse(p.validate())
         self.assertFalse(p.probe.validate())
+
+
+class TestOhmicProbe(unittest.TestCase):
+    """Dò bằng chính mỏ cắt: kẹp dây vào béc, hạ Z tới khi chạm phôi."""
+
+    def test_dau_do_chinh_la_mui_cat_nen_khong_co_lech(self):
+        spec = ProbeSpec(ohmic=True, seek_feed=250.0)
+        self.assertFalse(spec.has_offset)
+        p = _profile()
+        self.assertEqual(spec.offsets(p), {"X": 0.0, "Y": 0.0, "Z": -0.0})
+
+    def test_goc_z_dat_ngay_tai_mat_phoi(self):
+        p = _profile()
+        spec = ProbeSpec(ohmic=True, seek_feed=250.0)
+        out, _ = _run(p, probing.probe_surface(p, spec, start=TestRoutines.START),
+                      dict(x_centre=0.0, y_end=0.0, roll_deg=0.0, z_axis_centre=-40.0),
+                      TestRoutines.START)
+        self.assertAlmostEqual(out.zero[p.letter(ROLE_RADIAL)], 0.0, places=6)
+
+    def test_luon_tat_nguon_cat_truoc_khi_do(self):
+        p = _profile()
+        steps = probing.arm_steps(p, ProbeSpec(ohmic=True, seek_feed=250.0))
+        self.assertEqual(steps[0].lines, [p.process.off_command])
+
+    def test_ro_le_tach_day_do_dong_luc_do_ngat_luc_cat(self):
+        p = _profile()
+        spec = ProbeSpec(ohmic=True, ohmic_output=2, seek_feed=250.0)
+        arm = [l for st in probing.arm_steps(p, spec) for l in st.lines]
+        disarm = probing.disarm_lines(p, spec)
+        self.assertIn("M62 P2", arm)
+        self.assertIn("M63 P2", disarm)
+        # ngắt dây dò rồi mới thôi, và kết thúc bằng tắt mỏ
+        self.assertLess(disarm.index("M63 P2"), len(disarm) - 1)
+        self.assertEqual(disarm[-1], p.process.off_command)
+
+    def test_khong_khai_ro_le_thi_khong_sinh_M62(self):
+        p = _profile()
+        spec = ProbeSpec(ohmic=True, seek_feed=250.0)
+        arm = [l for st in probing.arm_steps(p, spec) for l in st.lines]
+        self.assertEqual(arm, [p.process.off_command])
+
+    def test_soat_cau_hinh_vo_ly(self):
+        self.assertFalse(ProbeSpec(ohmic=True, seek_feed=250.0).validate())
+        # đầu dò là mũi cắt thì không thể có khoảng lệch
+        self.assertTrue(ProbeSpec(ohmic=True, probe_below=12.0).validate())
+        # vừa ohmic vừa đầu đảo là mâu thuẫn
+        self.assertTrue(ProbeSpec(ohmic=True, swivel=True).validate())
+        # đi nhanh quá thì béc đập vào phôi
+        self.assertTrue(ProbeSpec(ohmic=True, seek_feed=900.0).validate())
+        # số ngõ ra ngoài tầm M62/M63
+        self.assertTrue(ProbeSpec(ohmic=True, seek_feed=250.0,
+                                  ohmic_output=9).validate())
+
+    def test_luu_va_nap_lai(self):
+        p = _profile()
+        p.probe.ohmic = True
+        p.probe.ohmic_output = 3
+        p.probe.seek_feed = 200.0
+        again = MachineProfile.from_dict(p.to_dict())
+        self.assertTrue(again.probe.ohmic)
+        self.assertEqual(again.probe.ohmic_output, 3)
 
 if __name__ == "__main__":
     unittest.main()

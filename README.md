@@ -233,23 +233,47 @@ Không phải rà tay từng trục nữa. Máy tự dò ra **cả bốn gốc**
 đường tâm phôi (X), mặt đầu ống (Y), và với ống hộp là cả góc xoay cho mặt phẳng
 nằm ngang (A).
 
-**Cần thêm gì:** một tiếp điểm đóng khi chạm phôi, nối vào chân `probe` của
-FluidNC. Lưu ý cái bán rời gồm bi ruby + trục sứ chỉ là **kim dò** — bi ruby và
-trục sứ đều không dẫn điện, phải mua cả **thân đầu dò cảm ứng** thì mới có tiếp
-điểm.
+**Hai đường đi, chọn một:**
 
-**Đầu đảo** — cách đang dùng: đầu dò gắn lệch **90°** với mỏ cắt trên một trục
+| | **Dò bằng chính mỏ cắt** | **Đầu dò riêng trên trục đảo** |
+|---|---|---|
+| Sắm thêm | 1 dây kẹp vào béc + 1 rơ-le tách dây | Thân đầu dò cảm ứng + kim dò + 1 mô-tơ + 1 trục |
+| Cấu hình FluidNC | [`fluidnc_pipe4axis_s3.yaml`](firmware/fluidnc_pipe4axis_s3.yaml) (4 trục) | [`fluidnc_pipe4axis_s3_dau_do.yaml`](firmware/fluidnc_pipe4axis_s3_dau_do.yaml) (5 trục) |
+| Hồ sơ máy | `config/machine_s3_do_bang_mo.json` | `config/machine_s3_dau_do.json` |
+| Rủi ro | Điện hồ quang chạy ngược vào mạch dò | Không dính gì tới mạch plasma |
+
+**Dò bằng chính mỏ cắt** — kẹp một dây vào đầu mỏ, cho Z hạ từ từ tới khi béc
+chạm phôi là đóng mạch qua chính phôi. Đầu dò *chính là* mũi cắt nên mọi số lệch
+bằng 0, không phải đo đạc gì.
+
+> ⚠ **Trước khi đấu dây phải biết máy plasma mồi hồ quang kiểu gì.** Máy **mồi
+> cao tần** (HF start) phát xung hàng chục nghìn vôn ở tần số MHz; xung đó chạy
+> ngược theo dây dò là **cháy bo ngay** — máy HF thì dùng đường đầu dò riêng.
+> *Cách thử:* bấm mồi trong không khí, không chạm phôi. Vẫn ra tia lửa xanh kèm
+> tiếng rè rè → mồi cao tần. Phải chạm phôi mới có hồ quang → **mồi chạm**
+> (blowback), kiểu này dò được.
+>
+> Dù là máy mồi chạm vẫn **bắt buộc có rơ-le tách dây dò** — lúc cắt đầu mỏ mang
+> điện hồ quang 100–300 V. Phần mềm tự đóng (`M62`) khi bắt đầu dò và ngắt
+> (`M63`) khi xong, kể cả lúc dò lỗi hay bấm dừng giữa chừng. Nên cách ly quang
+> cho chân probe. Và **béc là đồ tiêu hao** — để tốc độ dò 150–300 mm/ph, phần
+> mềm cảnh báo nếu đặt quá 400.
+
+**Đầu dò riêng trên trục đảo** — đầu dò gắn lệch **90°** với mỏ cắt trên một trục
 đảo (trục `B`), một mô-tơ xoay qua lại đổi đầu nào chúc xuống. Cái hay về hình
 học: khi mỗi đầu đã chúc xuống thì cả hai nằm **đúng cùng một chỗ theo X-Y**,
 chỉ khác chiều cao — nên thường chỉ phải khai một số duy nhất, *đầu dò thấp hơn
-mỏ bao nhiêu mm*.
+mỏ bao nhiêu mm*. Phần mềm tự lo trình tự: nâng Z → xoay sang đầu dò → dò → xoay
+về mỏ cắt. Lưu ý cái bán rời gồm bi ruby + trục sứ chỉ là **kim dò** — bi ruby và
+trục sứ đều không dẫn điện, phải mua cả **thân đầu dò cảm ứng** thì mới có tiếp
+điểm.
 
-Phần mềm tự lo trình tự: nâng Z → xoay sang đầu dò → dò → xoay về mỏ cắt. Ba
-chốt an toàn: **nâng trước rồi mới xoay** (không thì đầu dài quét vào phôi, phần
-mềm chặn nếu cao độ xoay quá thấp); **dò lỗi hay bấm dừng vẫn tự trả đầu về mỏ
-cắt**; và **mọi chương trình cắt đều mở đầu bằng lệnh đưa đầu đảo về mỏ cắt**,
-đứng trước mọi lệnh bật nguồn — mất điện xong máy không biết đầu nào đang chúc
-xuống, đoán sai là mồi lửa ngay trên đầu dò.
+**Ba chốt an toàn, chung cho cả hai đường:** **luôn tắt nguồn cắt trước khi dò**
+(lệnh đầu tiên của mọi quy trình); **dò lỗi hay bấm dừng vẫn tự về tư thế cắt**
+(ngắt dây dò, trả đầu đảo về mỏ, tắt mỏ lần nữa); và **mọi chương trình cắt đều
+mở đầu bằng lệnh đưa đầu đảo về mỏ cắt**, đứng trước mọi lệnh bật nguồn — mất
+điện xong máy không biết đầu nào đang chúc xuống, đoán sai là mồi lửa ngay trên
+đầu dò. Ở cấu hình 4 trục không có trục đảo thì chốt thứ ba tự bỏ qua.
 
 **Vì sao không dò ngang như máy phay:** mỏ treo thẳng đứng, đâm ngang vào ống là
 gãy mỏ. Nên cách làm ở đây chỉ cần **dò xuống**:
@@ -313,7 +337,8 @@ Hai dòng chip dùng **firmware khác nhau và bảng chân khác nhau**, nạp 
 
 | Bo | Bản firmware | Tệp cấu hình dùng kèm |
 |---|---|---|
-| **ESP32-S3** (S3-DevKitC-1...) | `wifi_s3` | [`fluidnc_pipe4axis_s3.yaml`](firmware/fluidnc_pipe4axis_s3.yaml) |
+| **ESP32-S3** (S3-DevKitC-1...) | `wifi_s3` | [`fluidnc_pipe4axis_s3.yaml`](firmware/fluidnc_pipe4axis_s3.yaml) — 4 trục, dò bằng mỏ cắt |
+| **ESP32-S3** + đầu dò trên trục đảo | `wifi_s3` | [`fluidnc_pipe4axis_s3_dau_do.yaml`](firmware/fluidnc_pipe4axis_s3_dau_do.yaml) — 5 trục |
 | **ESP32 gốc** (WROOM-32) | `wifi` | [`fluidnc_pipe4axis.yaml`](firmware/fluidnc_pipe4axis.yaml) |
 
 Bo **S3-DevKitC-1 có hai cổng USB-C**: cổng in chữ **USB** nối thẳng vào chip
@@ -537,8 +562,8 @@ pipecut/
   palette.py     bảng màu dùng chung (nền sáng / nền tối, tông FreeCAD)
   ui/            giao diện đồ hoạ Tkinter (kèm khung mô phỏng máy 3D)
 config/          hồ sơ máy mẫu (ống tròn, ống hộp, xoay góc, trục vát,
-                 laser, và bản ESP32-S3 có đầu đảo dò)
-firmware/        cấu hình FluidNC cho ESP32 gốc và ESP32-S3
+                 laser, hai bản ESP32-S3: dò bằng mỏ cắt và đầu đảo)
+firmware/        cấu hình FluidNC: ESP32 gốc, S3 (4 trục), S3 + trục đảo
 examples/        tệp công việc mẫu + bản vẽ mẫu (DXF, SVG, G-code phẳng)
 docs/            hướng dẫn sử dụng và tài liệu kỹ thuật
 tests/           230 bài kiểm thử (chạy bằng thư viện chuẩn)

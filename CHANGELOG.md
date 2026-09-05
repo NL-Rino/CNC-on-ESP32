@@ -1,5 +1,50 @@
 # Nhật ký thay đổi
 
+## v1.10.0 — 2026-09-05
+
+### Dò bằng chính mỏ cắt (ohmic touch-off)
+
+Thêm đường thứ hai để dò cạnh, không cần đầu dò cảm ứng: **kẹp một dây vào đầu
+mỏ plasma**, cho Z hạ từ từ tới khi béc chạm phôi là đóng mạch qua chính phôi
+(phôi đã nối mát máy cắt). Đầu dò *chính là* mũi cắt nên **mọi số lệch bằng 0** —
+gốc Z rơi đúng mặt phôi, không phải đo đạc gì.
+
+Hai đường giờ dùng chung một bộ mã: `arm_steps()` / `disarm_lines()` /
+`with_probe_setup()`. Chọn đường nào là chuyện của hồ sơ máy.
+
+**Bốn điều kiện phần cứng, phần mềm chặn hoặc cảnh báo từng cái:**
+
+1. **Máy phải mồi chạm (blowback), không phải mồi cao tần (HF).** Máy HF phát
+   xung hàng chục nghìn vôn ở tần số MHz, chạy ngược theo dây dò là cháy bo.
+   Cách thử ghi trong hướng dẫn: bấm mồi trong không khí — vẫn ra tia lửa kèm
+   tiếng rè rè liên tục là mồi cao tần, phải chuyển sang đầu dò riêng.
+2. **Bắt buộc có rơ-le tách dây dò.** Lúc cắt, đầu mỏ mang điện hồ quang
+   100–300 V. Phần mềm đóng rơ-le (`M62 P<n>`) khi bắt đầu dò và ngắt
+   (`M63 P<n>`) khi xong — **kể cả khi dò lỗi hay bấm dừng giữa chừng**. Khai
+   chân ở mục `user_outputs` của tệp cấu hình FluidNC (mẫu `gpio 47`).
+3. **Nên cách ly quang chân probe** — ranh giới duy nhất giữa mạch hồ quang và
+   con ESP32-S3.
+4. **Béc là đồ tiêu hao.** Dò nhanh quá là móp lỗ béc. Phần mềm **từ chối** tốc
+   độ dò trên 400 mm/ph ở chế độ này; hồ sơ mẫu để 250 mm/ph rồi dò lại 40.
+
+Phần kiểm tra khai báo cũng từ chối: số lệch khác 0 (đầu dò *là* mỏ, không có
+lệch), bật ohmic cùng lúc với đầu đảo, và số ngõ ra ngoài dải 0–7.
+
+**Tắt nguồn cắt luôn là lệnh đầu tiên** của mọi quy trình dò, trước cả lệnh đóng
+rơ-le hay xoay đầu đảo.
+
+### Tách tệp cấu hình FluidNC cho S3 thành hai bản
+
+`fluidnc_pipe4axis_s3.yaml` giờ là bản **4 trục dò bằng mỏ cắt**, có thêm mục
+`user_outputs` cho rơ-le tách dây. Bản 5 trục có trục đảo chuyển sang tệp riêng
+`fluidnc_pipe4axis_s3_dau_do.yaml`.
+
+Phải tách vì để trục `B` trong cấu hình mà không lắp mô-tơ là **về gốc treo ở chu
+kỳ 4**, máy đứng im không báo gì.
+
+Kèm hồ sơ máy mẫu `config/machine_s3_do_bang_mo.json` (4 trục, dò 250 mm/ph, dò
+lại 40 mm/ph, nhấc 3 mm, mọi số lệch 0).
+
 ## v1.9.0 — 2026-09-04
 
 ### Đầu đảo: một mô-tơ xoay giữa mỏ cắt và đầu dò

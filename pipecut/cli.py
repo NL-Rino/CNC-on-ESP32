@@ -165,11 +165,11 @@ def cmd_probe(args: argparse.Namespace) -> int:
         done.set()
 
     try:
-        from .probing import stow_lines, with_swivel
-        routine = with_swivel(
+        from .probing import disarm_lines, with_probe_setup
+        routine = with_probe_setup(
             profile, spec,
             factory(profile, spec, set_zero=not args.no_zero, start=start))
-        controller.run_probe(routine, cleanup=stow_lines(profile, spec),
+        controller.run_probe(routine, cleanup=disarm_lines(profile, spec),
                              on_done=finished,
                              on_step=lambda note: print(f"  · {note}")
                              if args.verbose else None)

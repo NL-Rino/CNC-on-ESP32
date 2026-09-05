@@ -19,7 +19,11 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FILES = {
     "esp32": os.path.join(REPO, "firmware", "fluidnc_pipe4axis.yaml"),
     "esp32s3": os.path.join(REPO, "firmware", "fluidnc_pipe4axis_s3.yaml"),
+    "esp32s3_dau_do": os.path.join(REPO, "firmware",
+                                   "fluidnc_pipe4axis_s3_dau_do.yaml"),
 }
+# cùng dòng chip thì cùng bộ chân cấm
+CHIP_OF = {"esp32": "esp32", "esp32s3": "esp32s3", "esp32s3_dau_do": "esp32s3"}
 
 # --- danh sách khoá hợp lệ, lấy từ mã nguồn FluidNC v4.0.4 -------------
 ROOT = {"name", "board", "meta", "stepping", "planner_blocks", "arc_tolerance_mm",
@@ -132,7 +136,8 @@ class TestFirmwareConfig(unittest.TestCase):
             self.assertIn(doc["stepping"]["engine"], ENGINES, key)
 
     def test_khong_dung_chan_cam(self):
-        for key, forbidden in BAD_PINS.items():
+        for key in FILES:
+            forbidden = BAD_PINS[CHIP_OF[key]]
             text, _ = self._load(key)
             used = {int(m.group(2)) for m in PIN_RE.finditer(text)}
             clash = sorted(used & forbidden)
@@ -175,7 +180,22 @@ class TestFirmwareConfig(unittest.TestCase):
             _, doc = self._load(key)
             pin = str(doc["Relay"]["output_pin"])
             num = int(pin.split(".")[1].split(":")[0])
-            self.assertNotIn(num, BAD_PINS[key], f"{key}: rơ-le ở chân {num}")
+            self.assertNotIn(num, BAD_PINS[CHIP_OF[key]],
+                             f"{key}: rơ-le ở chân {num}")
+
+    def test_ban_do_bang_mo_cat_co_ro_le_tach_day_do(self):
+        """Không có rơ-le tách thì điện hồ quang chạy thẳng vào mạch dò."""
+        _, doc = self._load("esp32s3")
+        self.assertIn("user_outputs", doc,
+                      "bản dò bằng chính mỏ cắt phải có ngõ ra rơ-le tách dây dò")
+        self.assertIn("digital0_pin", doc["user_outputs"])
+
+    def test_ban_dau_dao_co_du_truc_B(self):
+        _, doc = self._load("esp32s3_dau_do")
+        self.assertIn("b", doc["axes"], "bản đầu đảo phải có trục B")
+        self.assertNotIn("b", self._load("esp32s3")[1]["axes"],
+                         "bản dò bằng mỏ cắt không được có trục B thừa - "
+                         "về gốc sẽ treo vì không có mô-tơ")
 
 
 if __name__ == "__main__":

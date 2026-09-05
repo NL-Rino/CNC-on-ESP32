@@ -1,5 +1,71 @@
 # Nhật ký thay đổi
 
+## v1.8.0 — 2026-09-04
+
+### Sửa hai lỗi trong tệp cấu hình FluidNC mẫu
+
+Đối chiếu từng khoá với mã nguồn FluidNC v4.0.4 thì thấy hai lỗi, **cả hai đều
+làm máy không chạy được** mà không báo gì:
+
+* **Nguồn cắt khai sai chỗ.** Tôi lồng nó trong một khoá `spindle:`, nhưng
+  FluidNC không có khoá đó — nguồn cắt khai ngay ở **gốc tệp**, tên khối chính là
+  loại nguồn cắt (`Relay:`, `PWM:`...). Lồng sai là cả khối bị bỏ qua và **mỏ
+  không bao giờ kích**.
+* **Tên driver động cơ sai.** Tôi ghi `stepstick:`, nhưng tên đăng ký thật là
+  `standard_stepper:` — chữ `stepstick` chỉ nằm trong một dòng chú thích của mã
+  nguồn. Khai sai là **trục không có chân STEP/DIR nên đứng im**.
+
+Còn một lỗi nhỏ: `pulloff_mm` nằm nhầm trong khối `homing`, đúng ra thuộc về
+`motor0`.
+
+FluidNC **lặng lẽ bỏ qua khoá lạ** chứ không dừng, nên cả ba lỗi này đều không
+có thông báo gì nếu không chạy `$Config/Validate`. Đã ghi rõ điều đó trong
+hướng dẫn.
+
+Thêm `tests/test_firmware_config.py`: 10 bài soát tệp cấu hình theo danh sách
+khoá lấy từ chính mã nguồn FluidNC — khoá lạ, tên driver, vị trí nguồn cắt, chân
+cấm theo từng dòng chip, chân trùng, trục xoay không được đặt giới hạn hành
+trình, Z phải về gốc trước, rơ-le mỏ cắt không được nằm ở chân khởi động.
+
+### Tệp cấu hình ESP32-S3 đầy đủ
+
+Viết lại `firmware/fluidnc_pipe4axis_s3.yaml` cho đủ mọi phần: sinh xung, bộ đệm
+nhìn trước, sai số cung và mức phanh ở góc, bốn trục kèm về gốc, nguồn cắt, dò
+chạm, công tắc điều khiển ngoài (E-stop / tạm dừng / chạy tiếp), thiết lập lúc
+khởi động, và macro.
+
+Khối **nguồn cắt** để riêng một chỗ có đánh dấu rõ, kèm sẵn khối `PWM` cho laser
+và `NoSpindle` cho chạy khô — chọn xong nguồn cắt thì mở khối tương ứng.
+
+Thêm chân cho nút DỪNG KHẨN (`gpio 13`), tạm dừng (`gpio 14`) và chạy tiếp
+(`gpio 42`), khai kiểu **thường đóng** đúng chuẩn an toàn. Có ghi rõ đây chỉ là
+dừng *phần mềm*, vẫn bắt buộc phải có công tắc dừng khẩn **cứng** cắt thẳng
+nguồn động lực.
+
+### Que dò riêng đặt cạnh mỏ cắt
+
+Đầu que dò không nằm cùng chỗ với mũi cắt, nên mọi số đo được là đo ở vị trí que
+dò. Thêm ba ô khai khoảng lệch (**thấp hơn mỏ bao nhiêu**, **lệch ngang**,
+**lệch dọc**); phần mềm quy kết quả về đúng mũi cắt khi đặt gốc.
+
+Ví dụ que thấp hơn mỏ 12 mm: que chạm mặt phôi thì mũi cắt đang ở *trên* mặt
+phôi 12 mm, nên gốc Z đặt là **+12** chứ không phải 0.
+
+Khoảng lệch chỉ đổi gốc đặt ra, **không đổi số đo** — có bài kiểm thử giữ đúng
+điều này. Trục xoay không bị bù (que đặt lệch chỗ nào thì góc vẫn thế).
+
+Phần mềm chặn trước cấu hình nguy hiểm: khai lệch ngang mà quên khai que thấp
+hơn mỏ là báo lỗi ngay, vì khi đó mỏ đâm vào phôi trước khi que kịp chạm.
+
+Hộp thoại xác nhận nhắc rõ phải rà **đầu que dò** (không phải mũi cắt) vào giữa
+mặt trên phôi, kèm số lệch đang khai.
+
+### Khác
+
+* Thêm 17 bài kiểm thử, tổng cộng **221**.
+* `pyyaml` chỉ dùng cho bài kiểm thử cấu hình và tự bỏ qua khi thiếu — phần mềm
+  vẫn không cần thư viện ngoài nào ngoài `pyserial`.
+
 ## v1.7.0 — 2026-09-04
 
 ### Chế độ dò cạnh: máy tự tìm phôi và đặt gốc toạ độ

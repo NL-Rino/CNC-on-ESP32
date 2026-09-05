@@ -234,5 +234,76 @@ class TestProbeSpec(unittest.TestCase):
         self.assertAlmostEqual(again.probe.tolerance, 0.05)
 
 
+
+class TestProbeOffset(unittest.TestCase):
+    """Que dò riêng đặt cạnh mỏ: gốc phải quy về mũi cắt, không phải đầu que."""
+
+    START = {"X": 0.0, "Y": 100.0, "Z": 30.0, "A": 0.0}
+
+    def _truth(self, **kw):
+        base = dict(x_centre=0.0, y_end=0.0, roll_deg=0.0, z_axis_centre=-40.0)
+        base.update(kw)
+        return base
+
+    def test_que_do_thap_hon_mo_thi_goc_z_du_ra_dung_bay_nhieu(self):
+        p = _profile()
+        spec = ProbeSpec(probe_below=12.0)
+        out, _ = _run(p, probing.probe_surface(p, spec, start=self.START),
+                      self._truth(), self.START)
+        # que chạm mặt phôi thì mũi cắt còn ở TRÊN mặt 12 mm
+        self.assertAlmostEqual(out.zero[p.letter(ROLE_RADIAL)], 12.0, places=6)
+
+    def test_khong_khai_lech_thi_goc_bang_khong(self):
+        p = _profile()
+        out, _ = _run(p, probing.probe_surface(p, ProbeSpec(), start=self.START),
+                      self._truth(), self.START)
+        self.assertAlmostEqual(out.zero[p.letter(ROLE_RADIAL)], 0.0, places=6)
+
+    def test_lech_ngang_va_doc_deu_duoc_bu(self):
+        p = _profile()
+        spec = ProbeSpec(offset_x=-32.0, offset_y=5.0, probe_below=12.0)
+        xl, yl = p.letter(ROLE_CROSS), p.letter(ROLE_ALONG)
+        centre, _ = _run(p, probing.find_center(p, spec, start=self.START),
+                         self._truth(), self.START)
+        self.assertAlmostEqual(centre.zero[xl], 32.0, places=6)
+        end, _ = _run(p, probing.find_end(p, spec, start=self.START),
+                      self._truth(), self.START)
+        self.assertAlmostEqual(end.zero[yl], -5.0, places=6)
+
+    def test_do_duoc_van_dung_du_co_lech(self):
+        """Khoảng lệch chỉ đổi gốc đặt ra, không đổi số đo."""
+        p = _profile()
+        truth = self._truth(x_centre=7.35)
+        start = dict(self.START, X=7.35)
+        a, _ = _run(p, probing.find_center(p, ProbeSpec(), start=start), truth, start)
+        b, _ = _run(p, probing.find_center(
+            p, ProbeSpec(offset_x=-32.0, probe_below=12.0), start=start), truth, start)
+        xl = p.letter(ROLE_CROSS)
+        self.assertAlmostEqual(a.values[f"{xl}_tâm"], b.values[f"{xl}_tâm"], places=6)
+        self.assertAlmostEqual(a.values["bề_rộng"], b.values["bề_rộng"], places=6)
+
+    def test_truc_xoay_khong_bi_bu_lech(self):
+        """Que dò đặt lệch chỗ nào thì góc xoay vẫn thế - không bù gì cả."""
+        p = _profile()
+        spec = ProbeSpec(offset_x=-32.0, probe_below=12.0)
+        out, _ = _run(p, probing.level_face(p, spec, start=self.START),
+                      self._truth(roll_deg=5.0), self.START)
+        self.assertAlmostEqual(out.zero[p.letter("rotary")], 0.0, places=6)
+
+    def test_soat_thong_so_lech_vo_ly(self):
+        self.assertFalse(ProbeSpec(offset_x=-32.0, probe_below=12.0).validate())
+        # khai lệch ngang mà quên khai que thấp hơn mỏ -> mỏ đâm phôi trước
+        self.assertTrue(ProbeSpec(offset_x=-32.0).validate())
+        self.assertTrue(ProbeSpec(probe_below=-1.0).validate())
+
+    def test_luu_va_nap_lai_khoang_lech(self):
+        p = _profile()
+        p.probe.offset_x = -32.0
+        p.probe.probe_below = 12.0
+        again = MachineProfile.from_dict(p.to_dict())
+        self.assertAlmostEqual(again.probe.offset_x, -32.0)
+        self.assertAlmostEqual(again.probe.probe_below, 12.0)
+        self.assertTrue(again.probe.has_offset)
+
 if __name__ == "__main__":
     unittest.main()

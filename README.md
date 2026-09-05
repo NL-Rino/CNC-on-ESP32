@@ -234,10 +234,16 @@ Không phải rà tay từng trục nữa. Máy tự dò ra **cả bốn gốc**
 nằm ngang (A).
 
 **Cần thêm gì:** một tiếp điểm đóng khi mỏ chạm phôi, nối vào chân `probe` của
-FluidNC. Cách nên dùng nhất với plasma kích rơ-le là **đầu cắt thả nổi + công
-tắc hành trình** — rẻ, bền, và không dính gì tới mạch plasma nên không sợ cao
-tần. (Kiểu dò dẫn điện qua chụp mỏ thì xung cao tần lúc mồi hồ quang dễ giết bo,
-phải cách ly quang.)
+FluidNC. Hai cách hợp với plasma kích rơ-le: **que dò riêng đặt cạnh mỏ**
+(chính xác nhất, không hại mỏ) hoặc **đầu cắt thả nổi + công tắc hành trình**
+(rẻ, bền). Cả hai đều không dính gì tới mạch plasma nên không sợ cao tần — khác
+với kiểu dò dẫn điện qua chụp mỏ, xung cao tần lúc mồi hồ quang dễ giết bo.
+
+Dùng que dò riêng thì phải **khai khoảng lệch** của que so với mũi cắt (thấp hơn
+bao nhiêu, lệch ngang/dọc bao nhiêu). Phần mềm quy kết quả về đúng mũi cắt khi
+đặt gốc: que thấp hơn mỏ 12 mm thì lúc que chạm mặt phôi, gốc Z được đặt là
+**+12** chứ không phải 0. Que bắt buộc phải nhô xuống thấp hơn mũi cắt, nếu
+không mỏ đâm vào phôi trước — phần mềm chặn trước và báo lỗi.
 
 **Vì sao không dò ngang như máy phay:** mỏ treo thẳng đứng, đâm ngang vào ống là
 gãy mỏ. Nên cách làm ở đây chỉ cần **dò xuống**:
@@ -528,7 +534,7 @@ config/          hồ sơ máy mẫu (ống tròn, ống hộp, xoay góc, trụ
 firmware/        cấu hình FluidNC cho ESP32 gốc và ESP32-S3
 examples/        tệp công việc mẫu + bản vẽ mẫu (DXF, SVG, G-code phẳng)
 docs/            hướng dẫn sử dụng và tài liệu kỹ thuật
-tests/           204 bài kiểm thử (chạy bằng thư viện chuẩn)
+tests/           221 bài kiểm thử (chạy bằng thư viện chuẩn)
 ```
 
 Chạy kiểm thử:

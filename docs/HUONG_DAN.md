@@ -126,6 +126,11 @@ thành `--baud 115200` rồi chạy lại. Cáp USB dài hoặc rẻ tiền hay 
    `$Config/Filename=fluidnc_pipe4axis.yaml` rồi khởi động lại.
 3. Gõ `$Config/Validate` — FluidNC sẽ in ra mọi dòng nó không hiểu. Phải **sạch
    lỗi** mới cấp điện động lực.
+
+> **Vì sao bước `$Config/Validate` quan trọng:** khai sai một khoá thì FluidNC
+> **lặng lẽ bỏ qua cả khối** chứ không dừng. Khai nhầm tên driver động cơ là
+> trục không có chân STEP/DIR nên đứng im; khai nhầm chỗ nguồn cắt là mỏ không
+> bao giờ kích. Cả hai đều không có thông báo gì nếu không chạy Validate.
 4. **Đối chiếu chân GPIO** trong tệp YAML với bo mạch thực tế. Xem bảng chân
    tổng hợp ở cuối tệp YAML.
 
@@ -607,8 +612,36 @@ cách, xếp theo mức nên dùng:
 > nhưng hãy tự kiểm tra lần đầu. Nếu dùng kiểu ohmic, đừng đấu thẳng chụp mỏ vào
 > chân ESP32 — cao tần sẽ giết bo.
 
-Kiểm tra cảm biến trước: gõ `?` ở ô lệnh, lấy tay gạt công tắc, dòng trạng thái
-phải hiện `Pn:P`. Không thấy chữ `P` nghĩa là chưa nối đúng.
+Kiểm tra cảm biến trước: gõ `?` ở ô lệnh, lấy tay gạt công tắc (hoặc chạm que dò
+vào phôi), dòng trạng thái phải hiện `Pn:P`. Không thấy chữ `P` nghĩa là chưa nối
+đúng.
+
+### Dùng que dò riêng: phải khai khoảng lệch
+
+Đầu que dò **không nằm cùng chỗ với mũi cắt**, nên mọi số đo được là đo ở vị trí
+que dò. Không khai khoảng lệch thì gốc đặt ra sẽ sai đúng bằng khoảng cách giữa
+que và mỏ.
+
+Ba ô trong khung **Dò cạnh** (thẻ Điều khiển):
+
+| Ô | Đo cái gì | Ví dụ |
+|---|---|---|
+| **Que dò thấp hơn mỏ** | Đầu que nhô xuống thấp hơn mũi cắt bao nhiêu mm | `12` |
+| **Que lệch ngang** | Que lệch khỏi mũi cắt bao nhiêu mm theo trục ngang (X). Số âm là lệch về phía âm | `-32` |
+| **Que lệch dọc** | Lệch theo chiều dọc phôi (Y) | `0` |
+
+Phần mềm quy kết quả về đúng mũi cắt khi đặt gốc. Ví dụ que thấp hơn mỏ 12 mm:
+que chạm mặt phôi thì mũi cắt đang ở **trên** mặt phôi 12 mm, nên gốc Z được đặt
+là **+12**, không phải 0.
+
+> Que dò **bắt buộc phải nhô xuống thấp hơn mũi cắt**, nếu không mỏ đâm vào phôi
+> trước khi que kịp chạm. Phần mềm chặn trước: khai lệch ngang mà để ô "thấp hơn
+> mỏ" bằng 0 là nó báo lỗi ngay, không cho chạy.
+
+Lúc dò, hãy rà sao cho **đầu que dò** (không phải mũi cắt) nằm ở khoảng giữa mặt
+trên phôi. Hộp thoại xác nhận nhắc lại điều này kèm số lệch đang khai.
+
+Dùng đầu cắt thả nổi thì để cả ba số bằng 0.
 
 ### Vì sao không dò ngang như máy phay
 

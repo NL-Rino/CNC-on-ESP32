@@ -70,6 +70,36 @@ class ProbeSpec:
     level_tolerance: float = 0.15   # dừng khi hai điểm chênh nhau ít hơn (mm)
     double_tap: bool = True         # dò hai lần (nhanh rồi chậm) cho chính xác
 
+    # --- Que dò riêng đặt cạnh mỏ cắt ---------------------------------
+    # Đầu que dò không nằm cùng chỗ với mũi cắt, nên mọi số đo được là đo ở
+    # **vị trí que dò**.  Ba số dưới đây nói que dò lệch khỏi mũi cắt bao
+    # nhiêu, để phần mềm quy kết quả về đúng mũi cắt khi đặt gốc.
+    #
+    # Dùng đầu cắt thả nổi (chính mỏ chạm phôi) thì để cả ba bằng 0.
+    offset_x: float = 0.0           # que dò lệch bao nhiêu theo trục ngang (mm)
+    offset_y: float = 0.0           # que dò lệch bao nhiêu theo trục dọc phôi (mm)
+    probe_below: float = 0.0        # đầu que dò THẤP HƠN mũi cắt bao nhiêu (mm)
+
+    @property
+    def has_offset(self) -> bool:
+        return any(abs(v) > 1e-9 for v in
+                   (self.offset_x, self.offset_y, self.probe_below))
+
+    def offsets(self, profile) -> Dict[str, float]:
+        """Khoảng lệch của que dò so với mũi cắt, theo từng chữ cái trục."""
+        out: Dict[str, float] = {}
+        xl = profile.letter(ROLE_CROSS)
+        yl = profile.letter(ROLE_ALONG)
+        zl = profile.letter(ROLE_RADIAL)
+        if xl:
+            out[xl] = self.offset_x
+        if yl:
+            out[yl] = self.offset_y
+        if zl:
+            # que dò thấp hơn mũi cắt => lệch theo Z là số âm
+            out[zl] = -self.probe_below
+        return out
+
     def validate(self) -> List[str]:
         msgs: List[str] = []
         if self.latch_feed > self.seek_feed:
@@ -80,6 +110,15 @@ class ProbeSpec:
             msgs.append("Quãng dò xuống tối đa phải lớn hơn 0.")
         if self.clearance < self.retract:
             msgs.append("Chiều cao an toàn phải lớn hơn quãng nhấc.")
+        if (abs(self.offset_x) > 1e-9 or abs(self.offset_y) > 1e-9) \
+                and self.probe_below <= 0.0:
+            msgs.append(
+                "Đã khai que dò lệch khỏi mỏ nhưng chưa khai nó thấp hơn mỏ bao "
+                "nhiêu. Que dò phải nhô xuống thấp hơn mũi cắt, không thì mỏ "
+                "đâm vào phôi trước khi que kịp chạm."
+            )
+        if self.probe_below < 0.0:
+            msgs.append("Que dò phải THẤP HƠN mũi cắt: số này không được âm.")
         return msgs
 
 
@@ -109,6 +148,20 @@ class ProbeOutcome:
 
 # Quy trình dò là một generator: nó *yield* từng bước, nhận lại kết quả dò.
 Routine = Generator[Step, Optional[ProbeResult], ProbeOutcome]
+
+
+def _zero_at(spec: ProbeSpec, profile: MachineProfile, letter: str) -> float:
+    """Giá trị gốc chi tiết cần đặt cho một trục, đã bù khoảng lệch que dò.
+
+    Số đo được là đo ở **đầu que dò**, nhưng gốc phải quy về **mũi cắt**.  Lúc
+    que dò đang đứng đúng chỗ vừa tìm ra, mũi cắt còn cách chỗ đó đúng bằng
+    khoảng lệch ``d``, nên toạ độ chi tiết ngay lúc này phải là ``-d`` chứ
+    không phải 0.
+
+    Ví dụ: que dò thấp hơn mũi cắt 12 mm.  Que chạm mặt phôi thì mũi cắt đang
+    ở **trên** mặt phôi 12 mm, nên gốc Z phải đặt là +12, không phải 0.
+    """
+    return -spec.offsets(profile).get(letter, 0.0)
 
 
 def fmt(value: float) -> str:
@@ -170,8 +223,13 @@ def probe_surface(profile: MachineProfile, spec: ProbeSpec,
 
     out = ProbeOutcome(kind="Chạm mặt phôi", values={zl: z})
     if set_zero:
-        out.zero[zl] = 0.0
-        out.notes.append(f"Đặt gốc {zl} ngay tại mặt phôi.")
+        out.zero[zl] = _zero_at(spec, profile, zl)
+        if spec.probe_below > 0:
+            out.notes.append(
+                f"Đặt gốc {zl} tại mặt phôi, đã bù que dò thấp hơn mũi cắt "
+                f"{spec.probe_below:g} mm.")
+        else:
+            out.notes.append(f"Đặt gốc {zl} ngay tại mặt phôi.")
     return out
 
 
@@ -340,8 +398,10 @@ def find_center(profile: MachineProfile, spec: ProbeSpec,
             f"'Cân mặt phẳng' trước, hoặc nới quãng dò tối đa."
         )
     if set_zero:
-        out.zero[xl] = 0.0
-        out.notes.append(f"Đặt gốc {xl} tại đúng đường tâm phôi.")
+        out.zero[xl] = _zero_at(spec, profile, xl)
+        extra = (f", đã bù que dò lệch {spec.offset_x:g} mm"
+                 if abs(spec.offset_x) > 1e-9 else "")
+        out.notes.append(f"Đặt gốc {xl} tại đúng đường tâm phôi{extra}.")
     return out
 
 
@@ -386,8 +446,10 @@ def find_end(profile: MachineProfile, spec: ProbeSpec,
     out = ProbeOutcome(kind="Tìm đầu ống",
                        values={yl: edge, "sai_số": result.values["sai_so"]})
     if set_zero:
-        out.zero[yl] = 0.0
-        out.notes.append(f"Đặt gốc {yl} ngay tại mặt đầu ống.")
+        out.zero[yl] = _zero_at(spec, profile, yl)
+        extra = (f", đã bù que dò lệch {spec.offset_y:g} mm"
+                 if abs(spec.offset_y) > 1e-9 else "")
+        out.notes.append(f"Đặt gốc {yl} ngay tại mặt đầu ống{extra}.")
     return out
 
 

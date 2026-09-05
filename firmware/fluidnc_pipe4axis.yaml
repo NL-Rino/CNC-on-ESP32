@@ -68,13 +68,12 @@ axes:
       feed_mm_per_min: 300.000
       seek_mm_per_min: 1500.000
       settle_ms: 250
-      pulloff_mm: 3.000
     motor0:
       # Chân chỉ-vào, không treo được bên trong -> hàn điện trở 10k lên 3V3.
       limit_neg_pin: gpio.34:low
       hard_limits: false
       pulloff_mm: 3.000
-      stepstick:
+      standard_stepper:
         step_pin: gpio.32
         direction_pin: gpio.33
         disable_pin: gpio.23
@@ -99,7 +98,7 @@ axes:
       limit_neg_pin: gpio.35:low        # chân chỉ-vào -> điện trở 10k lên 3V3
       hard_limits: false
       pulloff_mm: 2.000
-      stepstick:
+      standard_stepper:
         step_pin: gpio.25
         direction_pin: gpio.26
         disable_pin: gpio.23
@@ -122,7 +121,7 @@ axes:
       limit_pos_pin: gpio.36:low        # chân chỉ-vào -> điện trở 10k lên 3V3
       hard_limits: false
       pulloff_mm: 2.000
-      stepstick:
+      standard_stepper:
         step_pin: gpio.27
         direction_pin: gpio.13
         disable_pin: gpio.23
@@ -148,43 +147,49 @@ axes:
       cycle: 0                      # 0 = không về gốc (mâm cặp không cần)
     motor0:
       hard_limits: false
-      stepstick:
+      standard_stepper:
         step_pin: gpio.18
         direction_pin: gpio.19
         disable_pin: gpio.23
 
-# --- Nguồn cắt --------------------------------------------------------
-# Plasma / oxy-gas: dùng rơ-le, M3 bật - M5 tắt.
+# =====================================================================
+#  NGUỒN CẮT - CHỖ NÀY TỰ CHỈNH THEO MÁY CỦA BẠN
+# =====================================================================
+#  Khai ở **gốc tệp**, tên khối chính là loại nguồn cắt.  KHÔNG lồng trong
+#  một khoá 'spindle:' nào cả - FluidNC không có khoá đó, lồng vào là cả
+#  khối bị bỏ qua và mỏ không bao giờ kích.
 #
-# !! AN TOÀN: KHÔNG đặt rơ-le mỏ cắt vào gpio 0, 2, 5, 14, 15.  Đó là những
-#    chân quyết định chế độ khởi động hoặc phát xung PWM ngay khi cấp điện -
-#    mỏ cắt có thể phụt một nhát lúc bật nguồn.  gpio 21 dưới đây là chân
-#    thường, không dính gì tới khởi động.
+#  Đang bật: Relay (plasma / oxy-gas kích bằng rơ-le, M3 bật - M5 tắt).
 #
-#    Dù chọn chân nào cũng nên dùng rơ-le **thường hở** (normally open) và
-#    lắp thêm một công tắc cắt tay nối tiếp trên đường mồi của nguồn cắt.
-spindle:
-  relay:
-    output_pin: gpio.21
-    enable_pin: NO_PIN
-    disable_with_s0: true
-    s0_with_disable: true
-    spinup_ms: 0
-    spindown_ms: 0
-    tool_num: 0
-    speed_map: 0=0% 1=100%
+#  !! AN TOÀN: KHÔNG đặt rơ-le mỏ cắt vào gpio 0, 2, 5, 14, 15.  Đó là
+#     những chân quyết định chế độ khởi động hoặc phát xung PWM ngay khi
+#     cấp điện - mỏ cắt có thể phụt một nhát lúc bật nguồn.  gpio 21 dưới
+#     đây là chân thường.  Dù chọn chân nào cũng nên dùng rơ-le **thường
+#     hở** và lắp thêm công tắc cắt tay nối tiếp trên đường mồi.
+# ---------------------------------------------------------------------
+Relay:
+  output_pin: gpio.21
+  enable_pin: NO_PIN
+  direction_pin: NO_PIN
+  disable_with_s0: true
+  s0_with_disable: true
+  spinup_ms: 0
+  spindown_ms: 0
+  tool_num: 0
+  speed_map: 0=0% 1=100%
+  off_on_alarm: true
 
-# Nếu dùng LASER thì thay khối trên bằng:
-# spindle:
-#   PWM:
-#     pwm_hz: 5000
-#     output_pin: gpio.21
-#     enable_pin: NO_PIN
-#     disable_with_s0: false
-#     s0_with_disable: true
-#     tool_num: 0
-#     speed_map: 0=0.000% 1000=100.000%
-# và bật chế độ laser:  $GCode/LaserMode=true
+# --- Nếu dùng LASER: tắt khối Relay ở trên, mở khối này ---------------
+# PWM:
+#   pwm_hz: 5000
+#   output_pin: gpio.21
+#   enable_pin: NO_PIN
+#   disable_with_s0: false
+#   s0_with_disable: true
+#   tool_num: 0
+#   speed_map: 0=0.000% 1000=100.000%
+#   off_on_alarm: true
+# ... rồi bật chế độ laser:  $GCode/LaserMode=true
 
 # --- Cổng vào ra khác --------------------------------------------------
 control:

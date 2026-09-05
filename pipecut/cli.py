@@ -5,6 +5,7 @@ Ví dụ::
     python -m pipecut ports                       # liệt kê cổng COM
     python -m pipecut scan                        # dò ESP32 trong mạng LAN
     python -m pipecut ops                         # xem danh mục nguyên công
+    python -m pipecut clamp --top 'X123.4,Z-15.6,A0' ...   # căn tâm mâm cặp
     python -m pipecut import ban_ve.dxf           # xem thử một tệp nhập vào
     python -m pipecut gen examples/ong_T.json -o ra.nc --svg xem.svg
     python -m pipecut sim ra.nc                   # chạy thử trên máy ảo
@@ -108,6 +109,76 @@ def cmd_import(args: argparse.Namespace) -> int:
     total = sum(c.length for c in curves)
     print(f"\n  Tổng: {len(curves)} đường, {total:.1f} mm đường cắt.")
     print(f"  Dùng trong tệp công việc: nguyên công 'pattern' với file=\"{args.file}\".")
+    return 0
+
+
+def _parse_touch(text: str):
+    """Đọc một lần chạm viết kiểu ``X123.4,Z-45.6,A0``."""
+    from .clamp import Touch
+    pos = {}
+    for part in str(text).replace(";", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        letter, value = part[0].upper(), part[1:].lstrip("=: ")
+        try:
+            pos[letter] = float(value)
+        except ValueError:
+            raise SystemExit(f"Không đọc được số đo '{part}' (viết kiểu X123.4)")
+    return Touch(pos)
+
+
+def cmd_clamp(args: argparse.Namespace) -> int:
+    """Xem, tính hoặc xoá hồ sơ căn tâm mâm cặp."""
+    from .clamp import (TOUCH_LABELS, TOUCH_ORDER, ClampCalibration, ClampError,
+                        limit_report, solve, work_origin, zero_commands)
+
+    profile = _load_profile(args.profile)
+    letters = {"cross": profile.letter("cross") or "X",
+               "radial": profile.letter("radial") or "Z",
+               "rotary": profile.letter("rotary") or "A"}
+
+    if args.clear:
+        profile.clamp = ClampCalibration()
+        print("Đã xoá hồ sơ căn tâm.")
+    elif any(getattr(args, k) for k in TOUCH_ORDER):
+        touches = {}
+        for key in TOUCH_ORDER:
+            raw = getattr(args, key)
+            if raw:
+                touches[key] = _parse_touch(raw)
+        try:
+            cal, warns = solve(touches, profile.pipe, letters=letters, margin=args.margin)
+        except ClampError as exc:
+            print(f"[!] {exc}", file=sys.stderr)
+            return 2
+        profile.clamp = cal
+        for w in warns:
+            print(f"  [!] {w}", file=sys.stderr)
+
+    cal = profile.clamp
+    print(cal.summary())
+    if cal.valid:
+        org = work_origin(cal, profile.pipe)
+        print(f"  Ống đang khai   : {profile.pipe.size_text}")
+        print(f"  Bề rộng đo được : {cal.span_x:.2f} mm")
+        print(f"  Lệch tâm        : {cal.runout:+.3f} mm")
+        print(f"  Gốc {letters['cross']} (toạ độ máy): {org['X']:.3f}")
+        print(f"  Gốc {letters['radial']} (toạ độ máy): {org['Z']:.3f}")
+        print("  Lệnh đặt gốc    : " + " ; ".join(zero_commands(profile)))
+        rep = limit_report(profile)
+        if rep:
+            print("  Hành trình sau khi siết:")
+            for line in rep:
+                print(f"    {line}")
+    else:
+        print("  Chạm bốn chỗ rồi truyền vào, ví dụ:")
+        for key in TOUCH_ORDER:
+            print(f"    --{key.replace('_', '-')} 'X123.4,Z-15.6,A0'   # {TOUCH_LABELS[key]}")
+
+    if args.save:
+        profile.save(args.save)
+        print(f"Đã lưu hồ sơ máy: {args.save}")
     return 0
 
 
@@ -493,6 +564,19 @@ def build_parser() -> argparse.ArgumentParser:
                     help="máy ảo: phôi bị xoay lệch bấy nhiêu độ")
     _add_profile_arg(sp)
     sp.set_defaults(func=cmd_probe)
+
+    cl = sub.add_parser("clamp", help="căn tâm mâm cặp: chạm bốn mặt ống, tính gốc")
+    for key, hlp in (("top", "chạm đỉnh ống"), ("left", "chạm sườn trái"),
+                     ("right", "chạm sườn phải"),
+                     ("top180", "xoay A 180 độ rồi chạm đỉnh lần nữa")):
+        cl.add_argument(f"--{key}", default="",
+                        help=f"{hlp}, toạ độ MÁY, ví dụ 'X123.4,Z-15.6,A0'")
+    cl.add_argument("--margin", type=float, default=25.0,
+                    help="chừa thêm bao nhiêu mm khi siết hành trình")
+    cl.add_argument("--clear", action="store_true", help="xoá hồ sơ căn đang có")
+    cl.add_argument("--save", default="", help="ghi hồ sơ máy ra tệp này")
+    _add_profile_arg(cl)
+    cl.set_defaults(func=cmd_clamp)
 
     si = sub.add_parser("import", help="xem thử tệp DXF/SVG/G-code/STL trước khi dùng")
     si.add_argument("file")

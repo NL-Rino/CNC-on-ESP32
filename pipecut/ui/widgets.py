@@ -12,6 +12,66 @@ from . import theme
 PAD = 6
 
 
+class ScrollColumn(ttk.Frame):
+    """Cột dọc cuộn được.
+
+    Bảng điều khiển dài hơn màn hình là chuyện thường trên máy tính xách tay;
+    không có cái này thì mấy khung dưới cùng bị cắt mất, bấm không tới.  Xếp
+    widget vào ``.inner`` chứ không phải vào chính đối tượng này.
+    """
+
+    def __init__(self, master, **kw):
+        super().__init__(master, **kw)
+        p = theme.current()
+        self.canvas = tk.Canvas(self, highlightthickness=0, borderwidth=0,
+                                background=p.bg)
+        self.vbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self._on_scroll)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.inner = ttk.Frame(self.canvas)
+        self._win = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
+        self.inner.bind("<Configure>", self._on_inner)
+        # Con lăn chuột chỉ cướp quyền khi trỏ đang nằm trong cột này.
+        self.bind("<Enter>", self._grab_wheel)
+        self.bind("<Leave>", self._release_wheel)
+
+    # -- nội dung đổi kích thước thì cập nhật vùng cuộn và bề rộng cột --
+    def _on_inner(self, _event=None) -> None:
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        want = self.inner.winfo_reqwidth()
+        if want and want != int(self.canvas.cget("width")):
+            self.canvas.configure(width=want)
+
+    def _on_scroll(self, first: str, last: str) -> None:
+        """Chỉ hiện thanh cuộn khi nội dung thật sự dài hơn khung."""
+        if float(first) <= 0.0 and float(last) >= 1.0:
+            self.vbar.pack_forget()
+        else:
+            self.vbar.pack(side="right", fill="y")
+        self.vbar.set(first, last)
+
+    def _grab_wheel(self, _event=None) -> None:
+        self.bind_all("<MouseWheel>", self._wheel, add="+")
+        self.bind_all("<Button-4>", self._wheel, add="+")
+        self.bind_all("<Button-5>", self._wheel, add="+")
+
+    def _release_wheel(self, _event=None) -> None:
+        for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self.unbind_all(seq)
+
+    def _wheel(self, event) -> None:
+        if event.num == 4:
+            step = -1
+        elif event.num == 5:
+            step = 1
+        else:
+            step = -1 if event.delta > 0 else 1
+        self.canvas.yview_scroll(step, "units")
+
+    def apply_theme(self) -> None:
+        self.canvas.configure(background=theme.current().bg)
+
+
 class ParamForm(ttk.Frame):
     """Biểu mẫu nhập liệu tự sinh từ mô tả tham số.
 

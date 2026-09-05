@@ -39,7 +39,7 @@ from ..transport import list_ports
 from . import theme
 from .canvasview import PreviewCanvas
 from .machineview import MachineView
-from .widgets import PAD, Console, DRO, FieldGrid, ParamForm, StatusBadge
+from .widgets import PAD, Console, DRO, FieldGrid, ParamForm, ScrollColumn, StatusBadge
 
 APP_TITLE = "PipeCut Studio - Máy cắt ống 4 trục (ESP32 / FluidNC)"
 
@@ -285,8 +285,10 @@ class MainWindow:
     # ------------------------------------------------------------------
     def _build_control_tab(self) -> None:
         t = self.tab_control
-        left = ttk.Frame(t)
-        left.pack(side="left", fill="y")
+        # Cột trái dài hơn màn hình máy tính xách tay, nên cho cuộn được.
+        self.control_column = ScrollColumn(t)
+        self.control_column.pack(side="left", fill="y")
+        left = self.control_column.inner
         self.dro = DRO(left, self.profile.letters, padding=PAD)
         self.dro.pack(side="top", fill="x")
 
@@ -362,8 +364,9 @@ class MainWindow:
         probe.pack(side="top", fill="x", pady=(PAD, 0))
         probe.columnconfigure(0, weight=1)
         ttk.Label(probe, style="Hint.TLabel", wraplength=300, justify="left",
-                  text="Rà mỏ vào khoảng giữa mặt trên phôi rồi bấm. Máy dò xuống "
-                       "nhiều chỗ, chia đôi để tìm mép, rồi tự đặt gốc.").grid(
+                  text="Đường phụ, cần cảm biến chạm. Căn tâm mâm cặp bên phải là "
+                       "đủ cho gốc X và Z; cái này để máy tự tìm mép khi cần. Rà mỏ "
+                       "vào khoảng giữa mặt trên phôi rồi bấm.").grid(
             row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
         from ..probing import ROUTINES
         self._probe_keys = list(ROUTINES)
@@ -375,7 +378,18 @@ class MainWindow:
                                     style="Accent.TButton", command=self.start_probe)
         self.btn_probe.grid(row=1, column=1, padx=(4, 0))
         sp0 = self.profile.probe
-        self.f_probe = FieldGrid(probe, [
+        ttk.Button(probe, text="Thông số dò...", command=self.show_probe_options).grid(
+            row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        # Mười hai ô thông số nằm trong hộp thoại riêng: cột này đã chật, mà
+        # khai xong rồi thì hầu như không đụng lại nữa.
+        self._probe_dlg = tk.Toplevel(self.root)
+        self._probe_dlg.title("Thông số dò cạnh")
+        self._probe_dlg.withdraw()
+        self._probe_dlg.protocol("WM_DELETE_WINDOW", self._probe_dlg.withdraw)
+        self._probe_dlg.resizable(False, False)
+        box = ttk.Frame(self._probe_dlg, padding=PAD)
+        box.pack(fill="both", expand=True)
+        self.f_probe = FieldGrid(box, [
             ("probe_below", "Đầu dò thấp hơn mỏ [mm]", sp0.probe_below),
             ("max_depth", "Quãng dò tối đa [mm]", sp0.max_depth),
             ("offset_x", "Đầu dò lệch ngang [mm]", sp0.offset_x),
@@ -389,22 +403,95 @@ class MainWindow:
             ("swivel_torch", "Góc đảo: mỏ cắt [độ]", sp0.swivel_torch),
             ("swivel_probe", "Góc đảo: đầu dò [độ]", sp0.swivel_probe),
         ], columns=2)
-        self.f_probe.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
-        ttk.Label(probe, style="Hint.TLabel", wraplength=300, justify="left",
+        self.f_probe.pack(fill="x")
+        ttk.Label(box, style="Hint.TLabel", wraplength=420, justify="left",
                   text="Dò bằng chính mỏ cắt: kẹp dây vào béc, mọi số lệch để 0. "
                        "Ngõ ra rơ-le = -1 nếu đấu chết không có rơ-le tách dây. "
                        "Dùng đầu dò riêng trên đầu đảo thì bật ô 'Có đầu đảo' và "
-                       "khai đầu dò thấp hơn mỏ bao nhiêu.").grid(
-            row=3, column=0, columnspan=2, sticky="w")
+                       "khai đầu dò thấp hơn mỏ bao nhiêu.").pack(anchor="w", pady=(8, 6))
+        ttk.Button(box, text="Đóng", command=self._probe_dlg.withdraw).pack(anchor="e")
+
         self.lbl_probe = ttk.Label(probe, style="Dim.TLabel", wraplength=300,
                                    justify="left", text="")
-        self.lbl_probe.grid(row=4, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        self.lbl_probe.grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         right = ttk.Frame(t)
         right.pack(side="left", fill="both", expand=True, padx=(PAD, 0))
-        ttk.Label(right, text="Nhật ký giao tiếp").pack(anchor="w")
+        self._build_clamp_frame(right)
+        ttk.Label(right, text="Nhật ký giao tiếp").pack(anchor="w", pady=(PAD, 0))
         self.console = Console(right, on_send=self.send_manual)
         self.console.pack(fill="both", expand=True)
+
+    # ------------------------------------------------------------------
+    # Căn tâm mâm cặp: chạm bốn mặt ống, một lần, dùng mãi
+    # ------------------------------------------------------------------
+    def _build_clamp_frame(self, parent) -> None:
+        from ..clamp import TOUCH_LABELS, TOUCH_ORDER, Touch
+        cal = self.profile.clamp
+        self._touches = {k: Touch(dict(v.pos)) for k, v in cal.touches.items()}
+
+        f = ttk.LabelFrame(parent, text="Căn tâm mâm cặp (căn một lần, dùng mãi)",
+                           padding=PAD)
+        f.pack(side="top", fill="x")
+        f.columnconfigure(2, weight=1)
+        ttk.Label(f, style="Hint.TLabel", wraplength=560, justify="left",
+                  text="Mâm cặp tự định tâm nên tâm nó là hằng số cơ khí của máy, "
+                       "không phải của phôi. Chạm mỏ vào bốn mặt ống một lần là "
+                       "xong: sau này thay ống cỡ khác chỉ việc khai lại kích "
+                       "thước, phần mềm tự tính gốc X và gốc Z mới, khỏi căn "
+                       "lại.").grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 6))
+
+        self._touch_rows: Dict[str, ttk.Label] = {}
+        for i, key in enumerate(TOUCH_ORDER):
+            r = i + 1
+            ttk.Label(f, text=f"{i + 1}. {TOUCH_LABELS[key]}").grid(
+                row=r, column=0, sticky="w", pady=1)
+            ttk.Button(f, text="Ghi", width=6,
+                       command=lambda k=key: self.clamp_record(k)).grid(
+                row=r, column=1, sticky="w", padx=6)
+            lbl = ttk.Label(f, style="Dim.TLabel", text="chưa ghi")
+            lbl.grid(row=r, column=2, columnspan=2, sticky="w")
+            self._touch_rows[key] = lbl
+
+        r = len(TOUCH_ORDER) + 1
+        self.lbl_clamp_hint = ttk.Label(f, style="Hint.TLabel", wraplength=560,
+                                        justify="left", text="")
+        self.lbl_clamp_hint.grid(row=r, column=0, columnspan=4, sticky="w", pady=(4, 4))
+
+        bar = ttk.Frame(f)
+        bar.grid(row=r + 1, column=0, columnspan=4, sticky="ew")
+        ttk.Button(bar, text="Tính tâm", style="Accent.TButton",
+                   command=self.clamp_solve).pack(side="left")
+        ttk.Button(bar, text="Xoá số đo", command=self.clamp_clear).pack(side="left", padx=4)
+        self.var_auto_limits = tk.BooleanVar(value=cal.auto_limits)
+        ttk.Checkbutton(bar, text="Tự siết hành trình theo cỡ ống",
+                        variable=self.var_auto_limits,
+                        command=self.clamp_sync).pack(side="left", padx=(12, 4))
+        ttk.Label(bar, text="chừa thêm").pack(side="left")
+        self.var_clamp_margin = tk.StringVar(value=f"{cal.margin:g}")
+        ttk.Entry(bar, textvariable=self.var_clamp_margin, width=5).pack(side="left", padx=3)
+        ttk.Label(bar, text="mm").pack(side="left")
+
+        self.lbl_clamp = ttk.Label(f, style="Dim.TLabel", wraplength=560,
+                                   justify="left", text=cal.summary())
+        self.lbl_clamp.grid(row=r + 2, column=0, columnspan=4, sticky="w", pady=(6, 4))
+
+        zbar = ttk.Frame(f)
+        zbar.grid(row=r + 3, column=0, columnspan=4, sticky="ew")
+        ttk.Button(zbar, text="Đặt gốc X-Z từ tâm kẹp", style="Accent.TButton",
+                   command=self.clamp_apply_zero).pack(side="left")
+        along = self.profile.letter(ROLE_ALONG) or "Y"
+        rotary = self.profile.letter(ROLE_ROTARY) or "A"
+        ttk.Button(zbar, text=f"Đặt gốc {along} tại đây",
+                   command=lambda: self.zero_here(ROLE_ALONG)).pack(side="left", padx=4)
+        ttk.Button(zbar, text=f"Đặt gốc {rotary} tại đây",
+                   command=lambda: self.zero_here(ROLE_ROTARY)).pack(side="left")
+        ttk.Label(f, style="Hint.TLabel", wraplength=560, justify="left",
+                  text=f"Gốc X và Z suy thẳng từ tâm kẹp nên mỏ đang đứng đâu cũng "
+                       f"bấm được. Còn gốc {along} (chỗ nào trên ống) thì rà tay tới "
+                       f"đúng chỗ muốn cắt rồi bấm - chỉ đâu cắt đó.").grid(
+            row=r + 4, column=0, columnspan=4, sticky="w", pady=(4, 0))
+        self._refresh_clamp_rows()
 
     # ------------------------------------------------------------------
     def _build_job_tab(self) -> None:
@@ -651,6 +738,134 @@ class MainWindow:
         self.run_console.pack(fill="both", expand=True)
 
     # ==================================================================
+    # Căn tâm mâm cặp
+    # ==================================================================
+    def _clamp_letters(self) -> Dict[str, str]:
+        return {"cross": self.profile.letter(ROLE_CROSS) or "X",
+                "radial": self.profile.letter(ROLE_RADIAL) or "Z",
+                "rotary": self.profile.letter(ROLE_ROTARY) or "A"}
+
+    def clamp_record(self, key: str) -> None:
+        """Ghi lại toạ độ **máy** ngay lúc mỏ đang chạm."""
+        from ..clamp import Touch
+        st = self.controller.status
+        mpos = dict(st.mpos) if st and st.mpos else {}
+        if not mpos:
+            messagebox.showwarning(
+                "Chưa có toạ độ máy",
+                "Chưa đọc được toạ độ máy. Nối máy (hoặc bật máy ảo) và chờ dòng "
+                "trạng thái hiện số rồi hãy ghi.\n\nPhải dùng toạ độ máy chứ không "
+                "phải toạ độ chi tiết: gốc chi tiết còn thay đổi, tâm mâm cặp thì "
+                "không.")
+            return
+        self._touches[key] = Touch({k.upper(): float(v) for k, v in mpos.items()})
+        self._refresh_clamp_rows()
+
+    def clamp_clear(self) -> None:
+        self._touches = {}
+        self._refresh_clamp_rows()
+        self.status_var.set("Đã xoá số đo căn tâm (hồ sơ căn cũ vẫn còn).")
+
+    def _refresh_clamp_rows(self) -> None:
+        from ..clamp import TOUCH_HINTS, TOUCH_ORDER
+        lt = self._clamp_letters()
+        for key in TOUCH_ORDER:
+            t = self._touches.get(key)
+            if t is None:
+                self._touch_rows[key].configure(text="chưa ghi", style="Dim.TLabel")
+            else:
+                self._touch_rows[key].configure(
+                    text="  ".join(f"{c}{t.get(c):.3f}" for c in
+                                   (lt["cross"], lt["radial"], lt["rotary"])),
+                    style="Ok.TLabel")
+        nxt = next((k for k in TOUCH_ORDER if k not in self._touches), None)
+        self.lbl_clamp_hint.configure(
+            text=TOUCH_HINTS[nxt] if nxt else "Đủ bốn lần chạm - bấm Tính tâm.")
+
+    def clamp_sync(self) -> None:
+        """Đưa hai ô tuỳ chọn vào hồ sơ căn (giới hạn tính lại ngay lập tức)."""
+        cal = self.profile.clamp
+        cal.auto_limits = bool(self.var_auto_limits.get())
+        try:
+            cal.margin = max(0.0, float(str(self.var_clamp_margin.get()).replace(",", ".")))
+        except ValueError:
+            pass
+
+    def clamp_solve(self) -> None:
+        from ..clamp import ClampError, limit_report, solve
+        self.apply_profile(silent=True)
+        self.clamp_sync()
+        try:
+            cal, warns = solve(self._touches, self.profile.pipe,
+                               letters=self._clamp_letters(),
+                               margin=self.profile.clamp.margin)
+        except ClampError as exc:
+            messagebox.showwarning("Chưa căn được", str(exc))
+            return
+        cal.auto_limits = self.profile.clamp.auto_limits
+        self.profile.clamp = cal
+        self.controller.profile = self.profile
+        lines = [cal.summary(),
+                 f"Bề rộng đo được {cal.span_x:.2f} mm, lệch tâm {cal.runout:+.2f} mm."]
+        lines += limit_report(self.profile)
+        self.lbl_clamp.configure(text="  ·  ".join(lines[:2]) + "\n" + " | ".join(lines[2:]))
+        self.status_var.set("Đã căn tâm mâm cặp. Nhớ Lưu hồ sơ máy để dùng lần sau.")
+        body = "\n".join(lines)
+        if warns:
+            messagebox.showwarning("Căn xong, có điều cần xem lại",
+                                   body + "\n\n" + "\n\n".join("• " + w for w in warns))
+        else:
+            messagebox.showinfo(
+                "Đã căn tâm mâm cặp",
+                body + "\n\nLưu hồ sơ máy (thẻ Máy → Lưu hồ sơ máy) thì lần sau "
+                       "mở phần mềm là có sẵn, không phải căn lại.")
+
+    def clamp_apply_zero(self) -> None:
+        """Đặt gốc X-Z thẳng từ tâm mâm cặp - không cần rà mỏ vào đâu cả."""
+        from ..clamp import ClampError, work_origin, zero_commands
+        self.apply_profile(silent=True)
+        self.clamp_sync()
+        try:
+            org = work_origin(self.profile.clamp, self.profile.pipe)
+            lines = zero_commands(self.profile)
+        except ClampError as exc:
+            messagebox.showwarning("Chưa căn tâm", str(exc))
+            return
+        if not self.controller.is_connected:
+            messagebox.showwarning("Chưa nối máy", "Nối máy trước rồi hãy đặt gốc.")
+            return
+        lt = self._clamp_letters()
+        if not messagebox.askokcancel(
+                "Đặt gốc từ tâm mâm cặp",
+                f"Ống đang khai: {self.profile.pipe.size_text}\n\n"
+                f"Gốc {lt['cross']} đặt tại toạ độ máy {org['X']:.3f} (đường tâm ống)\n"
+                f"Gốc {lt['radial']} đặt tại toạ độ máy {org['Z']:.3f} (mặt trên phôi)\n\n"
+                f"Máy không di chuyển, chỉ đổi gốc toạ độ.\n"
+                f"Gốc dọc ống và gốc xoay giữ nguyên."):
+            return
+        for line in lines:
+            self.controller.send(line, front=True)
+        self.status_var.set(f"Đã đặt gốc {lt['cross']}-{lt['radial']} từ tâm mâm cặp.")
+
+    def show_probe_options(self) -> None:
+        dlg = self._probe_dlg
+        dlg.configure(background=theme.current().bg)
+        dlg.transient(self.root)
+        dlg.deiconify()
+        dlg.lift()
+
+    def zero_here(self, role: str) -> None:
+        """Đặt gốc của **một** trục tại chỗ mỏ đang đứng - chỉ đâu cắt đó."""
+        letter = self.profile.letter(role)
+        if not letter:
+            return
+        if not self.controller.is_connected:
+            messagebox.showwarning("Chưa nối máy", "Nối máy trước rồi hãy đặt gốc.")
+            return
+        self.controller.send(f"G10 L20 P1 {letter}0", front=True)
+        self.status_var.set(f"Đã đặt gốc {letter} tại vị trí hiện tại.")
+
+    # ==================================================================
     # Dò cạnh
     # ==================================================================
     def start_probe(self) -> None:
@@ -764,6 +979,15 @@ class MainWindow:
     def _retheme_widgets(self) -> None:
         """Đổi màu những widget Tk thuần - ttk.Style không với tới được."""
         p = theme.current()
+        col = getattr(self, "control_column", None)
+        if col is not None:
+            col.apply_theme()
+        dlg = getattr(self, "_probe_dlg", None)
+        if dlg is not None:
+            try:
+                dlg.configure(background=p.bg)
+            except tk.TclError:
+                pass
         try:
             self.txt_gcode.configure(background=p.field, foreground=p.fg,
                                      insertbackground=p.fg,
@@ -1098,6 +1322,8 @@ class MainWindow:
             p.connection.simulator_speed = max(0.01, float(self.cmb_simspeed.get()))
         except ValueError:
             pass
+        if hasattr(self, "var_auto_limits"):
+            self.clamp_sync()
         warnings = p.validate()
         if warnings and not silent:
             messagebox.showwarning("Cấu hình", "\n".join(warnings))

@@ -227,11 +227,46 @@ Nạp STL không phải là "chỉ nhận dạng rồi để đấy". Trình t�
 
 ---
 
+## Căn tâm mâm cặp: căn một lần, dùng mãi
+
+Mâm cặp **tự định tâm** nên ống to hay nhỏ thì đường tâm ống vẫn trùng đường tâm
+mâm cặp — **tâm mâm cặp là hằng số cơ khí của máy, không phải của phôi**. Chạm
+mỏ vào bốn mặt ống **một lần** là xong: sau này thay ống cỡ khác chỉ việc khai
+lại kích thước, phần mềm tự tính gốc X và gốc Z mới.
+
+Bốn lần chạm, mỗi cặp lấy điểm giữa để khử đúng một sai số:
+
+| Chạm | Cho ra | Tự khử được gì |
+|---|---|---|
+| **sườn trái + sườn phải** | gốc X (đường tâm ống) | **đường kính béc** — không phải đo béc. Ống tròn thì khử luôn cả độ thụt do chạm cao hơn đường tâm |
+| **đỉnh + đỉnh sau khi xoay 180°** | gốc Z (mặt trên phôi) | **độ lệch tâm mâm cặp** — mà hiệu của hai số đó chính là độ lệch, phần mềm in ra cho biết |
+
+Xong rồi thì mỗi lô hàng chỉ còn hai việc bằng tay, đúng kiểu **chỉ đâu cắt đó**:
+rà trục dọc tới chỗ muốn cắt → *Đặt gốc Y tại đây*; xoay tới góc muốn → *Đặt gốc
+A tại đây*. Gốc X-Z bấm một nút là xong, **mỏ đang đứng ở đâu cũng bấm được** vì
+lệnh đặt thẳng gốc theo toạ độ máy (`G10 L2`) chứ không lấy chỗ đang đứng làm gốc.
+
+**Máy còn tự siết hành trình theo cỡ ống:** căn xong là biết chỗ nào mỏ không bao
+giờ có việc phải tới — trục ngang chỉ quanh quẩn trong bán kính ống, trục nâng hạ
+**không được xuống dưới 0** (gốc Z ở mặt phôi, xuống dưới là cắm vào ống ở mọi góc
+xoay). Sai ở đâu là báo ngay lúc sinh G-code. Giới hạn tính lại theo cỡ ống đang
+khai nên đổi ống là nó tự đổi theo, và luôn **giao với** hành trình cơ khí chứ
+không nới rộng quá máy chịu được.
+
+```bash
+python -m pipecut clamp --top 'X123.4,Z-20.6,A0' --left 'X92.4,Z-45.6,A0' \
+                        --right 'X154.4,Z-45.6,A0' --top180 'X123.4,Z-20.6,A180'
+python -m pipecut clamp        # xem lại hồ sơ căn đang có
+```
+
+---
+
 ## Dò cạnh: máy tự tìm phôi và đặt gốc
 
-Không phải rà tay từng trục nữa. Máy tự dò ra **cả bốn gốc**: mặt phôi (Z),
-đường tâm phôi (X), mặt đầu ống (Y), và với ống hộp là cả góc xoay cho mặt phẳng
-nằm ngang (A).
+Đường phụ, cần thêm một cảm biến chạm. Căn tâm mâm cặp ở trên đã đủ cho gốc X và
+Z; cái này để máy tự tìm phôi, đo được **cả bốn gốc**: mặt phôi (Z), đường tâm
+phôi (X), mặt đầu ống (Y), và với ống hộp là cả góc xoay cho mặt phẳng nằm ngang
+(A).
 
 **Hai đường đi, chọn một:**
 
@@ -552,6 +587,7 @@ pipecut/
   machinescene.py dựng hình mô phỏng máy (dùng chung cho giao diện và SVG)
   jobs.py        mô tả công việc bằng JSON + danh mục nguyên công
   protocol.py    phân tích phản hồi Grbl/FluidNC, mã lỗi tiếng Việt
+  clamp.py       căn tâm mâm cặp bằng tay: chạm 4 mặt ống ra gốc chuẩn
   probing.py     chế độ dò cạnh: tự tìm phôi rồi đặt gốc toạ độ
   transport.py   cổng COM (pyserial), mạng LAN/WiFi (Telnet) hoặc máy ảo
   importers/     nhập biên dạng: DXF, SVG, G-code phẳng, STL/OBJ, CSV/JSON

@@ -11,7 +11,7 @@ import json
 import math
 import os
 from dataclasses import dataclass, field, fields, asdict
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 # Vai trò của từng trục trên máy cắt ống
 ROLE_ALONG = "along"    # chạy dọc theo trục ống (thường là X)
@@ -26,6 +26,7 @@ ALL_ROLES = (ROLE_ALONG, ROLE_CROSS, ROLE_RADIAL, ROLE_ROTARY, ROLE_BEVEL,
 
 if TYPE_CHECKING:  # tránh phụ thuộc vòng khi chạy thật
     from .section import Section
+    from .clamp import ClampCalibration
 ANGULAR_ROLES = (ROLE_ROTARY, ROLE_BEVEL, ROLE_SWIVEL)
 
 
@@ -275,6 +276,12 @@ def _filter_probe(d: Dict[str, Any]) -> Dict[str, Any]:
     return _filter(ProbeSpec, d or {})
 
 
+def _clamp_cal(d: Optional[Dict[str, Any]] = None):
+    """Tạo ``ClampCalibration`` mà không nhập vòng."""
+    from .clamp import ClampCalibration
+    return ClampCalibration.from_dict(d or {})
+
+
 def _default_axes() -> List[AxisSpec]:
     """Bố trí trục mặc định, khớp với máy "ống tự tịnh tiến".
 
@@ -307,6 +314,7 @@ class MachineProfile:
     motion: MotionSpec = field(default_factory=MotionSpec)
     connection: ConnectionSpec = field(default_factory=ConnectionSpec)
     probe: "ProbeSpec" = field(default_factory=lambda: _probe_spec())
+    clamp: "ClampCalibration" = field(default_factory=_clamp_cal)
     layout: str = "pipe_moves"   # pipe_moves = ống tịnh tiến | torch_moves = xe mỏ cắt chạy
     work_offset: str = "G54"
     preamble: List[str] = field(default_factory=lambda: ["G21", "G90", "G94", "G54"])
@@ -378,7 +386,27 @@ class MachineProfile:
     # ---------------- nạp / lưu ----------------
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
+        # ``asdict`` biến Touch thành dict lồng {'pos': {...}}; hồ sơ căn tự
+        # tuần tự hoá gọn hơn nên ghi đè lại.
+        d["clamp"] = self.clamp.to_dict()
         return d
+
+    # ---------------- hành trình thực tế ----------------
+    def effective_travel(self, axis: AxisSpec) -> Tuple[float, float]:
+        """Hành trình cơ khí của trục **giao với** vùng cỡ ống đang khai cần.
+
+        Căn tâm mâm cặp xong là biết ống nằm ở đâu, nên biết luôn chỗ nào mỏ
+        không bao giờ có việc phải tới - đi vào đó chỉ có thể là nhầm.  Tính
+        lại mỗi lần gọi nên khai cỡ ống khác là giới hạn tự đổi theo, không
+        phải căn lại.
+        """
+        from .clamp import envelope
+        lo, hi = (float("-inf"), float("inf")) if axis.max_travel <= 0 else (
+            min(axis.min_travel, axis.max_travel), max(axis.min_travel, axis.max_travel))
+        span = envelope(self).get(axis.role)
+        if span is not None:
+            lo, hi = max(lo, span[0]), min(hi, span[1])
+        return lo, hi
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "MachineProfile":
@@ -393,6 +421,7 @@ class MachineProfile:
             motion=MotionSpec.from_dict(d.get("motion", {})),
             connection=ConnectionSpec.from_dict(d.get("connection", {})),
             probe=_probe_spec(**_filter_probe(d.get("probe", {}))),
+            clamp=_clamp_cal(d.get("clamp", {})),
             layout=d.get("layout", "pipe_moves"),
             work_offset=d.get("work_offset", "G54"),
             preamble=list(d.get("preamble", ["G21", "G90", "G94", "G54"])),

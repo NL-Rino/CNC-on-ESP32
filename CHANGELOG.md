@@ -1,5 +1,66 @@
 # Nhật ký thay đổi
 
+## v1.11.0 — 2026-09-05
+
+### Căn tâm mâm cặp bằng tay: căn một lần, dùng mãi
+
+Mâm cặp tự định tâm nên ống to hay nhỏ thì đường tâm ống vẫn trùng đường tâm mâm
+cặp. **Tâm mâm cặp là hằng số cơ khí của máy, không phải của phôi.** Chạm mỏ vào
+bốn mặt ống một lần là xong: sau này thay ống cỡ khác chỉ việc khai lại kích
+thước, phần mềm tự tính gốc X và gốc Z mới, không phải căn lại.
+
+Bốn lần chạm, mỗi cặp lấy điểm giữa để khử đúng một sai số:
+
+* **Sườn trái + sườn phải → gốc X.** Béc dày bao nhiêu thì cộng bên này trừ bên
+  kia bấy nhiêu, lấy điểm giữa là **đường kính béc tự triệt tiêu** — khỏi đo
+  béc. Ống tròn còn khử luôn độ thụt do chạm cao hơn đường tâm, miễn hai bên
+  cùng một cao độ Z (lệch quá 1 mm là báo).
+* **Đỉnh + đỉnh sau khi xoay 180° → gốc Z.** Ống kẹp lệch lên `e` mm thì quay
+  nửa vòng thành lệch xuống `e` mm, cộng lại chia đôi là hết. Còn *hiệu* của hai
+  số đó chính là **độ lệch tâm**, in ra để biết mâm cặp có vấn đề không.
+
+Bốn phép soát tự động: đỉnh có chạm gần đường tâm không, hai lần chạm đỉnh có
+đúng cách nhau 180° không, hai sườn có cùng cao độ không, và bề rộng đo được có
+khớp cỡ ống đã khai không.
+
+### Đặt gốc: X-Z tự động, Y-A bằng tay — chỉ đâu cắt đó
+
+**Đặt gốc X-Z từ tâm kẹp** dùng `G10 L2` (đặt thẳng gốc theo toạ độ máy) chứ
+không phải `G10 L20` (lấy chỗ đang đứng làm gốc), nên **mỏ đang ở đâu cũng bấm
+được**, không phải rà vào đâu cả. Thêm `G92.1` ở đầu để xoá dịch gốc tạm còn sót.
+
+Hai thứ đổi theo từng lần gá thì để tay, đúng như nên thế: **Đặt gốc Y tại đây**
+(rà tới chỗ muốn cắt) và **Đặt gốc A tại đây** (xoay tới góc muốn).
+
+Chế độ dò cạnh tự động vẫn còn nguyên nhưng lùi xuống làm đường phụ.
+
+### Tự siết hành trình theo cỡ ống
+
+Căn xong là phần mềm biết chỗ nào mỏ không bao giờ có việc phải tới:
+
+* trục ngang chỉ chạy trong bán kính ống cộng phần chừa thêm;
+* **trục nâng hạ không được xuống dưới 0** — gốc Z ở mặt phôi, xuống dưới là đã
+  cắm vào ống ở *mọi* góc xoay;
+* trục dọc giới hạn theo chiều dài phôi đã khai.
+
+Sai ở đâu là báo ngay lúc sinh G-code, chưa kịp chạy. Giới hạn **tính lại mỗi
+lần gọi** theo cỡ ống đang khai nên đổi ống là tự đổi theo, và luôn **giao với**
+hành trình cơ khí chứ không nới rộng quá máy chịu được. Tắt được bằng một ô đánh
+dấu.
+
+### Giao diện
+
+Cột trái thẻ Điều khiển giờ **cuộn được** — trước đây trên màn hình máy tính
+xách tay là khung dưới cùng bị cắt mất, bấm không tới. Mười hai ô thông số dò
+cạnh dời vào hộp thoại riêng cho cột đỡ chật.
+
+### Khác
+
+* Lệnh mới `python -m pipecut clamp` để xem, tính hoặc xoá hồ sơ căn tâm.
+* `MachineProfile.effective_travel()` trả về hành trình cơ khí đã giao với vùng
+  cỡ ống đang khai cần tới; `Kinematics.check_limits()` dùng nó.
+* 28 bài kiểm thử mới, tổng 269.
+
 ## v1.10.0 — 2026-09-05
 
 ### Dò bằng chính mỏ cắt (ohmic touch-off)

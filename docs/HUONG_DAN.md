@@ -7,7 +7,7 @@
 3. [Hiệu chỉnh trục xoay](#3-hiệu-chỉnh-trục-xoay)
 4. [Cài đặt phần mềm](#4-cài-đặt-phần-mềm)
 5. [Khai báo hồ sơ máy](#5-khai-báo-hồ-sơ-máy)
-6. [Đặt gốc toạ độ](#6-đặt-gốc-toạ-độ)
+6. [Đặt gốc toạ độ](#6-đặt-gốc-toạ-độ) — căn tâm mâm cặp một lần, dùng mãi
 7. [Tạo công việc](#7-tạo-công-việc)
 8. [Chạy chương trình](#8-chạy-chương-trình)
 9. [Định dạng tệp công việc](#9-định-dạng-tệp-công-việc)
@@ -313,17 +313,98 @@ Bấm **Áp dụng thông số** rồi **Lưu hồ sơ máy...** để dùng l�
 
 ## 6. Đặt gốc toạ độ
 
-Thứ tự chuẩn trước mỗi lô hàng:
+Mâm cặp **tự định tâm**: ống to hay nhỏ thì đường tâm ống vẫn trùng đường tâm
+mâm cặp. Nghĩa là **tâm mâm cặp là hằng số cơ khí của máy**, không phải của
+phôi. Căn nó **một lần duy nhất** rồi thôi — sau này thay ống chỉ việc khai lại
+kích thước, phần mềm tự tính ra gốc X và gốc Z mới.
+
+Còn hai thứ *có* đổi theo từng lần gá thì để tay:
+
+| Gốc | Ở đâu | Lấy bằng cách nào |
+|---|---|---|
+| **X** đường tâm ống | tâm mâm cặp | căn một lần, xong tự có |
+| **Z** mặt trên phôi | tâm mâm cặp + nửa chiều cao tiết diện | căn một lần, xong tự có |
+| **Y** dọc ống | tuỳ lần này đẩy ống vào sâu bao nhiêu | rà tay tới chỗ muốn cắt, bấm |
+| **A** góc xoay | tuỳ lần này đặt ống nghiêng bao nhiêu | xoay tay, bấm |
+
+### 6.1 Căn tâm mâm cặp — làm một lần
+
+Thẻ **2. Điều khiển** → khung **Căn tâm mâm cặp** ở cột phải. Bốn lần chạm,
+mỗi lần rà mỏ tới nơi rồi bấm **Ghi** (phần mềm lấy **toạ độ máy**, không phải
+toạ độ chi tiết — gốc chi tiết còn đổi, tâm mâm cặp thì không).
+
+| | Rà mỏ tới đâu |
+|---|---|
+| 1 | **Chạm đỉnh ống.** Ống hộp thì xoay cho một mặt phẳng nằm ngang trước. Hạ mỏ xuống đúng giữa mặt trên. |
+| 2 | **Chạm sườn trái.** Nâng mỏ, đưa sang trái, hạ xuống ngang thân ống, đẩy X vào tới khi chạm. |
+| 3 | **Chạm sườn phải**, hạ xuống **đúng cao độ như lúc chạm sườn trái**. |
+| 4 | **Xoay A đúng 180°, chạm đỉnh lần nữa.** |
+
+Bấm **Tính tâm**. Rồi **Lưu hồ sơ máy** (thẻ 1) để lần sau mở phần mềm là có sẵn.
+
+**Vì sao lại là bốn chỗ chứ không phải hai.** Cả hai cặp đều dùng phép *lấy điểm
+giữa*, và mỗi phép khử đúng một sai số:
+
+* **Trái + phải → tâm ngang.** Béc dày bao nhiêu thì cộng vào bên này bấy nhiêu
+  và trừ đi bên kia bấy nhiêu, lấy điểm giữa là **đường kính béc tự triệt tiêu**
+  — không phải đo béc. Với ống tròn còn hay hơn: chạm ở cao độ nào cũng được,
+  chỗ chạm thụt vào bao nhiêu thì thụt đều cả hai bên. Điều kiện duy nhất là
+  **hai bên cùng một cao độ Z**; lệch quá 1 mm là phần mềm báo.
+* **Đỉnh + đỉnh sau nửa vòng → tâm đứng.** Ống kẹp lệch lên `e` mm thì quay nửa
+  vòng thành lệch xuống `e` mm, cộng lại chia đôi là hết. **Hiệu** của hai số đó
+  chính là độ lệch tâm — phần mềm in ra để biết mâm cặp có vấn đề không.
+
+Phần mềm còn soát giúp: đỉnh có chạm gần đường tâm không, hai lần chạm đỉnh có
+đúng cách nhau 180° không, và bề rộng đo được có khớp cỡ ống đã khai không (lệch
+nhiều thường là chạm nhầm vào mâm cặp hoặc khai sai cỡ ống).
+
+Làm bằng dòng lệnh cũng được, tiện khi muốn ghi lại số đo:
+
+```bash
+python -m pipecut clamp --top 'X123.4,Z-20.6,A0' --left 'X92.4,Z-45.6,A0' \
+                        --right 'X154.4,Z-45.6,A0' --top180 'X123.4,Z-20.6,A180' \
+                        --save config/machine.json
+python -m pipecut clamp        # xem lại hồ sơ căn đang có
+```
+
+### 6.2 Trước mỗi lô hàng
 
 1. **Về gốc** (`$H`) nếu máy có công tắc hành trình.
-2. Kẹp phôi vào mâm cặp, mặt đầu ống nhô ra đủ dài.
-3. Jog trục **Y** (ống ra vào) cho tới khi **mặt đầu ống nằm đúng dưới mũi cắt**.
-4. Jog trục **X** cho mỏ cắt về **đúng đường tâm ống** (nhìn từ đầu ống: mũi cắt
-   thẳng hàng với đỉnh ống).
-5. Jog trục **Z** hạ mũi cắt xuống **chạm nhẹ mặt ống** (kẹp tờ giấy để cảm nhận).
-6. Xoay trục **A** sao cho vị trí muốn coi là 0° nằm **ngay dưới mũi cắt**.
-7. Bấm **Đặt gốc chi tiết** — lúc này Y0 ở mặt đầu ống, X0 trên đường tâm,
-   Z0 ở mặt ống, A0 tại 12 giờ.
+2. Kẹp phôi, mặt đầu ống nhô ra đủ dài.
+3. Khai đúng cỡ ống ở thẻ **1. Máy & Kết nối**.
+4. Bấm **Đặt gốc X-Z từ tâm kẹp**. **Mỏ đang đứng ở đâu cũng bấm được** — lệnh
+   này đặt thẳng gốc theo toạ độ máy (`G10 L2`), không phải "lấy chỗ đang đứng
+   làm gốc" (`G10 L20`), nên không phải rà mỏ vào đâu cả.
+5. Rà trục **Y** tới đúng chỗ trên ống muốn bắt đầu cắt → **Đặt gốc Y tại đây**.
+6. Xoay **A** tới vị trí muốn coi là 0° → **Đặt gốc A tại đây**.
+
+Chỉ đâu cắt đó: bước 5 và 6 là toàn bộ phần phải làm cho mỗi lô.
+
+### 6.3 Máy tự siết hành trình theo cỡ ống
+
+Bật ô **Tự siết hành trình theo cỡ ống** (mặc định bật) thì căn xong là phần mềm
+biết luôn chỗ nào mỏ *không bao giờ* có việc phải tới:
+
+* **Trục ngang** chỉ cần chạy trong khoảng bán kính ống cộng phần chừa thêm.
+* **Trục nâng hạ** không được xuống dưới 0 — gốc Z ở mặt phôi, xuống dưới là đã
+  cắm vào ống ở **mọi góc xoay**.
+* **Trục dọc** giới hạn theo chiều dài phôi đã khai.
+
+Sai ở đâu là báo ngay lúc sinh G-code, chưa kịp chạy. Giới hạn **tính lại mỗi
+lần** theo cỡ ống đang khai, nên đổi ống to hơn thì nó tự nới ra — không phải
+căn lại, cũng không phải sửa hồ sơ máy. Ô **chừa thêm** (mặc định 25 mm) là
+khoảng dự phòng cho mồi lửa và dây dẫn mồi.
+
+Giới hạn này **giao với** hành trình cơ khí đã khai ở thẻ Máy chứ không thay
+thế: nó chỉ siết chặt hơn, không bao giờ nới rộng ra quá máy chịu được.
+
+### 6.4 Không dùng cách căn thì làm tay như cũ
+
+1. Jog **Y** cho mặt đầu ống nằm đúng dưới mũi cắt.
+2. Jog **X** cho mỏ về đúng đường tâm ống.
+3. Jog **Z** hạ mũi cắt chạm nhẹ mặt ống (kẹp tờ giấy để cảm nhận).
+4. Xoay **A** cho vị trí muốn coi là 0° nằm ngay dưới mũi cắt.
+5. Bấm **Đặt gốc chi tiết**.
 
 Toàn bộ toạ độ trong tệp công việc đều đo từ gốc này: `x` là khoảng cách từ mặt
 đầu ống (ra lệnh cho trục Y), `theta` là góc quay tính từ vị trí 12 giờ (trục A).
@@ -592,8 +673,13 @@ python -m pipecut send ra.nc --port 127.0.0.1:2323
 
 ## 12. Dò cạnh: máy tự tìm phôi và đặt gốc
 
-Thay vì rà tay từng trục rồi đặt gốc bằng mắt, để máy tự dò. Nó tìm được **cả
-bốn gốc**: mặt phôi (Z), đường tâm phôi (X), mặt đầu ống (Y), và với ống hộp là
+> **Đây là đường phụ.** Với mâm cặp tự định tâm thì [căn tâm một lần ở mục
+> 6.1](#6-đặt-gốc-toạ-độ) đã lo xong gốc X và gốc Z rồi, còn gốc Y thì rà tay
+> tới đúng chỗ muốn cắt là nhanh nhất. Mục này dành cho ai muốn máy tự tìm
+> phôi — cần thêm một cảm biến chạm, đổi lại đo được **cả bốn gốc** kể cả góc
+> xoay của ống hộp.
+
+Máy dò ra: mặt phôi (Z), đường tâm phôi (X), mặt đầu ống (Y), và với ống hộp là
 cả góc xoay cho mặt phẳng nằm ngang (A).
 
 ### Chọn cách dò: hai đường

@@ -242,9 +242,13 @@ class Kinematics:
         msgs: List[str] = []
         for letter, v in values.items():
             ax = self.profile.axis_by_letter(letter)
-            if not ax or ax.max_travel <= 0:
-                continue  # 0 = không giới hạn (trục xoay)
-            lo, hi = min(ax.min_travel, ax.max_travel), max(ax.min_travel, ax.max_travel)
+            if not ax:
+                continue
+            # Hành trình cơ khí giao với vùng cỡ ống đang khai cần tới - căn
+            # tâm mâm cặp xong thì vùng đó siết chặt hơn hành trình máy nhiều.
+            lo, hi = self.profile.effective_travel(ax)
+            if lo == float("-inf") and hi == float("inf"):
+                continue  # không giới hạn (trục xoay chưa căn)
             if v < lo - 1e-6 or v > hi + 1e-6:
                 msgs.append(
                     f"Trục {letter} = {v:.2f} vượt hành trình [{lo:.1f}, {hi:.1f}]"

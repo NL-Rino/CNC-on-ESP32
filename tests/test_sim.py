@@ -279,7 +279,7 @@ def test_nho_vi_tri_tram_sac_sau_khi_sac():
         d = env.world.dock
         px, py = d.pocket
         env.robot.reset(px, py, d.heading, 0.3, env.rng)
-        env.ir_hand = env.steps
+        env.per.ir_hand = env.per.steps   # gia lap vua bat tay hong ngoai xong
         env.step((0.0, 0.0))
         assert env.mem is not None, "sac xong phai nho vi tri tram"
         # lui ra 0.6 m roi hoi lai: tri nho phai chi nguoc ve phia tram
@@ -298,7 +298,7 @@ def test_nho_vi_tri_tram_sac_sau_khi_sac():
 def test_uoc_luong_pin_ve_tram():
     env = CarEnv(EnvConfig(stage=3, max_steps=80))
     env.reset(3)
-    env.mem = (env.robot.ox + 2.0, env.robot.oy)
+    env.per.mem = (env.robot.ox + 2.0, env.robot.oy, env.robot.oth)
     far = env._return_margin(2.0)
     near = env._return_margin(0.2)
     assert near > far, "cang xa tram thi bien an toan cang mong"

@@ -10,32 +10,16 @@ import random
 
 import numpy as np
 
-from .dock_detector import MAX_CAND, detect_lidar
 from .geometry import clamp, wrap_angle
-from .lidar import RMAX, SECTORS, Lidar
+from .lidar import Lidar
+from .perception import (MEM_CLIP, OBS_DIM, OBS_NAMES,  # noqa: F401
+                         SEC_CLIP, Perception)
 from .robot import Robot, RobotSpec
 from .sensors import SensorSuite
 from .world import IR_CALL, IR_DOCK, Beacon, make_world
 
-SEC_CLIP = 3.0          # tam nhin dua vao mang no-ron (m) - xa hon coi la "trong"
-MEM_CLIP = 3.0
-
-OBS_DIM = SECTORS + 2 + 6 * MAX_CAND + 6 + 6 + 3 + 5
 ACT_DIM = 2
 
-OBS_NAMES = (
-    ["lidar_sector_%02d" % i for i in range(SECTORS)] +
-    ["cliff_front", "cliff_rear"] +
-    sum([["cand%d_seen" % i, "cand%d_sin" % i, "cand%d_cos" % i,
-          "cand%d_dist" % i, "cand%d_yawsin" % i, "cand%d_yawcos" % i]
-         for i in range(MAX_CAND)], []) +
-    ["ir_call", "ir_call_seen", "ir_dock", "ir_dock_seen", "d_ir_call", "d_ir_dock"] +
-    ["mem_known", "mem_sin", "mem_cos", "mem_dist",
-     "mem_headsin", "mem_headcos"] +
-    ["battery", "battery_low", "return_margin"] +
-    ["vel", "yaw_rate", "prev_u_left", "prev_u_right", "bump"]
-)
-assert len(OBS_NAMES) == OBS_DIM
 
 
 class EnvConfig:
@@ -90,6 +74,10 @@ class CarEnv:
         self.robot = Robot(self.spec)
         self.sensors = SensorSuite(self.spec)
         self.lidar = Lidar()
+        # CHINH module nay cung chay tren laptop khi dieu khien robot that
+        # (link/brain_server.py). Mot cho duy nhat dung vector quan sat.
+        self.per = Perception(self.cfg.battery_low, self.cfg.ir_handshake,
+                              self.spec.v_max, self.spec.wheel_base)
         self.rng = random.Random(0)
         self.nprng = np.random.default_rng(0)
         self.obs_dim = OBS_DIM
@@ -117,31 +105,30 @@ class CarEnv:
         self.lidar.reset(self.nprng)
         self.lidar._scan(self.robot, self.world)
 
+        self.per = Perception(cfg.battery_low, cfg.ir_handshake,
+                              self.spec.v_max, self.spec.wheel_base)
+        self.per.reset(batt)
         self.steps = 0
-        self.prev_u = [0.0, 0.0]
-        self.prev_ir = [0.0, 0.0]
         self.visited = set()
         self.call = None
         self.call_expire = 0
         self.call_timer = self._draw_call_delay()
-        self.cands = []
-        self.ir_hand = -999            # buoc cuoi cung con thay IR tram sac
-        self.mem = None                # (x, y) tram sac trong he odometry
-        self.mem_age = 0
         self.arrivals = 0
         self.charged = 0.0
         self.full_charges = 0
         self.bumps = 0
         self.distance = 0.0
         self.batt_used = 0.0
-        self.e_per_m = 0.045           # uoc luong ban dau: pin hao moi met
         self._docked_once = False
         self.rew_parts = {k: 0.0 for k in
                           ("fall", "flat", "bump", "cliff", "progress", "arrive",
                            "charge", "full", "align", "speed", "novel", "spin",
                            "cost")}
         self.frames = []
-        self._sense()
+        # Doc cam bien o DUNG cho nay: read_all rut so ngau nhien (nhieu cam
+        # bien vuc va hong ngoai), dat sai cho la ca chuoi ngau nhien lech di
+        # va tap chay ra khac han - tim ra loi nay mat mot vong doi chieu.
+        self.sensors.read_all(self.robot, self.world, rng)
         return self._obs()
 
     def _draw_call_delay(self):
@@ -172,108 +159,35 @@ class CarEnv:
         self.call_timer = self.rng.randint(80, 400)
 
     # -------------------------------------------------------------------- sense
-    def _sense(self):
-        r = self.robot
-        self.sensors.read_all(r, self.world, self.rng)
-        if self.lidar.scans_new:
-            self.cands = detect_lidar(self.lidar, r.theta)
-        if self.sensors.ir_seen[IR_DOCK] > 0.5:
-            self.ir_hand = self.steps
-            self._update_memory()
-        if r.charging:
-            self.mem = (r.ox, r.oy, r.oth)
-            self.mem_age = 0
+    @property
+    def cands(self):
+        return self.per.cands
 
-    def _update_memory(self):
-        """Hong ngoai xac nhan: ghi lai vi tri tram theo he odometry cua xe.
+    @property
+    def mem(self):
+        return self.per.mem
 
-        Mat thu nam o dau xe nen tin hieu IR co nghia la tram dang o phia truoc.
-        Neu LiDAR cung thay mot ung vien o phia truoc thi lay khoang cach cua no,
-        khong thi uoc luong tam thoi bang cuong do tin hieu.
-        """
-        r = self.robot
-        best = None
-        for c in self.cands:
-            if abs(c.bearing) < 0.45 and (best is None or c.dist < best.dist):
-                best = c
-        if best is not None:
-            a = r.oth + best.bearing
-            self.mem = (r.ox + best.dist * math.cos(a),
-                        r.oy + best.dist * math.sin(a),
-                        wrap_angle(r.oth + best.yaw))
-            self.mem_age = 0
+    @property
+    def e_per_m(self):
+        return self.per.e_per_m
 
     def _obs(self):
-        s = self.sensors
+        """Dong goi cam bien y het luc chay that roi day qua Perception."""
         r = self.robot
-        cfg = self.cfg
-        om_max = 2.0 * self.spec.v_max / self.spec.wheel_base
-
-        # .tolist() nhanh hon list(...) nhieu lan: khong sinh 16 doi tuong
-        # numpy scalar roi moi chuyen ve float.
-        sec = self.lidar.sector_ranges(r.theta)
-        obs = np.minimum(sec, SEC_CLIP, out=sec).__imul__(1.0 / SEC_CLIP).tolist()
-        obs.append(s.cliff_front)
-        obs.append(s.cliff_rear)
-
-        for i in range(MAX_CAND):
-            if i < len(self.cands):
-                c = self.cands[i]
-                obs += [1.0, math.sin(c.bearing), math.cos(c.bearing),
-                        min(c.dist, SEC_CLIP) / SEC_CLIP,
-                        math.sin(c.yaw), math.cos(c.yaw)]
-            else:
-                obs += [0.0, 0.0, 0.0, 1.0, 0.0, 1.0]
-
-        d_call = clamp((s.ir[IR_CALL] - self.prev_ir[IR_CALL]) * 8.0, -1.0, 1.0)
-        d_dock = clamp((s.ir[IR_DOCK] - self.prev_ir[IR_DOCK]) * 8.0, -1.0, 1.0)
-        obs += [s.ir[IR_CALL], s.ir_seen[IR_CALL],
-                s.ir[IR_DOCK], s.ir_seen[IR_DOCK], d_call, d_dock]
-        self.prev_ir = list(s.ir)
-
-        md, mb, mh = self._memory_polar()
-        if self.mem is None:
-            obs += [0.0, 0.0, 0.0, 1.0, 0.0, 1.0]
-        else:
-            obs += [1.0, math.sin(mb), math.cos(mb), min(md, MEM_CLIP) / MEM_CLIP,
-                    math.sin(mh), math.cos(mh)]
-
-        obs += [r.battery,
-                1.0 if r.battery < cfg.battery_low else 0.0,
-                self._return_margin(md)]
-        obs += [clamp(r.v / self.spec.v_max, -1.0, 1.0),
-                clamp(r.omega / om_max, -1.0, 1.0),
-                self.prev_u[0], self.prev_u[1],
-                1.0 if r.bumped else 0.0]
-        return obs
+        s = self.sensors
+        return self.per.update(
+            ranges=self.lidar.r, scan_theta=self.lidar.scan_theta,
+            scans_new=self.lidar.scans_new, odo=(r.ox, r.oy, r.oth),
+            cliff=(s.cliff_front, s.cliff_rear), ir=s.ir,
+            battery=r.battery, v=r.v, omega=r.omega,
+            bumped=r.bumped, charging=r.charging)
 
     def _memory_polar(self):
-        """Khoang cach, goc, va HUONG TRUC cua tram sac theo tri nho.
-
-        Phai nho ca huong truc: hoc chi chui vao duoc tu mot phia, biet no nam
-        dau ma khong biet no quay ve dau thi ve toi noi van phai do lai tu dau.
-        """
-        if self.mem is None:
-            return MEM_CLIP, 0.0, 0.0
         r = self.robot
-        dx = self.mem[0] - r.ox
-        dy = self.mem[1] - r.oy
-        return (math.hypot(dx, dy), wrap_angle(math.atan2(dy, dx) - r.oth),
-                wrap_angle(self.mem[2] - r.oth))
+        return self.per.memory_polar((r.ox, r.oy, r.oth))
 
     def _return_margin(self, dist):
-        """Pin con du de ve tram khong? Day la phan "kinh nghiem" cua xe.
-
-        e_per_m la muc hao pin moi met do CHINH XE do duoc tu dau tap - chay
-        cang nang, ma sat cang nhieu thi con so nay cang lon.
-        """
-        if self.mem is None:
-            need = 0.35        # chua biet tram o dau -> phai chua du de di tim
-        else:
-            # 2.0 chu khong phai 1.0: duong ve khong thang, con phai vong ra
-            # truoc cua hoc. 0.12 la phan danh cho viec do dam va canh truc.
-            need = self.e_per_m * dist * 2.0 + 0.12
-        return clamp(self.robot.battery - need, -1.0, 1.0)
+        return self.per.return_margin(dist)
 
     # --------------------------------------------------------------------- goal
     def dock_points(self):
@@ -312,15 +226,12 @@ class CarEnv:
             d_before = math.hypot(r.x - goal_before[0], r.y - goal_before[1])
 
         fallen = r.step(ul, ur, cfg.dt, self.world, rng)
-        ir_ok = (self.steps - self.ir_hand) <= cfg.ir_handshake
-        gained = r.try_charge(self.world, cfg.dt, ir_ok)
+        gained = r.try_charge(self.world, cfg.dt, self.per.ir_ok)
 
         moved = math.hypot(r.x - px, r.y - py)
         self.distance += moved
         if gained <= 0.0:
             self.batt_used += max(0.0, b0 - r.battery)
-        if self.distance > 0.5:
-            self.e_per_m = 0.9 * self.e_per_m + 0.1 * (self.batt_used / self.distance)
 
         self.call_timer -= 1
         if self.call is None and self.call_timer <= 0 and cfg.stage >= 3:
@@ -331,8 +242,7 @@ class CarEnv:
                 self._drop_call()
 
         self.lidar.step(r, self.world, cfg.dt)
-        self.mem_age += 1
-        self._sense()
+        self.sensors.read_all(r, self.world, rng)
 
         # ------------------------------------------------------------ phan thuong
         rew = 0.0
@@ -432,11 +342,11 @@ class CarEnv:
             P["spin"] -= sp
 
         cost = cfg.w_energy * 0.5 * (abs(ul) + abs(ur)) + cfg.w_smooth * 0.5 * (
-            abs(ul - self.prev_u[0]) + abs(ur - self.prev_u[1]))
+            abs(ul - self.per.prev_u[0]) + abs(ur - self.per.prev_u[1]))
         rew -= cost
         P["cost"] -= cost
 
-        self.prev_u = [ul, ur]
+        self.per.note_action(ul, ur)
         self.steps += 1
         if self.steps >= cfg.max_steps:
             done = True
@@ -458,7 +368,7 @@ class CarEnv:
              "batt": round(r.battery, 4), "charging": r.charging, "bump": r.bumped,
              "cliff": [self.sensors.cliff_front, self.sensors.cliff_rear],
              "ir": [round(v, 3) for v in self.sensors.ir],
-             "u": [round(self.prev_u[0], 3), round(self.prev_u[1], 3)],
+             "u": [round(self.per.prev_u[0], 3), round(self.per.prev_u[1], 3)],
              "call": [round(self.call.x, 3), round(self.call.y, 3)] if self.call else None,
              "cand": [[round(c.bearing, 3), round(c.dist, 3), round(c.yaw, 3)]
                       for c in self.cands]}
@@ -466,7 +376,7 @@ class CarEnv:
         if n % self.cfg.scan_every == 0:
             a, rr = self.lidar.base, self.lidar.r
             k = max(1, self.lidar.n // 90)
-            off = self.lidar.scan_theta - r.theta
+            off = self.lidar.scan_theta - r.oth
             f["scan"] = [round(float(v), 2) for v in rr[::k]]
             f["scan_off"] = round(off, 3)
         return f

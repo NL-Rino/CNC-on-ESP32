@@ -1,5 +1,12 @@
 # Nạp bộ não xuống ESP32 (phần làm sau)
 
+> **Hai chế độ.** `robot_link.ino` — bộ não chạy trên laptop, ESP32 chỉ đẩy cảm
+> biến qua wifi và nhận lệnh ga (xem `link/` và mục tương ứng trong README gốc).
+> `car_main_skeleton.ino` — bộ não chạy ngay trên ESP32, không cần mạng. Giữ cả
+> hai: khi wifi chết mà vẫn muốn xe về được trạm sạc thì cần cái thứ hai.
+>
+> Dù chọn chế độ nào, **lớp phản xạ an toàn ở mục 4 vẫn phải nằm trên ESP32**.
+
 Thư mục này chứa **phần chạy bộ não + phần nhận dạng trạm sạc**, chưa phải
 firmware hoàn chỉnh. Mục đích là khi làm phần cứng thì không phải viết lại từ
 đầu, và để biết trước phải đo đạc những gì.

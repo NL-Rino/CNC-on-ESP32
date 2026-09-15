@@ -10,6 +10,7 @@ Chạy bằng Python 3 + numpy, không cần GPU, không cần thư viện RL n�
 pip install numpy
 python3 tests/test_sim.py                                  # kiểm tra mô phỏng
 python3 tests/test_firmware.py                             # bản C khớp bản Python
+python3 tests/test_link.py                                 # robot <-> wifi <-> bộ não
 python3 tools/compare.py brains/car_bay_v1.npz              # AI vs bộ điều khiển viết tay
 python3 -m train.evaluate --policy brains/car_bay_v1.npz --ascii --seed 7
 ```
@@ -69,6 +70,58 @@ python3 -m train.train --curriculum --resume brains/car_bay_v1.npz \
 4. **Miễn phạt va chạm với vách hộc quá rộng.** Định miễn cho việc xát vách lúc
    chui vào (khe hở 5 mm, xát là đương nhiên), nhưng lỡ miễn cả lúc xe tì vào
    *sườn* hộc. Xe nằm lì vào vách **41% số bước**.
+
+## Bộ não chạy trên laptop, robot nối qua wifi
+
+ESP32 chỉ làm ba việc: đọc cảm biến, đẩy lên laptop, nhận lại lệnh ga. Toàn bộ
+bộ dò hộc và mạng nơ-ron chạy trên máy bạn.
+
+```bash
+# trên laptop
+python3 -m link.brain_server --policy brains/car_bay_v1.npz
+
+# thử toàn bộ đường đi khi chưa có phần cứng (robot giả nói đúng giao thức)
+python3 -m link.fake_robot --realtime
+```
+
+Đo trên loopback: **20 Hz đều**, bộ não xử lý **0,5 ms** trong ngân sách 50 ms
+mỗi chu kỳ, khứ hồi 0,8 ms. Một vòng quét LiDAR đầy đủ gói lại còn **888 byte**
+(khoảng cách nén về milimet — mịn hơn nhiễu thật của Camsense cả chục lần), tức
+**6 KB/s** ở 7 Hz. Băng thông không phải vấn đề.
+
+### Ba thứ phải làm đúng, nếu không sẽ hỏng âm thầm
+
+**1. Lớp phản xạ an toàn phải nằm trên ESP32.** Từ lúc cảm biến vực kêu đến lúc
+tâm xe qua mép là **290 ms**; trừ 120 ms quãng đường phanh còn **170 ms** dự địa.
+Một cú nghẽn wifi ăn hết chừng đó. Nên `robot_link.ino` tự lùi khi cảm biến vực
+kêu, bất kể bộ não đang nghĩ gì, và tự dừng bánh nếu 150 ms không có lệnh mới.
+
+**2. Robot phải báo lại ga *thực sự* đã chạy, không phải ga được yêu cầu.** Lệnh
+bước trước là một trong 46 đầu vào của bộ não. Khi phản xạ an toàn đè lệnh mà
+robot không báo lại, trạng thái GRU trên laptop sẽ trôi khỏi thực tế — đúng vào
+lúc xe đang gặp chuyện. Đây là lỗi tôi mắc phải và chỉ lộ ra nhờ phép đối chiếu
+quan sát: lệch **1.6** ở trường `prev_u_right`.
+
+**3. Dựng quan sát phải dùng chung một đoạn mã.** `sim/perception.py` là chỗ duy
+nhất biến tín hiệu cảm biến thành 46 số; cả mô phỏng lẫn `brain_server` đều gọi
+vào đó. Có hai phép kiểm tra giữ cho nó không trôi:
+
+| kiểm tra | kết quả |
+|---|---|
+| Quan sát trên laptop vs. mô phỏng tự tính, 220 bước | lệch tối đa **3.6e-3** (đúng bằng sai số làm tròn 1 mm) |
+| Gói tin `link_pack.c` vs. `link/protocol.py` | **trùng từng byte** |
+
+Cái thứ hai đáng giá hơn vẻ ngoài của nó: offset byte lệch một chữ là thứ không
+thể gỡ khi đã nằm trên xe.
+
+### Một lỗi cũ lộ ra khi tách mã
+
+Bản mô phỏng cũ khử nhoè vòng quét LiDAR bằng **góc thật** của xe — thứ robot
+thật không hề có. Khi chuyển sang dùng odometry thì tỉ lệ cắm sạc tụt từ 0.33
+xuống 0.10 mỗi tập. Nguyên nhân: tôi lấy `scan_theta` ở hệ góc-thật trừ đi góc
+odometry, ra đúng bằng **lượng trôi tích luỹ**. Khử nhoè chỉ cần biết xe quay bao
+nhiêu *trong một vòng quét* (~143 ms), nên phải lấy hiệu hai số **cùng một hệ**
+thì phần trôi mới triệt tiêu. Sửa xong, kết quả trở lại 0.32.
 
 ## Chiếc xe trong mô phỏng
 

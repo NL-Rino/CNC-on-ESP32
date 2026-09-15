@@ -81,7 +81,12 @@ class Lidar:
         bad = (r >= RMAX - 0.02) | (r < RMIN) | (g.random(self.n) < DROP_RATE)
         self.r = np.where(bad, 0.0, r)
         self.r_filled = np.where(bad, RMAX, r)
-        self.scan_theta = robot.theta
+        # Ghi lai goc theo hệ ODOMETRY cua chinh xe, khong phai goc that.
+        # Khu nhoe chi can biet xe da quay bao nhieu TRONG mot vong quet
+        # (~143 ms); lay hieu hai so cung he thi phan troi tich luy tu triet
+        # tieu. Tru goc-that cho goc-odometry thi ra dung luong troi - va do
+        # la loi tôi vua mac phai: bo do bi lech dan theo thoi gian chay.
+        self.scan_theta = robot.oth
 
     # -------------------------------------------------------------- doc du lieu
     def shift_for(self, theta_now):

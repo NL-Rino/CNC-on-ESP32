@@ -37,7 +37,8 @@ int main(int argc, char **argv) {
     dock_cand_t out[DOCK_MAX_CAND];
     int k = dock_detect(r, ca, sa, n, 0.0f, out);
     for (int i = 0; i < k; ++i)
-        printf("%.4f %.4f %.4f\n", out[i].bearing, out[i].dist, out[i].width);
+        printf("%.4f %.4f %.4f %.4f\n", out[i].bearing, out[i].dist,
+               out[i].width, out[i].yaw);
     return 0;
 }
 """
@@ -70,9 +71,13 @@ def main():
         ld = Lidar()
         ld.reset(np.random.default_rng(seed))
         rb = Robot()
-        dist = 0.6 + 0.4 * (seed % 4)
-        rb.reset(d.x - dist * math.cos(d.heading),
-                 d.y - dist * math.sin(d.heading), d.heading, 1.0)
+        dist = 0.5 + 0.35 * (seed % 4)
+        off = (-0.3, 0.0, 0.3)[seed % 3]
+        mx, my = d.mouth
+        a = d.heading + math.pi + off
+        rb.reset(mx + dist * math.cos(a), my + dist * math.sin(a),
+                 math.atan2(my - (my + dist * math.sin(a)),
+                            mx - (mx + dist * math.cos(a))), 1.0)
         if not w.on_table(rb.x, rb.y):
             continue
         ld._scan(rb, w)
@@ -85,9 +90,12 @@ def main():
         out = subprocess.run([exe, path], capture_output=True, text=True).stdout
         c = [tuple(float(v) for v in line.split())
              for line in out.splitlines() if line.strip()]
+        # `yaw` khop long hon: no den tu khop duong thang, ma Python cong
+        # don float32 theo cap con C cong don double tuan tu.
         ok = len(c) == len(py) and all(
             abs(a[0] - b.bearing) < 2e-3 and abs(a[1] - b.dist) < 2e-3 and
-            abs(a[2] - b.width) < 2e-3 for a, b in zip(c, py))
+            abs(a[2] - b.width) < 2e-3 and abs(a[3] - b.yaw) < 1e-2
+            for a, b in zip(c, py))
         if not ok:
             bad += 1
             print("  FAIL canh %d" % seed)

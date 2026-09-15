@@ -86,8 +86,8 @@ def build(npz, log_path, out_path, episodes=3):
     facts = [
         ["%d" % ep0.get("lidar_n", 460), "điểm LiDAR mỗi vòng"],
         ["%.1f Hz" % ep0.get("scan_hz", 7), "tốc độ quét — dữ liệu luôn cũ 3 chu kỳ"],
-        ["15 cm", "cạnh hộp trạm sạc phải nhận ra"],
-        ["10.5 cm", "khoảng báo trước của cảm biến vực"],
+        ["40 / 31 cm", "hộc sạc: ngoài / lòng trong"],
+        ["5 mm", "khe hở mỗi bên khi xe 30 cm chui vào"],
         ["%d" % pol.n_params, "tham số trong bộ não"],
     ]
     data = {

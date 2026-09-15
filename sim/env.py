@@ -1,8 +1,8 @@
 """Moi truong huan luyen kieu gym (reset/step) cho xe 2 banh vi sai.
 
 Policy CHI nhin thay du lieu cam bien - dung nhung thu phan cung that co:
-LiDAR Camsense (da rut thanh 16 quat + ket qua bo do hinh tram sac), 2 mat do
-vuc, 1 mat thu hong ngoai 2 kenh, muc pin, va uoc luong odometry cua chinh no.
+LiDAR Camsense (rut thanh 12 quat + ket qua bo do hoc sac), 2 mat do vuc,
+1 mat thu hong ngoai 2 kenh, muc pin, va uoc luong odometry cua chinh no.
 Phan thuong duoc phep dung thong tin "toan tri" vi no chi ton tai luc huan luyen.
 """
 import math
@@ -20,16 +20,18 @@ from .world import IR_CALL, IR_DOCK, Beacon, make_world
 SEC_CLIP = 3.0          # tam nhin dua vao mang no-ron (m) - xa hon coi la "trong"
 MEM_CLIP = 3.0
 
-OBS_DIM = SECTORS + 2 + 4 * MAX_CAND + 6 + 4 + 3 + 5
+OBS_DIM = SECTORS + 2 + 6 * MAX_CAND + 6 + 6 + 3 + 5
 ACT_DIM = 2
 
 OBS_NAMES = (
     ["lidar_sector_%02d" % i for i in range(SECTORS)] +
     ["cliff_front", "cliff_rear"] +
-    sum([["cand%d_seen" % i, "cand%d_sin" % i, "cand%d_cos" % i, "cand%d_dist" % i]
+    sum([["cand%d_seen" % i, "cand%d_sin" % i, "cand%d_cos" % i,
+          "cand%d_dist" % i, "cand%d_yawsin" % i, "cand%d_yawcos" % i]
          for i in range(MAX_CAND)], []) +
     ["ir_call", "ir_call_seen", "ir_dock", "ir_dock_seen", "d_ir_call", "d_ir_dock"] +
-    ["mem_known", "mem_sin", "mem_cos", "mem_dist"] +
+    ["mem_known", "mem_sin", "mem_cos", "mem_dist",
+     "mem_headsin", "mem_headcos"] +
     ["battery", "battery_low", "return_margin"] +
     ["vel", "yaw_rate", "prev_u_left", "prev_u_right", "bump"]
 )
@@ -45,14 +47,14 @@ class EnvConfig:
     call_radius = 0.25
     call_timeout = (200, 500)
     ir_handshake = 30         # so buoc con nho tin hieu IR de duoc phep sac
-    dock_approach = 0.55      # diem tiep can, tinh tu tam hop tram sac (m)
+    dock_approach = 0.40      # diem doi truoc CUA hoc sac (m)
     record = False
     record_every = 2
     scan_every = 4
 
     # He so thuong/phat
     w_fall = -40.0
-    w_flat = -25.0
+    w_flat = -60.0
     w_bump = -1.5
     w_cliff = -0.8
     w_progress = 14.0
@@ -165,7 +167,7 @@ class CarEnv:
             self.ir_hand = self.steps
             self._update_memory()
         if r.charging:
-            self.mem = (r.ox, r.oy)
+            self.mem = (r.ox, r.oy, r.oth)
             self.mem_age = 0
 
     def _update_memory(self):
@@ -183,7 +185,8 @@ class CarEnv:
         if best is not None:
             a = r.oth + best.bearing
             self.mem = (r.ox + best.dist * math.cos(a),
-                        r.oy + best.dist * math.sin(a))
+                        r.oy + best.dist * math.sin(a),
+                        wrap_angle(r.oth + best.yaw))
             self.mem_age = 0
 
     def _obs(self):
@@ -203,9 +206,10 @@ class CarEnv:
             if i < len(self.cands):
                 c = self.cands[i]
                 obs += [1.0, math.sin(c.bearing), math.cos(c.bearing),
-                        min(c.dist, SEC_CLIP) / SEC_CLIP]
+                        min(c.dist, SEC_CLIP) / SEC_CLIP,
+                        math.sin(c.yaw), math.cos(c.yaw)]
             else:
-                obs += [0.0, 0.0, 0.0, 1.0]
+                obs += [0.0, 0.0, 0.0, 1.0, 0.0, 1.0]
 
         d_call = clamp((s.ir[IR_CALL] - self.prev_ir[IR_CALL]) * 8.0, -1.0, 1.0)
         d_dock = clamp((s.ir[IR_DOCK] - self.prev_ir[IR_DOCK]) * 8.0, -1.0, 1.0)
@@ -213,11 +217,12 @@ class CarEnv:
                 s.ir[IR_DOCK], s.ir_seen[IR_DOCK], d_call, d_dock]
         self.prev_ir = list(s.ir)
 
-        md, mb = self._memory_polar()
+        md, mb, mh = self._memory_polar()
         if self.mem is None:
-            obs += [0.0, 0.0, 0.0, 1.0]
+            obs += [0.0, 0.0, 0.0, 1.0, 0.0, 1.0]
         else:
-            obs += [1.0, math.sin(mb), math.cos(mb), min(md, MEM_CLIP) / MEM_CLIP]
+            obs += [1.0, math.sin(mb), math.cos(mb), min(md, MEM_CLIP) / MEM_CLIP,
+                    math.sin(mh), math.cos(mh)]
 
         obs += [r.battery,
                 1.0 if r.battery < cfg.battery_low else 0.0,
@@ -229,13 +234,18 @@ class CarEnv:
         return obs
 
     def _memory_polar(self):
-        """Khoang cach + goc toi tram sac theo tri nho (he odometry, co troi)."""
+        """Khoang cach, goc, va HUONG TRUC cua tram sac theo tri nho.
+
+        Phai nho ca huong truc: hoc chi chui vao duoc tu mot phia, biet no nam
+        dau ma khong biet no quay ve dau thi ve toi noi van phai do lai tu dau.
+        """
         if self.mem is None:
-            return MEM_CLIP, 0.0
+            return MEM_CLIP, 0.0, 0.0
         r = self.robot
         dx = self.mem[0] - r.ox
         dy = self.mem[1] - r.oy
-        return math.hypot(dx, dy), wrap_angle(math.atan2(dy, dx) - r.oth)
+        return (math.hypot(dx, dy), wrap_angle(math.atan2(dy, dx) - r.oth),
+                wrap_angle(self.mem[2] - r.oth))
 
     def _return_margin(self, dist):
         """Pin con du de ve tram khong? Day la phan "kinh nghiem" cua xe.
@@ -244,18 +254,20 @@ class CarEnv:
         cang nang, ma sat cang nhieu thi con so nay cang lon.
         """
         if self.mem is None:
-            need = 0.25
+            need = 0.35        # chua biet tram o dau -> phai chua du de di tim
         else:
-            need = self.e_per_m * dist * 1.5 + 0.06
+            # 2.0 chu khong phai 1.0: duong ve khong thang, con phai vong ra
+            # truoc cua hoc. 0.12 la phan danh cho viec do dam va canh truc.
+            need = self.e_per_m * dist * 2.0 + 0.12
         return clamp(self.robot.battery - need, -1.0, 1.0)
 
     # --------------------------------------------------------------------- goal
     def dock_points(self):
+        """(diem doi truoc cua, diem dung sac)."""
         d = self.world.dock
-        c, sn = math.cos(d.heading), math.sin(d.heading)
+        ax, ay = d.approach(self.cfg.dock_approach)
         px, py = d.pocket
-        return (d.x - self.cfg.dock_approach * c,
-                d.y - self.cfg.dock_approach * sn, px, py)
+        return ax, ay, px, py
 
     def _active_goal(self):
         """Muc tieu dung cho phan thuong. Pin yeu thi ve sac truoc da."""
@@ -324,9 +336,13 @@ class CarEnv:
             P["flat"] += cfg.w_flat
             done = True
             info["flat"] = True
-        if r.bumped:
+        if r.bumped and not r.bump_bay:
             rew += cfg.w_bump
             P["bump"] += cfg.w_bump
+            self.bumps += 1
+        elif r.bump_bay:
+            # Xat vach hoc khi chui vao la chuyen binh thuong - khe chi ho
+            # 5 mm moi ben. Phat o day thi xe se hoc cach khong bao gio vao sac.
             self.bumps += 1
 
         cf, cr = self.sensors.cliff_front, self.sensors.cliff_rear
@@ -358,10 +374,10 @@ class CarEnv:
         if dock is not None and r.battery < cfg.battery_low:
             _, _, pkx, pky = self.dock_points()
             dd = math.hypot(r.x - pkx, r.y - pky)
-            if dd < 0.5:
+            if dd < 0.7:
                 err = wrap_angle(r.theta - dock.heading)
-                bonus = cfg.w_align * math.cos(err) * (1.0 - dd / 0.5)
-                if dd < 0.16 and abs(err) < 0.8:
+                bonus = cfg.w_align * math.cos(err) * (1.0 - dd / 0.7)
+                if dd < 0.20 and abs(err) < 0.5:
                     bonus += cfg.w_align * (1.0 - min(1.0, abs(r.v) / 0.20))
                 rew += bonus
                 P["align"] += bonus
@@ -425,7 +441,8 @@ class CarEnv:
              "ir": [round(v, 3) for v in self.sensors.ir],
              "u": [round(self.prev_u[0], 3), round(self.prev_u[1], 3)],
              "call": [round(self.call.x, 3), round(self.call.y, 3)] if self.call else None,
-             "cand": [[round(c.bearing, 3), round(c.dist, 3)] for c in self.cands]}
+             "cand": [[round(c.bearing, 3), round(c.dist, 3), round(c.yaw, 3)]
+                      for c in self.cands]}
         n = len(self.frames)
         if n % self.cfg.scan_every == 0:
             a, rr = self.lidar.base, self.lidar.r

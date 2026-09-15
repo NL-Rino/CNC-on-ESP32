@@ -1,6 +1,7 @@
-// Tim tram sac (hop 15 x 15 cm) trong mot vong quet LiDAR.
+// Tim hoc sac (chu U, ngoai 40 cm, long trong 31 cm) trong mot vong quet LiDAR.
 // Ban C cua sim/dock_detector.py - GIU HAI BEN GIONG NHAU, neu sua mot ben
 // ma quen ben kia thi bo nao se gap du lieu khac luc huan luyen.
+// tests/test_firmware.py doi chieu hai ban tren 25 canh ngau nhien.
 #pragma once
 #include <stdint.h>
 
@@ -11,12 +12,13 @@ extern "C" {
 #define DOCK_MAX_CAND 2   // phai bang MAX_CAND trong sim/dock_detector.py
 
 typedef struct {
-    float bearing;   // rad, 0 = thang truoc mat xe
-    float dist;      // m
-    float width;     // m, be rong doan do duoc
-    float depth;     // m, do cong so voi day cung
+    float bearing;   // rad, huong toi CUA hoc (0 = thang truoc mat xe)
+    float dist;      // m, khoang cach toi cua hoc
+    float width;     // m, be rong cua do duoc
+    float depth;     // m, long hoc lom vao bao sau
+    float yaw;       // rad, huong TRUC hoc - goc ma xe phai quay ve de chui vao
     int   npts;
-    float score;     // 0..1, cang gan 15 cm va cang phang thi cang cao
+    float score;     // 0..1, cang giong hoc that cang cao
 } dock_cand_t;
 
 // scan: mang `n` khoang cach (m) theo goc tang dan tu -pi den +pi,

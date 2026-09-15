@@ -6,7 +6,7 @@ ve) - y het ngoai doi. Chi hai mat chieu xuong cuu duoc xe.
 import math
 
 from .geometry import wrap_angle
-from .world import IR_CALL, IR_DOCK
+from .world import IR_CALL, IR_DOCK  # noqa: F401
 
 CLIFF_TRIG = 0.045         # nguong cao do (m) de bao "co vuc"
 CLIFF_NOISE = 0.003
@@ -65,8 +65,10 @@ class SensorSuite:
                 # goc nhin tu den ra xe co nam trong chum phat khong
                 if abs(wrap_angle(ang + math.pi - b.dir_ang)) > b.cone:
                     continue
-            tag = "dock" if b.channel == IR_DOCK else None
-            if not world.line_of_sight(rx, ry, b.x, b.y, skip_tag=tag):
+            # KHONG bo qua vach hoc o day: chinh hai vach ben cua hoc bop
+            # chum hong ngoai lai con +-24 do o cua. Nho vay xe phai doi dien
+            # cai hoc moi bat duoc tin hieu - dung nhu tram sac that.
+            if not world.line_of_sight(rx, ry, b.x, b.y):
                 continue
             lobe = math.cos(off * math.pi / (2.0 * IR_FOV)) ** 2
             atten = 1.0 / (1.0 + (d / 0.9) ** 2)

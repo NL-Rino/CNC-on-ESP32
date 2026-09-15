@@ -11,6 +11,7 @@ import numpy as np
 
 from sim.dock_detector import detect, detect_lidar
 from sim.env import OBS_DIM, OBS_NAMES, CarEnv, EnvConfig
+from sim.geometry import wrap_angle
 from sim.lidar import RMAX, RMIN, SECTORS, Lidar
 from sim.robot import Robot, RobotSpec
 from sim.sensors import SensorSuite
@@ -81,22 +82,86 @@ def test_lidar_bu_goc_khi_xe_quay():
     assert moved == SECTORS // 4, moved   # vat phai nhay sang ben phai 90 do
 
 
-def test_bo_do_tim_duoc_hop_15cm():
+def _lone_dock(heading=math.pi):
     w = World(6.0, 6.0)
-    dock = Dock(3.0, 3.0, math.pi)        # xe se dam dau theo huong +x
-    w.obstacles.append(dock.box)
+    dock = Dock(3.0, 3.0, heading)
     w.dock = dock
+    w.add_bay(dock)
+    w.beacons.append(dock.beacon)
     w.bake()
+    return w, dock
+
+
+def test_bo_do_tim_duoc_hoc():
+    w, dock = _lone_dock()                # cua hoc quay ve phia +x
     rb = Robot()
+    mx, my = dock.mouth
     hit = 0
     for k in range(12):
-        rb.reset(3.0 - 1.0, 3.0, 0.0)
+        rb.reset(mx + 0.7, my, math.pi)
         ld = _lidar_on(w, rb, seed=k)
         for c in detect_lidar(ld, rb.theta):
-            if abs(c.bearing) < 0.2 and abs(c.dist - 0.93) < 0.25:
+            if abs(c.bearing) < 0.2 and abs(c.dist - 0.7) < 0.15:
                 hit += 1
                 break
-    assert hit >= 8, "chi tim thay %d/12 lan" % hit
+    assert hit >= 10, "chi tim thay %d/12 lan" % hit
+
+
+def test_bo_do_cho_ra_truc_cua_hoc():
+    """Thu quan trong nhat: hoc chu U cho biet no QUAY VE DAU.
+
+    Khong co con so nay thi khong the canh xe vao khe chi ho 5 mm moi ben.
+    """
+    w, dock = _lone_dock()
+    rb = Robot()
+    mx, my = dock.mouth
+    errs = []
+    for k in range(20):
+        rb.reset(mx + 0.55, my + 0.12 * ((k % 5) - 2), math.pi)
+        ld = _lidar_on(w, rb, seed=k)
+        for c in detect_lidar(ld, rb.theta):
+            if abs(c.dist - 0.6) < 0.25:
+                errs.append(abs(wrap_angle(rb.theta + c.yaw - dock.heading)))
+                break
+    assert len(errs) >= 16, "chi do duoc truc %d/20 lan" % len(errs)
+    med = sorted(errs)[len(errs) // 2]
+    assert med < math.radians(8.0), "truc lech trung vi %.1f do" % math.degrees(med)
+
+
+def test_bo_do_khong_nham_hop_dac_la_hoc():
+    """Hop dac cung co bang 40 cm cung khong duoc tinh la hoc: no LOI ra
+    truoc day cung chu khong LOM vao sau."""
+    w = World(6.0, 6.0)
+    w.add_obstacle(Obstacle("box", x0=3.0, y0=2.8, x1=3.4, y1=3.2))
+    w.bake()
+    rb = Robot()
+    for k in range(10):
+        rb.reset(2.0, 3.0, 0.0)
+        ld = _lidar_on(w, rb, seed=k)
+        for c in detect_lidar(ld, rb.theta):
+            assert abs(c.bearing) > 0.4, "nham hop dac thanh hoc: %r" % (c,)
+
+
+def test_mieng_hoc_loe_bat_duoc_xe_lech():
+    """Doan loe la thu duy nhat lam cho viec cam sac kha thi.
+
+    Hoc thang tap 31 cm voi xe 30 cm doi hoi vao dung +-5 mm; doan vat goc
+    o mieng noi cua so do ra +-3 cm, roi hai vach tu nan xe ve giua.
+    """
+    w, dock = _lone_dock(0.0)
+    rb = Robot()
+    got = []
+    for lat in (0.0, 0.02, 0.04, -0.03):
+        x, y = dock.local_to_world(-0.75, lat)
+        rb.reset(x, y, dock.heading, 0.5)
+        rng = random.Random(4)
+        for _ in range(180):
+            rb.step(0.32, 0.32, 0.05, w, rng)
+        u, v, _ = dock.to_local(rb.x, rb.y, rb.theta)
+        got.append((lat, u, v))
+        assert u > -0.05, "lech %.2f m: chi vao toi u=%.3f" % (lat, u)
+        assert abs(v) < 0.01, "lech %.2f m: vao lech %.3f m" % (lat, v)
+    assert rb.try_charge(w, 0.05, True) > 0.0, "vao tan noi ma khong sac"
 
 
 def test_bo_do_bo_qua_tuong_dai():
@@ -128,22 +193,26 @@ def test_cam_bien_vuc_bao_truoc_khi_roi():
 
 
 def test_hong_ngoai_tram_sac_chi_thay_tu_phia_truoc():
-    w = World(6.0, 6.0)
-    dock = Dock(3.0, 3.0, math.pi)
-    w.dock = dock
-    w.obstacles.append(dock.box)
-    w.beacons.append(dock.beacon)
-    w.bake()
+    w, dock = _lone_dock()
     rb = Robot()
     s = SensorSuite(RobotSpec())
     rng = random.Random(2)
-    # dock quay mat ve phia +x, nen cho dau xe la x > 3
-    rb.reset(3.8, 3.0, math.pi)           # dung truoc mat tram, nhin vao
+    mx, my = dock.mouth
+    rb.reset(mx + 0.6, my, math.pi)       # doi dien cua hoc, nhin vao
     v, seen = s.read_ir(rb, w, rng)
     assert seen[IR_DOCK] > 0.5 and v[IR_DOCK] > 0.1
-    rb.reset(2.2, 3.0, 0.0)               # dung sau lung tram, nhin vao
+    rb.reset(2.2, 3.0, 0.0)               # sau lung hoc, nhin vao
     v, seen = s.read_ir(rb, w, rng)
     assert seen[IR_DOCK] < 0.5, "khong duoc thay den tu phia sau tram"
+    # Hai vach ben bop chum hong ngoai lai: dung lech nhieu la mat tin hieu.
+    # Day chinh la ly do xe phai vong ra doi dien cua hoc roi moi hoi IR.
+    for deg, want in ((20, True), (65, False)):
+        a = dock.heading + math.pi + math.radians(deg)
+        x, y = mx + 0.6 * math.cos(a), my + 0.6 * math.sin(a)
+        rb.reset(x, y, math.atan2(my - y, mx - x))
+        v, seen = s.read_ir(rb, w, rng)
+        assert (seen[IR_DOCK] > 0.5) is want, \
+            "lech %d do: thay=%s ma mong doi %s" % (deg, seen[IR_DOCK], want)
 
 
 def test_khong_bat_tay_hong_ngoai_thi_khong_sac():
@@ -189,9 +258,11 @@ def test_nho_vi_tri_tram_sac_sau_khi_sac():
         back = d.heading + math.pi
         env.robot.ox += 0.6 * math.cos(back)
         env.robot.oy += 0.6 * math.sin(back)
-        dist, bear = env._memory_polar()
+        dist, bear, head = env._memory_polar()
         assert 0.4 < dist < 0.8, dist
         assert abs(bear) < 0.3, bear
+        # nho ca HUONG TRUC: hoc chi chui vao duoc tu mot phia
+        assert abs(wrap_angle(head - (d.heading - env.robot.oth))) < 0.2, head
         return
     raise AssertionError("khong sinh duoc canh nao co tram sac")
 

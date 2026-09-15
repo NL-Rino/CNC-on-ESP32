@@ -5,16 +5,22 @@ from .geometry import clamp, wrap_angle
 
 
 class RobotSpec:
-    """Thong so vat ly cua xe - doi o day khi dung khung xe that."""
-    radius = 0.090          # ban kinh than xe (m)
-    wheel_base = 0.150      # khoang cach 2 ben banh (m)
-    v_max = 0.60            # toc do banh toi da (m/s) o PWM 100%
+    """Thong so vat ly cua xe - doi o day khi dung khung xe that.
+
+    Than xe VUONG 30 x 30 cm. Voi vat can thuong thi coi la hinh tron ban
+    kinh 15 cm cho nhanh; rieng khi chui vao hoc sac (long trong 31 cm, tuc
+    moi ben du 5 mm) thi phai tinh dung hinh vuong va dung ca goc quay.
+    """
+    half = 0.150            # nua canh than xe vuong (m)
+    radius = 0.150          # ban kinh tuong duong dung cho vat can thuong
+    wheel_base = 0.240      # khoang cach 2 ben banh (m)
+    v_max = 0.50            # toc do banh toi da (m/s) o PWM 100%
     motor_tau = 0.12        # hang so thoi gian dap ung motor (s)
     deadband = 0.06         # PWM duoi muc nay khong du thang ma sat tinh
     slip_noise = 0.02       # nhieu truot banh (ti le)
-    cliff_fwd = 0.105       # vi tri cam bien vuc truoc (m, tu tam xe)
-    cliff_rear = -0.105     # vi tri cam bien vuc sau
-    ir_offset = 0.085       # mat thu hong ngoai o dau xe
+    cliff_fwd = 0.145       # vi tri cam bien vuc truoc (m, tu tam xe)
+    cliff_rear = -0.145     # vi tri cam bien vuc sau
+    ir_offset = 0.140       # mat thu hong ngoai o dau xe
 
     # Odometry (dung de nho vi tri tram sac giua cac chuyen di)
     odo_scale_err = 0.025   # sai so ti le duong kinh banh moi ben
@@ -55,6 +61,7 @@ class Robot:
         self.omega = 0.0       # toc do quay (rad/s)
         self.battery = battery
         self.bumped = False
+        self.bump_bay = False      # cham vach hoc (co xat khi chui vao la thuong)
         self.fallen = False
         self.charging = False
 
@@ -84,22 +91,48 @@ class Robot:
 
         # Va cham voi vat can: truot doc / chan lai
         self.bumped = False
-        if world.min_obstacle_clearance(nx, ny) < s.radius:
+        self.bump_bay = False
+        if world.blocked(nx, ny, ntheta, s.radius, s.half):
             self.bumped = True
+            # Chi vach hoc chan thoi, vat can thuong thi khong -> dang co chui
+            # vao hoc va xat nhe hai ben. Chuyen do binh thuong, dung phat.
+            self.bump_bay = world.min_obstacle_clearance(nx, ny) >= s.radius
+            # Mat vat cheo o mieng hoc nan xe ve giua truoc da
+            wd = world.wedge(nx, ny, ntheta, s.radius, s.half) \
+                if self.bump_bay else None
+            if wd is not None:
+                nx, ny, ntheta = wd
+                self.x, self.y, self.theta = nx, ny, ntheta
+                self.vl *= 0.85
+                self.vr *= 0.85
+                self._odo(dt)
+                if not world.on_table(self.x, self.y):
+                    self.fallen = True
+                self._drain(dt)
+                return self.fallen
             # thu truot theo tung truc de xe khong bi dinh cung
-            if world.min_obstacle_clearance(nx, self.y) >= s.radius:
+            if not world.blocked(nx, self.y, ntheta, s.radius, s.half):
                 ny = self.y
-            elif world.min_obstacle_clearance(self.x, ny) >= s.radius:
+            elif not world.blocked(self.x, ny, ntheta, s.radius, s.half):
                 nx = self.x
             else:
                 nx, ny = self.x, self.y
+                ntheta = self.theta if world.blocked(
+                    self.x, self.y, ntheta, s.radius, s.half) else ntheta
             self.vl *= 0.3
             self.vr *= 0.3
 
         self.x, self.y, self.theta = nx, ny, ntheta
+        self._odo(dt)
+        if not world.on_table(self.x, self.y):
+            self.fallen = True
+        self._drain(dt)
+        return self.fallen
 
-        # Odometry: xe chi biet minh di duoc bao nhieu qua banh xe, ma banh
-        # thi truot va hai ben khong bang nhau -> uoc luong troi dan.
+    def _odo(self, dt):
+        """Odometry: xe chi biet minh di duoc bao nhieu qua banh xe, ma banh
+        thi truot va hai ben khong bang nhau -> uoc luong troi dan."""
+        s = self.spec
         vlo = self.vl * self.sl
         vro = self.vr * self.sr
         vo = 0.5 * (vlo + vro)
@@ -108,16 +141,12 @@ class Robot:
         self.oy += vo * math.sin(self.oth) * dt
         self.oth = wrap_angle(self.oth + wo * dt)
 
-        # Roi khoi ban khi tam xe vuot qua mep
-        if not world.on_table(self.x, self.y):
-            self.fallen = True
-
-        # Pin
+    def _drain(self, dt):
+        s = self.spec
         effort = 0.5 * (abs(self.vl) + abs(self.vr)) / s.v_max
         self.battery -= (s.batt_idle + s.batt_drive * effort) * dt
         if self.battery < 0.0:
             self.battery = 0.0
-        return self.fallen
 
     # ------------------------------------------------------------------- tram sac
     def try_charge(self, world, dt, ir_ok=True):
@@ -133,7 +162,9 @@ class Robot:
         px, py = dock.pocket
         d = math.hypot(self.x - px, self.y - py)
         align = abs(wrap_angle(self.theta - dock.heading))
-        if d < 0.11 and align < 0.7 and abs(self.v) < 0.10:
+        # Da chui han vao trong hoc: khe chi ho 5 mm moi ben nen toi day
+        # goc quay gan nhu chac chan da dung, chi con phai vao du sau.
+        if d < 0.10 and align < 0.30 and abs(self.v) < 0.10:
             before = self.battery
             self.battery = min(self.spec.batt_capacity,
                                self.battery + self.spec.charge_rate * dt)
@@ -154,3 +185,10 @@ class Robot:
         return {"x": self.x, "y": self.y, "th": self.theta,
                 "batt": self.battery, "charging": self.charging,
                 "bump": self.bumped, "v": self.v, "w": self.omega}
+
+    def footprint(self):
+        """4 goc than xe - dung de ve hinh."""
+        c, s = math.cos(self.theta), math.sin(self.theta)
+        h = self.spec.half
+        return [(self.x + u * c - v * s, self.y + u * s + v * c)
+                for u, v in ((h, h), (h, -h), (-h, -h), (-h, h))]

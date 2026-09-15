@@ -56,7 +56,8 @@ tức 2–4 giờ trên máy 8 nhân — và chạy nền được, không phả
 |---|---|
 | **LiDAR Camsense X1/X2** | 3000 điểm/giây, quay 5–8 Hz → ~460 điểm mỗi vòng (0.8°/điểm), tầm 0.12–8 m. Mỗi vòng mất ~150 ms nên dữ liệu luôn cũ hơn thực tế 3 chu kỳ điều khiển; có nhiễu, rung góc, 2% điểm mất. Xoay bù theo odometry để vòng quét cũ vẫn chỉ đúng hướng |
 | 2 cặp bánh DC trái/phải | điều khiển vi sai, 2 lệnh PWM trong `[-1,1]`, trễ motor 0.12 s, vùng chết PWM, trượt bánh ngẫu nhiên |
-| 2 cảm biến vực | chiếu xuống ở **đầu** và **đuôi** xe (cách tâm 10.5 cm) |
+| Thân xe | **vuông 30 × 30 cm**. Với vật cản thường thì tính va chạm kiểu hình tròn cho nhanh; riêng lúc chui vào hộc sạc thì tính đúng hình vuông **và cả góc quay** — khe chỉ hở 5 mm mỗi bên, lấy hình tròn thay thế là sai hẳn |
+| 2 cảm biến vực | chiếu xuống ở **đầu** và **đuôi** xe (cách tâm 14.5 cm) |
 | 1 mắt thu hồng ngoại | ở đầu xe, góc thu ±46°, **2 kênh tần số**: kênh GỌI và kênh TRẠM SẠC |
 | Odometry | encoder 2 bánh, sai số đường kính 2.5% + trôi góc → trí nhớ vị trí trạm sạc mờ dần |
 | Cảm biến pin | mức pin 0..1, hao theo tải động cơ |
@@ -64,21 +65,49 @@ tức 2–4 giờ trên máy 8 nhân — và chạy nền được, không phả
 **LiDAR không thấy được mép bàn** — tia quét ngang, hố sâu không dội gì về. Chỉ 2
 cảm biến chiếu xuống cứu được xe. Đây là ràng buộc quan trọng nhất của cả thiết kế.
 
-## Trạm sạc: thấy hình → quay đầu hỏi hồng ngoại → mới vào
+## Trạm sạc: cái hộc chữ U
 
-Trạm sạc là một **hộp 15 × 15 cm thật** nằm trên bàn. Trên bàn còn có vài **hộp mồi
-nhử cùng kích thước** không phát hồng ngoại. Quy trình đúng như vậy mới cắm được:
+Trạm sạc là một cái **hộc** để xe chui hẳn vào: ngoài **40 × 40 cm**, lòng trong
+**31 × 31 cm**, vách dày 4.5 cm, **đèn hồng ngoại nằm giữa thành trong** chiếu
+thẳng ra cửa. Trên bàn còn vài cái hộc **giống hệt** nhưng không phát hồng ngoại.
 
-1. `sim/dock_detector.py` cắt vòng quét LiDAR thành từng đoạn, giữ lại đoạn **rộng
-   10–25 cm và phẳng** → ứng viên. Hộp mồi nhử và góc bàn cũng lọt qua bước này.
-2. Xe quay đầu về phía ứng viên và xem **mắt hồng ngoại có bắt được tín hiệu kênh
-   trạm sạc không**. Trạm chỉ phát về phía trước mặt nó, nên phải vừa đứng đúng phía
-   vừa quay đầu về đó mới bắt được.
-3. Có tín hiệu thì vào **ổ đậu** (cách tâm hộp 20 cm, đúng trên trục), dừng lại,
-   canh hướng. **Không có bắt tay hồng ngoại thì không đóng điện** — trạm thật cũng vậy.
+Hình chữ U cho LiDAR nhiều hơn hẳn một cái hộp đặc: nó cho biết cả **trục** của
+trạm, tức hướng xe phải quay về để chui vào thẳng.
 
-Đây là thuật toán hình học thuần, không phải mạng nơ-ron, nên chuyển sang C chạy
-trên ESP32 được: `firmware/dock_detect.c` cho **kết quả trùng khít** bản Python.
+1. `sim/dock_detector.py` cắt vòng quét thành đoạn, nối hai đầu thành dây cung rồi
+   đo độ **lõm**: hộc lõm vào 35 cm, vật đặc thì lồi ra trước. Rồi khớp một đường
+   thẳng qua **thành trong** để lấy trục — trung vị lệch **2°**.
+2. Xe **vòng ra đối diện cửa hộc**, canh thẳng trục, rồi xem mắt hồng ngoại có bắt
+   được tín hiệu kênh trạm sạc không. Chùm phát của LED là ±40° nhưng **hai vách
+   bên bóp nó lại còn ~±24°**, nên đứng chéo là không thấy gì. Đó là lý do phải
+   vòng ra đối diện — hình học bắt buộc thế, không phải luật tôi viết thêm.
+3. Có tín hiệu thì **cam kết chui vào** và cứ thế mà vào. **Không có bắt tay hồng
+   ngoại thì không đóng điện** — trạm thật cũng vậy.
+
+Bước 3 phải "cam kết" chứ không được tính lại từng bước: khi đã vào trong, điểm
+đợi trước cửa nằm **sau lưng** xe, nên nếu bước nào cũng hỏi "mình có đang đứng
+đúng chỗ đợi không" thì xe sẽ lùi ra rồi vào, lùi ra rồi vào mãi. Tôi mất một
+vòng gỡ lỗi vì đúng chuyện này.
+
+### Khe 5 mm và đoạn vát ở miệng — chỗ cần bạn quyết
+
+Xe 30 cm, lòng hộc 31 cm. Mô phỏng cho ra con số dứt khoát: hộc **thẳng tuột**
+đòi xe vào đúng **±5 mm ngang và ±1° góc**. Hình học thuần thôi — xe vuông nghiêng
+2° đã cần khe 31.0 cm. Mà LiDAR ở cự ly cắm chỉ cho trục chính xác ~2°, tức là
+**đo tốt hết mức vẫn không đủ**. Không dẫn động vi sai nào cắm nổi.
+
+Nên tôi thêm thứ mọi đế sạc thật đều có: **vát hai góc trong ở miệng hộc**. 8 cm
+đầu nong ra 37 cm rồi thu dần về 31 cm — kích thước ngoài vẫn đúng 40 × 40 cm của
+bạn. Cửa sổ bắt rộng ra ±3.5 cm, và mặt vát hoạt động như một cái **cam**: vừa
+đẩy xe sang ngang vừa **xoay** xe về đúng trục.
+
+Nếu bạn muốn xem lại bản thẳng tuột như bản vẽ gốc: đặt `BAY_FLARE = 0.0` trong
+`sim/world.py`. Còn nếu đóng thật, tôi khuyên hoặc giữ đoạn vát này, hoặc nới lòng
+trong lên ~34 cm.
+
+Bộ dò là thuật toán hình học thuần, không phải mạng nơ-ron, nên chuyển sang C chạy
+trên ESP32 được: `firmware/dock_detect.c` cho **kết quả trùng khít** bản Python
+trên 25 cảnh ngẫu nhiên (`tests/test_firmware.py`).
 
 ## "Kinh nghiệm những lần trước" để tự đoán lúc phải về
 
@@ -88,15 +117,19 @@ Xe không được cho biết bản đồ hay toạ độ. Nó tự dựng ba th
   lại chỗ đó theo hệ odometry của chính nó. Odometry trôi dần nên trí nhớ mờ đi,
   thấy lại đèn thì mới làm mới được.
 - **Hao pin mỗi mét**: đo thẳng từ chuyến đi hiện tại (pin đã tụt / quãng đường đã đi).
-- **Biên an toàn** = `pin còn − (hao mỗi mét × quãng đường về trạm × 1.5 + 0.06)`.
-  Đây là một trong 40 đầu vào của bộ não: âm nghĩa là "về ngay không thì chết giữa đường".
+- **Hướng trục của trạm**: nhớ luôn, vì hộc chỉ chui vào được từ một phía. Biết nó
+  ở đâu mà không biết nó quay về đâu thì về tới nơi vẫn phải dò lại từ đầu.
+- **Biên an toàn** = `pin còn − (hao mỗi mét × quãng đường về trạm × 2.0 + 0.12)`.
+  Đây là một trong 46 đầu vào của bộ não: âm nghĩa là "về ngay không thì chết giữa
+  đường". Hệ số 2.0 chứ không phải 1.0 vì đường về không thẳng — còn phải vòng ra
+  trước cửa hộc rồi canh trục.
 
 Sạc thì sạc **đầy** rồi mới đi tiếp — có thưởng riêng cho việc đó, và mỗi lần sạc đầy
 xong thì lưới "đã đi qua" được xoá, coi như bắt đầu vòng tuần tra mới.
 
 ## Bộ não và cách nuôi
 
-- `train/policy.py` — GRU nhỏ: **40 đầu vào → 12 nơ-ron ẩn → 2 số ga**, 1.934 tham số.
+- `train/policy.py` — GRU nhỏ: **46 đầu vào → 16 nơ-ron ẩn → 2 số ga**, ~3.000 tham số.
   Phải có trí nhớ vì chỉ có một mắt hồng ngoại và vòng quét LiDAR thì cũ 150 ms.
 - `train/imitate.py` — **học bắt chước trước**: cho mạng học theo bộ điều khiển viết
   tay (mục tiêu dày đặc, mỗi bước đều có đáp án, không phải chạy mô phỏng lại). Mò từ

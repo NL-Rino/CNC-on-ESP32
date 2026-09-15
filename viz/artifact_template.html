@@ -103,14 +103,15 @@ footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
   <h1>Xe hai bánh học lái</h1>
   <p class="lede">Một bộ não GRU <span class="mono" id="nparam">—</span> tham số điều khiển 2 cặp bánh DC
   bằng LiDAR Camsense + 2 cảm biến vực + 1 mắt hồng ngoại: đi long nhong không rơi khỏi mép bàn,
-  thấy hộp 15×15 cm thì quay đầu hỏi hồng ngoại xem có phải trạm sạc không, và tự tính xem
-  còn đủ pin để về hay chưa.</p>
+  thấy cái hộc chữ U thì vòng ra đối diện cửa, hỏi hồng ngoại xem có phải trạm sạc thật không
+  rồi mới chui vào, và tự tính xem còn đủ pin để về hay chưa.</p>
 
   <div class="facts" id="facts"></div>
   <p class="sub" style="margin-top:14px;max-width:70ch">Các tab <b>viết tay</b> là bộ điều khiển
-  luật cứng — nó làm trọn quy trình: đi long nhong, thấy hộp 15 cm thì quay đầu hỏi hồng ngoại,
-  vào ổ sạc đầy rồi đi tiếp. Các tab <b>AI</b> là bộ não đang nuôi: hiện đã biết đi long nhong
-  và né mép bàn, chưa học xong phần tự về sạc.</p>
+  luật cứng — nó làm trọn quy trình: đi long nhong, thấy hộc thì vòng ra đối diện cửa, hỏi hồng
+  ngoại, chui vào sạc đầy rồi đi tiếp. Các tab <b>AI</b> là bộ não đang nuôi. Hộc <span
+  class="mono">40×40 cm</span> ngoài, lòng <span class="mono">31×31 cm</span>, xe
+  <span class="mono">30×30 cm</span> — mỗi bên chỉ dư <b>5 mm</b>.</p>
 
   <div class="deck">
     <div>
@@ -138,7 +139,7 @@ footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
         <div class="readout"><b id="lid-n">—</b><span id="lid-hz">điểm/vòng</span></div>
         <div class="pair">
           <div class="chan">vật gần nhất<b id="lid-near">—</b></div>
-          <div class="chan">ứng viên 15 cm<b id="lid-cand">0</b></div>
+          <div class="chan">hộc dò được<b id="lid-cand">0</b></div>
         </div>
       </div>
       <div class="inst">
@@ -185,14 +186,17 @@ footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
             <td>3000 điểm/giây, quay 5–8 Hz → ~460 điểm mỗi vòng (0.8°/điểm). Mỗi vòng mất
             ~150 ms nên dữ liệu luôn cũ hơn thực tế 3 chu kỳ điều khiển; có nhiễu, rung góc
             và 2% điểm mất. <b>Không thấy được mép bàn</b> — tia quét ngang, hố sâu không dội về.</td></tr>
-        <tr><td>Bộ dò hình 15×15 cm</td><td class="n">thuật toán, không phải mạng</td>
-            <td>cắt vòng quét thành đoạn, giữ đoạn rộng 10–25 cm và phẳng. Hộp mồi nhử cùng
-            kích thước cũng lọt qua — nên phải hỏi hồng ngoại mới biết đâu là trạm thật</td></tr>
-        <tr><td>2 × cảm biến vực</td><td class="n">±10.5 cm trước/sau</td>
-            <td>chiếu xuống; báo trước ~0.17 s ở tốc độ tối đa, trong khi xe cần ~0.07 s để phanh</td></tr>
+        <tr><td>Bộ dò hộc chữ U</td><td class="n">thuật toán, không phải mạng</td>
+            <td>cắt vòng quét thành đoạn, nối hai đầu thành dây cung rồi đo độ <b>lõm</b>:
+            hộc lõm vào 35 cm, vật đặc thì lồi ra. Cho ra cả <b>trục hộc</b> (khớp đường thẳng
+            qua thành trong) — không có con số này thì không tài nào canh vào khe hở 5 mm.
+            Hộc mồi nhử giống hệt trên LiDAR, nên phải hỏi hồng ngoại mới biết đâu là thật</td></tr>
+        <tr><td>2 × cảm biến vực</td><td class="n">±14.5 cm trước/sau</td>
+            <td>chiếu xuống; báo trước ~0.29 s ở tốc độ tối đa, trong khi xe cần ~0.07 s để phanh</td></tr>
         <tr><td>1 × mắt thu hồng ngoại</td><td class="n">đầu xe, ±46°</td>
-            <td>2 kênh tần số: đèn gọi và trạm sạc. Trạm chỉ phát về phía trước mặt nó, nên xe
-            phải vừa đứng đúng phía vừa quay đầu về đó mới bắt được tín hiệu</td></tr>
+            <td>2 kênh tần số: đèn gọi và trạm sạc. Đèn trạm nằm giữa <b>thành trong</b> của hộc,
+            nên chính hai vách bên bóp chùm phát lại còn ~±24° — xe phải vòng ra đối diện cửa
+            mới bắt được tín hiệu. Không bắt tay hồng ngoại thì không đóng điện</td></tr>
         <tr><td>Odometry</td><td class="n">trôi dần</td>
             <td>sai số đường kính bánh 2.5% + trôi góc — xe nhớ được chỗ trạm sạc nhưng trí nhớ
             mờ dần, thấy lại đèn hồng ngoại thì mới làm mới được</td></tr>
@@ -260,10 +264,36 @@ function draw(){
 
   ctx.fillStyle = css('--sunk'); ctx.strokeStyle = css('--line');
   for(const o of w.obstacles){
+    if(o.tag === 'dock' || o.tag === 'decoy') continue;   // ve rieng ben duoi
     ctx.beginPath();
     if(o.kind === 'circle') ctx.arc(X(o.x,p), Y(o.y,p), o.r*p.s, 0, 7);
     else ctx.rect(X(o.x0,p), Y(o.y1,p), (o.x1-o.x0)*p.s, (o.y1-o.y0)*p.s);
     ctx.fill(); ctx.stroke();
+  }
+
+  // Cac cai HOC chu U. Tram sac that va hoc moi nhu giong het nhau tren
+  // LiDAR - khac nhau duy nhat o chuyen co den hong ngoai hay khong.
+  for(const b of (w.bays || [])){
+    const on = b.tag === 'dock' && f.dock_on !== false;
+    const col = b.tag === 'dock' ? css('--dock') : css('--ink-3');
+    const hu = b.out*0.5, hi = b.inner*0.5;
+    ctx.save();
+    ctx.translate(X(b.x,p), Y(b.y,p)); ctx.rotate(-b.heading);
+    ctx.fillStyle = col; ctx.globalAlpha = on ? .95 : .45;
+    const S = p.s;
+    ctx.fillRect(hi*S, -hu*S, (hu-hi)*S, 2*hu*S);            // vach day
+    ctx.fillRect(-hu*S, -hu*S, 2*hu*S, (hu-hi)*S);           // vach ben
+    ctx.fillRect(-hu*S,  hi*S, 2*hu*S, (hu-hi)*S);
+    if(on){   // chum hong ngoai chieu ra cua, bi hai vach bop lai
+      ctx.globalAlpha = .13;
+      ctx.beginPath(); ctx.moveTo(hi*S, 0);
+      ctx.lineTo(-1.4*S, -0.62*S); ctx.lineTo(-1.4*S, 0.62*S); ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore(); ctx.globalAlpha = 1;
+    ctx.fillStyle = col; ctx.font = '500 11px "IBM Plex Mono", monospace';
+    ctx.fillText(b.tag === 'dock' ? 'trạm sạc' : 'mồi nhử',
+                 X(b.x,p) - 24, Y(b.y,p) - hu*p.s - 6);
   }
 
   ctx.save();
@@ -276,19 +306,11 @@ function draw(){
   ctx.stroke(); ctx.globalAlpha = 1;
 
   const dock = w.dock;
-  if(dock){
-    const on = f.dock_on !== false;
-    const hs = (dock.size || 0.15) * 0.5 * p.s;
-    ctx.fillStyle = css('--dock'); ctx.globalAlpha = on ? 1 : .4;
-    ctx.fillRect(X(dock.x,p)-hs, Y(dock.y,p)-hs, 2*hs, 2*hs);
-    // o dau: cho xe phai dung dung vao day moi nap duoc dien
+  if(dock){   // cho xe phai chui han vao moi nap duoc dien
     ctx.strokeStyle = css('--dock'); ctx.lineWidth = 1.5; ctx.setLineDash([4,3]);
     ctx.beginPath();
-    ctx.arc(X(dock.pocket[0],p), Y(dock.pocket[1],p), 0.11*p.s, 0, 7);
+    ctx.arc(X(dock.pocket[0],p), Y(dock.pocket[1],p), 0.10*p.s, 0, 7);
     ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = css('--dock'); ctx.font = '500 11px "IBM Plex Mono", monospace';
-    ctx.fillText('trạm sạc', X(dock.x,p) - 26, Y(dock.y,p) - hs - 6);
-    ctx.globalAlpha = 1;
   }
   if(f.call){
     const t = fi * 0.35;
@@ -317,28 +339,43 @@ function draw(){
       ctx.fillRect(X(f.x + d*Math.cos(a),p)-1.3, Y(f.y + d*Math.sin(a),p)-1.3, 2.6, 2.6);
     }
   }
-  // ung vien "hop 15 cm" ma bo do tim duoc
+  // Hoc ma bo do tim duoc. Mui ten chi TRUC hoc - huong xe phai quay ve de
+  // chui vao. Do la thu ma hop dac khong the cho biet.
   ctx.globalAlpha = 1;
   if(f.cand){
     for(const c of f.cand){
       const a = f.th + c[0], cxp = X(f.x + c[1]*Math.cos(a),p), cyp = Y(f.y + c[1]*Math.sin(a),p);
-      ctx.strokeStyle = css('--call'); ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(cxp, cyp, 10, 0, 7); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cxp-14, cyp); ctx.lineTo(cxp-10, cyp);
-      ctx.moveTo(cxp+10, cyp); ctx.lineTo(cxp+14, cyp); ctx.stroke();
+      ctx.strokeStyle = css('--call'); ctx.fillStyle = css('--call'); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(cxp, cyp, 11, 0, 7); ctx.stroke();
+      if(c.length > 2){
+        const ya = f.th + c[2], L = 0.28*p.s;
+        const ex = cxp + L*Math.cos(ya), ey = cyp - L*Math.sin(ya);
+        ctx.beginPath(); ctx.moveTo(cxp + 11*Math.cos(ya), cyp - 11*Math.sin(ya));
+        ctx.lineTo(ex, ey); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(ex - 6*Math.cos(ya-0.5), ey + 6*Math.sin(ya-0.5));
+        ctx.lineTo(ex - 6*Math.cos(ya+0.5), ey + 6*Math.sin(ya+0.5));
+        ctx.closePath(); ctx.fill();
+      }
     }
   }
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  const R = 0.09 * p.s;
+  // Than xe VUONG 30 x 30 cm - ve dung hinh, vi chinh goc xe la thu quyet
+  // dinh no co lot qua khe 31 cm hay khong.
+  const H = 0.15 * p.s;
+  ctx.save();
+  ctx.translate(X(f.x,p), Y(f.y,p)); ctx.rotate(-f.th);
   ctx.fillStyle = f.charging ? css('--dock') : (f.bump ? danger : trace);
-  ctx.beginPath(); ctx.arc(X(f.x,p), Y(f.y,p), R, 0, 7); ctx.fill();
+  ctx.fillRect(-H, -H, 2*H, 2*H);
+  ctx.restore();
   ctx.strokeStyle = css('--scope'); ctx.lineWidth = 2.5; ctx.beginPath();
   ctx.moveTo(X(f.x,p), Y(f.y,p));
-  ctx.lineTo(X(f.x + 0.115*Math.cos(f.th),p), Y(f.y + 0.115*Math.sin(f.th),p)); ctx.stroke();
+  ctx.lineTo(X(f.x + 0.17*Math.cos(f.th),p), Y(f.y + 0.17*Math.sin(f.th),p)); ctx.stroke();
   for(let k=0;k<2;k++){
-    const off = k ? -0.105 : 0.105;
+    const off = k ? -0.145 : 0.145;
     ctx.fillStyle = f.cliff[k] > .5 ? danger : css('--ink-3');
     ctx.beginPath();
     ctx.arc(X(f.x + off*Math.cos(f.th),p), Y(f.y + off*Math.sin(f.th),p), 3.2, 0, 7);

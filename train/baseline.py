@@ -2,8 +2,8 @@
 co the nap thang vao ESP32 neu mang no-ron loi.
 
 Lam dung quy trinh da mo ta:
-  di long nhong -> LiDAR thay vat 15x15 cm -> quay dau lai nhin no
-  -> hong ngoai co tin hieu tram sac khong -> co thi vo cam, khong thi bo qua.
+  di long nhong -> LiDAR thay cai HOC chu U -> vong ra doi dien cua hoc
+  -> hong ngoai co tin hieu tram sac khong -> co thi chui vao, khong thi bo qua.
 Khi pin yeu thi uu tien ve sac, va sac DAY roi moi di tiep.
 
 Chi dung dung nhung tin hieu ma phan cung that co (xem OBS_NAMES trong env).
@@ -17,12 +17,14 @@ from sim.lidar import SECTORS as NSEC
 
 I_CLIFF_F = OBS_NAMES.index("cliff_front")
 I_CLIFF_R = OBS_NAMES.index("cliff_rear")
-I_CAND = OBS_NAMES.index("cand0_seen")      # MAX_CAND x (seen, sin, cos, dist)
+I_CAND = OBS_NAMES.index("cand0_seen")     # MAX_CAND x (seen,sin,cos,dist,ysin,ycos)
+CAND_W = 6
 I_IR_CALL = OBS_NAMES.index("ir_call")
 I_IR_CALL_SEEN = OBS_NAMES.index("ir_call_seen")
 I_IR_DOCK = OBS_NAMES.index("ir_dock")
 I_IR_DOCK_SEEN = OBS_NAMES.index("ir_dock_seen")
-I_MEM = OBS_NAMES.index("mem_known")        # known, sin, cos, dist
+I_MEM = OBS_NAMES.index("mem_known")       # known, sin, cos, dist, hsin, hcos
+APPROACH = 0.40                            # doi truoc cua hoc bao xa (m)
 I_BATT = OBS_NAMES.index("battery")
 I_BATT_LOW = OBS_NAMES.index("battery_low")
 I_MARGIN = OBS_NAMES.index("return_margin")
@@ -73,20 +75,32 @@ class ReactiveController:
         self.t = 0
         self.prev_batt = 1.0
         self.charging = False
-        self.checking = 0        # so buoc con lai cua pha "quay dau xem IR"
-        self.check_bear = 0.0
+        self.verify = 0          # so buoc da doi hong ngoai tra loi
+        self.skip = 0            # so buoc lo di ung vien (vua gap hoc moi nhu)
+        self.entering = 0        # da cam ket chui vao, con bao nhieu buoc
 
     def _turn(self, spin, steps, speed=0.5):
         self.queue = [(speed * spin, -speed * spin)] * steps
 
     def _cands(self, obs):
+        """(huong toi cua, khoang cach, huong truc hoc) - tat ca theo than xe."""
         out = []
         for i in range(MAX_CAND):
-            b = I_CAND + 4 * i
+            b = I_CAND + CAND_W * i
             if obs[b] > 0.5:
                 out.append((math.atan2(obs[b + 1], obs[b + 2]),
-                            obs[b + 3] * SEC_CLIP))
+                            obs[b + 3] * SEC_CLIP,
+                            math.atan2(obs[b + 4], obs[b + 5])))
         return out
+
+    def _approach_point(self, bear, dist, yaw):
+        """Diem doi truoc cua hoc, theo he than xe.
+
+        Cua o `dist` met theo huong `bear`; truc hoc chi theo `yaw`. Lui
+        nguoc truc ra APPROACH met thi duoc cho dung doi dien.
+        """
+        return (dist * math.cos(bear) - APPROACH * math.cos(yaw),
+                dist * math.sin(bear) - APPROACH * math.sin(yaw))
 
     def act(self, obs):
         self.t += 1
@@ -112,43 +126,81 @@ class ReactiveController:
 
         front = sec_min(obs, -0.4, 0.4)
         cands = self._cands(obs)
-        low = obs[I_BATT_LOW] > 0.5 or obs[I_MARGIN] < 0.0
+        # "Kinh nghiem": bien an toan am nghia la pin con lai khong du cho
+        # quang duong ve tram nua - do chinh xe tu do hao pin moi met ma tinh.
+        # Ve som mot chut bao gio cung re hon chet pin giua ban.
+        low = obs[I_BATT_LOW] > 0.5 or obs[I_MARGIN] < 0.08
 
-        # 2) Dang thay den tram sac va pin yeu -> vao cam
-        if low and obs[I_IR_DOCK_SEEN] > 0.5:
-            near = [c for c in cands if abs(c[0]) < 0.9]
-            bear = near[0][0] if near else 0.0
-            dist = near[0][1] if near else 1.0
-            if dist < 0.45:
-                speed = 0.16
-            elif dist < 0.9:
-                speed = 0.30
+        if self.skip > 0:
+            self.skip -= 1
+            cands = []
+        if not low:
+            self.entering = 0
+
+        # 2a) Da cam ket chui vao thi CU THE MA VAO.
+        # Diem doi truoc cua nam SAU lung khi da vao trong, nen neu buoc nao
+        # cung tinh lai "minh co dung cho doi khong" thi xe se lui ra roi vao,
+        # lui ra roi vao mai. Vao la vao.
+        if self.entering > 0:
+            self.entering -= 1
+            if cands:
+                bear, dist, yaw = min(cands, key=lambda c: c[1])
+                turn = max(-0.20, min(0.20, 1.0 * yaw + 0.9 * bear))
             else:
-                speed = 0.45
-            turn = max(-0.45, min(0.45, 1.3 * bear))
-            return (speed - turn, speed + turn)
+                turn = 0.0
+            return (0.26 - turn, 0.26 + turn)
 
-        # 3) Pin yeu: thay vat dung kich thuoc -> quay dau lai hoi hong ngoai
-        if low and self.checking > 0:
-            self.checking -= 1
-            turn = max(-0.5, min(0.5, 1.5 * self.check_bear))
-            return (-turn, turn)
+        # 2) Pin yeu + dang thay cai hoc -> vong ra doi dien roi chui vao
         if low and cands:
-            bear, dist = min(cands, key=lambda c: c[1])
-            if dist < 2.0 and abs(bear) > 0.25:
-                self.check_bear = bear
-                self.checking = 12
-                turn = max(-0.5, min(0.5, 1.5 * bear))
-                return (-turn, turn)
-            if dist < 2.0 and front > 0.35:
-                turn = max(-0.4, min(0.4, 1.2 * bear))
-                return (0.40 - turn, 0.40 + turn)
+            bear, dist, yaw = min(cands, key=lambda c: c[1])
+            tx, ty = self._approach_point(bear, dist, yaw)
+            off = math.hypot(tx, ty)
+            ir = obs[I_IR_DOCK_SEEN] > 0.5
 
-        # 4) Pin yeu, khong thay gi: di theo tri nho vi tri tram sac
+            if off > 0.14:
+                # chua vao dung cho doi dien: di toi diem do da
+                ang = math.atan2(ty, tx)
+                turn = max(-0.5, min(0.5, 1.4 * ang))
+                if abs(ang) > 1.0:
+                    return (-0.45 * (1.0 if ang > 0 else -1.0),
+                            0.45 * (1.0 if ang > 0 else -1.0))
+                sp = 0.40 if off > 0.4 else 0.25
+                return (sp - turn, sp + turn)
+
+            # da doi dien cua hoc: canh truc cho thang
+            if abs(yaw) > 0.05:
+                sp = max(-0.42, min(0.42, 1.6 * yaw))
+                return (-sp, sp)
+
+            # 3) Thang truc roi moi hoi hong ngoai: that hay moi nhu?
+            if not ir:
+                self.verify += 1
+                if self.verify > 26:
+                    self.verify = 0
+                    self.skip = 90      # hoc moi nhu - lo di mot luc
+                    self.queue = [(-0.5, -0.5)] * 12
+                    return self.queue.pop(0)
+                return (0.0, 0.0)
+
+            # 4) Co tin hieu - cam ket chui vao
+            self.verify = 0
+            self.entering = 160
+            turn = max(-0.20, min(0.20, 1.0 * yaw + 0.9 * bear))
+            return (0.26 - turn, 0.26 + turn)
+
+        # 5) Pin yeu, khong thay hoc: di theo tri nho, nho ca huong truc
         if low and obs[I_MEM] > 0.5 and front > 0.35:
-            bear = math.atan2(obs[I_MEM + 1], obs[I_MEM + 2])
-            turn = max(-0.5, min(0.5, 1.2 * bear))
-            return (0.45 - turn, 0.45 + turn)
+            md = obs[I_MEM + 3] * 3.0
+            mb = math.atan2(obs[I_MEM + 1], obs[I_MEM + 2])
+            mh = math.atan2(obs[I_MEM + 4], obs[I_MEM + 5])
+            if md > 0.7:
+                ang = mb                      # con xa: cu nham thang tram
+            else:                             # gan roi: vong ra truoc cua
+                tx = md * math.cos(mb) - APPROACH * math.cos(mh)
+                ty = md * math.sin(mb) - APPROACH * math.sin(mh)
+                ang = math.atan2(ty, tx)
+            turn = max(-0.5, min(0.5, 1.2 * ang))
+            return (0.42 - turn, 0.42 + turn)
 
         # 5) Co den goi thi toi
         if not low and obs[I_IR_CALL_SEEN] > 0.5 and front > 0.35:

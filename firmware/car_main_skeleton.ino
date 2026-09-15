@@ -2,7 +2,7 @@
 // Chua do dac phan cung that nen cac hang so o day chi la cho trong.
 //
 // Vong chay: LiDAR Camsense day goi lien tuc qua UART -> gom du MOT VONG ->
-// chay dock_detect() -> dung mang obs[48] -> brain_step() -> PWM 2 cap banh.
+// chay dock_detect() -> dung mang obs[46] -> brain_step() -> PWM 2 cap banh.
 #include "brain.h"
 #include "dock_detect.h"
 
@@ -21,7 +21,7 @@ static float scan[LIDAR_N], cos_a[LIDAR_N], sin_a[LIDAR_N];
 static float prev_ir[2], prev_u[2];
 static uint32_t last_ir_dock_ms;
 static float odo_x, odo_y, odo_th;         // odometry tich luy tu encoder
-static float mem_x, mem_y;                 // vi tri tram sac da nho
+static float mem_x, mem_y, mem_th;          // vi tri + huong truc hoc da nho
 static bool  mem_known;
 static float e_per_m = 0.045f;             // pin hao moi met - do duoc khi chay
 static float trip_dist, trip_batt;
@@ -92,49 +92,57 @@ void loop() {
     obs[12] = read_cliff(0) ? 1.0f : 0.0f;
     obs[13] = read_cliff(1) ? 1.0f : 0.0f;
     for (int i = 0; i < DOCK_MAX_CAND; ++i) {
-        int b = 14 + 4 * i;
+        int b = 14 + 6 * i;
         if (i < ncand) {
             obs[b]     = 1.0f;
             obs[b + 1] = sinf(cand[i].bearing);
             obs[b + 2] = cosf(cand[i].bearing);
             obs[b + 3] = clampf(cand[i].dist / SEC_CLIP, 0.0f, 1.0f);
+            obs[b + 4] = sinf(cand[i].yaw);
+            obs[b + 5] = cosf(cand[i].yaw);
         } else {
-            obs[b] = obs[b + 1] = obs[b + 2] = 0.0f;
-            obs[b + 3] = 1.0f;
+            obs[b] = obs[b + 1] = obs[b + 2] = obs[b + 4] = 0.0f;
+            obs[b + 3] = obs[b + 5] = 1.0f;
         }
     }
 
     float ir_call = read_ir(0), ir_dock = read_ir(1);
-    obs[22] = ir_call;  obs[23] = ir_call > 0.05f ? 1.0f : 0.0f;
-    obs[24] = ir_dock;  obs[25] = ir_dock > 0.05f ? 1.0f : 0.0f;
-    obs[26] = clampf((ir_call - prev_ir[0]) * 8.0f, -1.0f, 1.0f);
-    obs[27] = clampf((ir_dock - prev_ir[1]) * 8.0f, -1.0f, 1.0f);
+    obs[26] = ir_call;  obs[27] = ir_call > 0.05f ? 1.0f : 0.0f;
+    obs[28] = ir_dock;  obs[29] = ir_dock > 0.05f ? 1.0f : 0.0f;
+    obs[30] = clampf((ir_call - prev_ir[0]) * 8.0f, -1.0f, 1.0f);
+    obs[31] = clampf((ir_dock - prev_ir[1]) * 8.0f, -1.0f, 1.0f);
     prev_ir[0] = ir_call; prev_ir[1] = ir_dock;
 
     // 2) Hong ngoai xac nhan tram sac -> ghi lai vi tri theo odometry
-    if (obs[25] > 0.5f) {
+    if (obs[29] > 0.5f) {
         last_ir_dock_ms = now;
         for (int i = 0; i < ncand; ++i) {
             if (fabsf(cand[i].bearing) < 0.45f) {
                 float a = odo_th + cand[i].bearing;
                 mem_x = odo_x + cand[i].dist * cosf(a);
                 mem_y = odo_y + cand[i].dist * sinf(a);
+                mem_th = odo_th + cand[i].yaw;    // nho ca huong truc hoc
                 mem_known = true;
                 break;
             }
         }
     }
-    float mem_d = 0.0f, mem_b = 0.0f;
+    float mem_d = 0.0f, mem_b = 0.0f, mem_h = 0.0f;
     if (mem_known) {
         mem_d = hypotf(mem_x - odo_x, mem_y - odo_y);
         mem_b = atan2f(mem_y - odo_y, mem_x - odo_x) - odo_th;
+        mem_h = mem_th - odo_th;
         while (mem_b > (float)M_PI)  mem_b -= 2.0f * (float)M_PI;
         while (mem_b < -(float)M_PI) mem_b += 2.0f * (float)M_PI;
+        while (mem_h > (float)M_PI)  mem_h -= 2.0f * (float)M_PI;
+        while (mem_h < -(float)M_PI) mem_h += 2.0f * (float)M_PI;
     }
-    obs[28] = mem_known ? 1.0f : 0.0f;
-    obs[29] = mem_known ? sinf(mem_b) : 0.0f;
-    obs[30] = mem_known ? cosf(mem_b) : 0.0f;
-    obs[31] = mem_known ? clampf(mem_d / SEC_CLIP, 0.0f, 1.0f) : 1.0f;
+    obs[32] = mem_known ? 1.0f : 0.0f;
+    obs[33] = mem_known ? sinf(mem_b) : 0.0f;
+    obs[34] = mem_known ? cosf(mem_b) : 0.0f;
+    obs[35] = mem_known ? clampf(mem_d / SEC_CLIP, 0.0f, 1.0f) : 1.0f;
+    obs[36] = mem_known ? sinf(mem_h) : 0.0f;
+    obs[37] = mem_known ? cosf(mem_h) : 1.0f;
 
     // 3) Pin va "kinh nghiem": do xem chay mot met ton bao nhieu pin
     float batt = read_battery();
@@ -144,16 +152,16 @@ void loop() {
         float e = trip_batt / trip_dist;
         e_per_m = 0.9f * e_per_m + 0.1f * e;
     }
-    float need = mem_known ? (e_per_m * mem_d * 1.5f + 0.06f) : 0.25f;
-    obs[32] = batt;
-    obs[33] = batt < BATT_LOW ? 1.0f : 0.0f;
-    obs[34] = clampf(batt - need, -1.0f, 1.0f);
+    float need = mem_known ? (e_per_m * mem_d * 2.0f + 0.12f) : 0.35f;
+    obs[38] = batt;
+    obs[39] = batt < BATT_LOW ? 1.0f : 0.0f;
+    obs[40] = clampf(batt - need, -1.0f, 1.0f);
 
-    obs[35] = clampf(v / V_MAX, -1.0f, 1.0f);
-    obs[36] = clampf(w / OMEGA_MAX, -1.0f, 1.0f);
-    obs[37] = prev_u[0];
-    obs[38] = prev_u[1];
-    obs[39] = read_bump() ? 1.0f : 0.0f;
+    obs[41] = clampf(v / V_MAX, -1.0f, 1.0f);
+    obs[42] = clampf(w / OMEGA_MAX, -1.0f, 1.0f);
+    obs[43] = prev_u[0];
+    obs[44] = prev_u[1];
+    obs[45] = read_bump() ? 1.0f : 0.0f;
 
     float u[BRAIN_ACT];
     brain_step(&brain, obs, u);

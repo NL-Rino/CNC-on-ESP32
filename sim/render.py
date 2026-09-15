@@ -24,13 +24,12 @@ def ascii_frame(env, cols=62):
                 if 0 <= r < rows and 0 <= c < cols:
                     grid[r][c] = "#"
 
+    for bay in env.world.bays:
+        r, c = cell(*bay.mouth)
+        grid[r][c] = "C" if bay.tag == "dock" else "c"    # C = that, c = moi nhu
     if env.world.dock is not None:
-        r, c = cell(env.world.dock.x, env.world.dock.y)
-        grid[r][c] = "C"
-        px, py = env.world.dock.pocket
-        r, c = cell(px, py)
-        if grid[r][c] == " ":
-            grid[r][c] = "o"
+        r, c = cell(*env.world.dock.pocket)
+        grid[r][c] = "o"                                  # cho dung sac
     if env.call is not None:
         r, c = cell(env.call.x, env.call.y)
         grid[r][c] = "!"
@@ -47,10 +46,11 @@ def ascii_frame(env, cols=62):
     sec = env.lidar.sector_ranges(rb.theta)
     n = len(sec)
     fwd = min(sec[(n // 2 - 1) % n], sec[n // 2 % n])
-    cand = ", ".join("%.0f do/%.1fm" % (math.degrees(c.bearing), c.dist)
+    cand = ", ".join("%.0f do/%.1fm/truc %.0f do"
+                     % (math.degrees(c.bearing), c.dist, math.degrees(c.yaw))
                      for c in env.cands[:2]) or "khong"
     hud = ("t=%5.1fs  pin[%s%s] %3.0f%%  truoc=%4.2fm  vuc=%d%d"
-           "  ir_goi=%.2f ir_sac=%.2f%s\nung vien 15cm: %s"
+           "  ir_goi=%.2f ir_sac=%.2f%s\nhoc sac thay duoc: %s"
            % (env.steps * env.cfg.dt, "#" * bar, "." * (10 - bar), rb.battery * 100,
               fwd, int(s.cliff_front), int(s.cliff_rear), s.ir[0], s.ir[1],
               "  [DANG SAC]" if rb.charging else "", cand))

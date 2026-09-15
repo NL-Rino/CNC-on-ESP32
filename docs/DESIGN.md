@@ -30,29 +30,66 @@ trị gần nhất). Phần tinh vi để cho bộ dò hình lo.
 **LiDAR không thấy mép bàn.** Tia quét ngang đi thẳng ra ngoài và không có gì
 dội về — đúng như ngoài đời. Chỉ hai cảm biến chiếu xuống cứu được xe.
 
-## 3. Bộ dò hình trạm sạc (`sim/dock_detector.py` ⇄ `firmware/dock_detect.c`)
+## 3. Bộ dò hộc sạc (`sim/dock_detector.py` ⇄ `firmware/dock_detect.c`)
 
-1. Vá lại điểm mất lẻ loi (2% điểm mất cũng đủ cắt vụn hộp 15 cm thành mảnh quá ngắn).
-2. Cắt vòng quét thành đoạn: hai điểm kề nhau lệch quá `3.5 cm + 5%` thì thuộc hai vật khác nhau.
-3. Giữ đoạn **rộng 10–25 cm** (hộp 15 cm nhìn chéo thấy 2 mặt, rộng tới 21 cm),
-   **phẳng** (độ cong ≤ 8.5 cm — góc hộp nhìn chéo nhô ra tối đa 7.5 cm) và **gần hơn 3 m**.
+Trạm sạc là cái **hộc chữ U**: ngoài 40×40 cm, lòng trong 31×31 cm, vách dày
+4.5 cm, đèn hồng ngoại giữa thành trong. Xe 30×30 cm chui vừa khít.
 
-Tỉ lệ tìm ra trạm: ~82% ở 0.4 m, 80% ở 0.6 m, 55% ở 1 m, 39% ở 1.6 m. Nghe thấp
-nhưng xe nhận vòng quét mới 7 lần mỗi giây, nên chỉ cần vài giây là gần như chắc chắn thấy.
+1. Vá lại điểm mất lẻ loi.
+2. **Cắt vòng quét thành đoạn.** Ngưỡng cắt phải **lớn hơn** độ sâu lòng hộc
+   (35.5 cm) — nếu không chính cái hộc sẽ bị cắt làm đôi. Dùng `45 cm + 20%`.
+3. **Nối hai đầu đoạn thành dây cung, đo độ lõm.** Hộc lõm vào 35 cm sau dây
+   cung; vật đặc thì mọi điểm **lồi ra trước** dây cung. Đó là dấu hiệu phân biệt.
+4. **Co dây cung vào cho hết lồi.** Nhìn chéo, cái hộc in bóng thành chữ L: mặt
+   ngoài của vách bên lồi hẳn ra trước dây cung nối hai đầu đoạn. Cứ cắt dần đầu
+   nào gần chỗ lồi nhất, dây cung sẽ tự lùi về đúng hai mép cửa.
+5. **Trục hộc lấy từ mặt thành trong**, không lấy từ dây cung.
 
-Ứng viên được xếp theo **khoảng cách**, không theo điểm giống nhau — vì hộp mồi
-nhử và góc bàn cho điểm y hệt trạm thật. Phân biệt là việc của hồng ngoại.
+Bước 5 là bước quan trọng nhất và cũng là thứ hộp đặc 15 cm ngày trước **không
+thể cho được**. Dây cung chỉ có hai điểm đầu, mỗi điểm nhiễu ±2 cm, nên ở cự ly
+0.4 m nó cho trục lệch tới 40°. Thành trong thì phẳng và có hàng chục điểm: khớp
+một đường thẳng qua chúng cho **trung vị 2°**.
+
+| | dây cung | khớp thành trong |
+|---|---|---|
+| trục lệch trung vị | 8.4° | **2.0°** |
+| 90% dưới | 37.8° | **15.8°** |
+
+Tỉ lệ tìm ra hộc (ở khoảng ±20° quanh trục): **99–100%** trong 0.5 m, 92% ở
+0.8 m, 71% ở 1.2 m. Sai số khoảng cách ~3 cm.
+
+Ứng viên được xếp theo **khoảng cách**, không theo điểm giống nhau — vì hộc mồi
+nhử cho điểm y hệt trạm thật. Phân biệt là việc của hồng ngoại.
+
+### Một phát hiện chỉ lộ ra khi đo thật
+
+Tia LiDAR quét qua cửa hộc **không** nhảy một phát từ mép vào thành trong. Nó
+trượt dọc mặt trong của vách bên, nên khoảng cách lên dần thành bậc thang:
+
+```
+0.82 → 0.82 → 0.89 → 1.07 → 1.16 → 1.16 …   (đo ở cự ly 0.8 m)
+      mép cửa    mặt trong vách    thành trong
+```
+
+Bản đầu tiên tôi viết theo kiểu "tìm mép rồi ghép cặp mở–đóng" — nghe rất hợp lý,
+và chỉ đạt **27%**. Mỗi bậc thang đều vượt ngưỡng mép nên nó đẻ ra 3–4 cái "mép"
+chồng nhau, và cái nào cũng lệch vào trong. Chuyển sang cắt đoạn rồi đo độ lõm:
+**84%**. Bài học: đừng đoán vòng quét trông thế nào, in nó ra mà nhìn.
 
 ## 4. Bắt tay hồng ngoại
 
-Trạm sạc phát hồng ngoại **có hướng** (nửa góc 54°) từ mặt trước. Mắt thu của xe
-ở đầu xe, nửa góc 46°. Nghĩa là muốn bắt được tín hiệu thì xe phải **vừa đứng
-đúng phía trước trạm, vừa quay đầu về phía trạm** — đúng quy trình "thấy hình thì
-quay đầu lại hỏi".
+Đèn hồng ngoại nằm giữa **thành trong** của hộc, chiếu thẳng ra cửa. Chùm phát
+của LED là ±40°, nhưng **chính hai vách bên bóp nó lại còn ~±24°** — đây là hình
+học tự nhiên, không phải con số tôi đặt ra: mô phỏng dựng đường ngắm qua đúng ba
+cái vách đó. Kết quả đo: đứng lệch 20° vẫn thấy, lệch 45° là mất hẳn.
+
+Nghĩa là xe phải **vòng ra đối diện cửa hộc** mới hỏi được hồng ngoại — đúng quy
+trình "thấy hình thì quay lại hỏi", nhưng bây giờ nó là hệ quả của hình học chứ
+không phải một luật tôi viết tay vào.
 
 `Robot.try_charge()` chỉ nạp điện khi:
-- cách **ổ đậu** (trên trục trạm, cách tâm hộp 20 cm) dưới 11 cm,
-- lệch hướng dưới 40°,
+- cách **tâm hộc** dưới 10 cm (tức là đã chui hẳn vào trong),
+- lệch hướng dưới 17°,
 - gần như đứng yên (|v| < 0.10 m/s),
 - **và** còn nhớ tín hiệu hồng ngoại trong 30 bước gần nhất (1.5 giây).
 
@@ -71,16 +108,21 @@ Xe không có bản đồ. Nó giữ 3 con số, tất cả đều dựng đư�
 
 Biên an toàn là một đầu vào của mạng. Âm nghĩa là "về ngay không thì chết giữa đường".
 
-## 6. Đầu vào/đầu ra của bộ não (40 → 2)
+## 6. Đầu vào/đầu ra của bộ não (46 → 2)
 
 ```
  0..11  12 quạt LiDAR (chia 3.0 m)          12,13  vực trước, vực sau
-14..21  2 ứng viên hộp 15 cm: [thấy, sin, cos, khoảng cách]
-22..27  hồng ngoại: gọi, thấy_gọi, sạc, thấy_sạc, Δgọi, Δsạc
-28..31  trí nhớ vị trí trạm: [có, sin, cos, khoảng cách]
-32..34  pin, pin_yếu, BIÊN AN TOÀN
-35..39  vận tốc, tốc độ quay, ga trái/phải bước trước, va chạm
+14..25  2 ứng viên hộc, mỗi cái 6 số:
+        [thấy, sin/cos góc tới cửa, khoảng cách, sin/cos GÓC TRỤC hộc]
+26..31  hồng ngoại: gọi, thấy_gọi, sạc, thấy_sạc, Δgọi, Δsạc
+32..37  trí nhớ trạm: [có, sin/cos góc, khoảng cách, sin/cos HƯỚNG TRỤC]
+38..40  pin, pin_yếu, BIÊN AN TOÀN
+41..45  vận tốc, tốc độ quay, ga trái/phải bước trước, va chạm
 ```
+
+Hai chỗ in hoa là phần mới so với bản hộp đặc. Hộc chỉ chui vào được từ **một
+phía**, nên biết nó ở đâu mà không biết nó quay về đâu thì về tới nơi vẫn phải
+dò lại từ đầu.
 
 Ra: `tanh` → `(ga_trái, ga_phải)`. Bộ não **chỉ** nhìn thấy từng này. Thông tin
 toàn tri (vị trí thật của trạm, của đèn gọi) chỉ dùng trong **phần thưởng**.
@@ -157,6 +199,20 @@ Sửa: tập dài 65 giây, tăng tốc độ hao pin, một nửa số tập b�
 3.154 tham số, ES học chậm hẳn. Nén còn 12 quạt + 2 ứng viên = 40 đầu vào →
 1.934 tham số. Bài học: với ES, mỗi đầu vào thừa đều phải trả giá bằng thế hệ.
 
+**(f) Khe 31 cm cho xe 30 cm là bất khả thi nếu không vát mép.** Mô phỏng cho ra
+con số dứt khoát: hộc thẳng tuột đòi xe vào đúng **±5 mm ngang và ±1° góc**. Hình
+học thuần: xe vuông cạnh 30 cm nghiêng góc φ cần khe `30·(cos φ + sin φ)`, nghiêng
+2° đã là 31.0 cm. Mà LiDAR ở cự ly cắm chỉ cho trục chính xác ~2°. Tức là **đo tốt
+hết mức vẫn không đủ**.
+
+Cách sửa là cách mọi đế sạc thật đều dùng: **vát hai góc trong ở miệng**. 8 cm
+đầu nong ra 37 cm rồi thu dần về 31 cm. Cửa sổ bắt rộng ±3.5 cm, và quan trọng
+hơn: mặt vát là một cái **cam** — nó vừa đẩy xe sang ngang vừa **xoay** xe về
+đúng trục. Phần xoay mới là phần quyết định; bản mô phỏng đầu tôi chỉ cho nó đẩy
+ngang, và xe lệch 7.8° kẹt cứng ở miệng dù lệch ngang chỉ 1 mm.
+
+Đặt `BAY_FLARE = 0.0` trong `sim/world.py` để quay lại hộc thẳng tuột mà xem.
+
 Bài học chung: khi agent **không** học được một kỹ năng, đừng tăng số thế hệ. Hãy
 đo xem nó thật sự đi tới đâu và dừng lại ở đâu — gần như lần nào nguyên nhân cũng
 là hai khoản thưởng đang kéo ngược nhau.
@@ -165,7 +221,7 @@ là hai khoản thưởng đang kéo ngược nhau.
 
 1. `v_max`, `motor_tau`, `deadband` — đo bằng cách cho xe chạy 1 m và quay video.
    **Quãng đường phanh phải nhỏ hơn khoảng cách từ tâm xe tới cảm biến vực**
-   (mô phỏng: ~6.5 cm phanh so với 10.5 cm cảm biến).
+   (mô phỏng: ~5.5 cm phanh so với 14.5 cm cảm biến).
 2. Chu kỳ gom một vòng LiDAR thật (phụ thuộc tốc độ quay thật, 5–8 Hz).
 3. Ngưỡng cảm biến vực thực tế và độ trễ của nó.
 4. Đặc tuyến cường độ IR thật: bịt đèn lại, đo giá trị theo góc và khoảng cách.

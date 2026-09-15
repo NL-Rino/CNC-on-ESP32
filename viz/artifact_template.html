@@ -101,11 +101,16 @@ footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
 <div class="page">
   <p class="eyebrow">Mô phỏng · Evolution Strategies · <span id="gen-tag">—</span></p>
   <h1>Xe hai bánh học lái</h1>
-  <p class="lede">Một bộ não GRU <span class="mono" id="nparam">—</span> tham số, tiến hoá hoàn toàn
-  trong mô phỏng, điều khiển 2 cặp bánh DC: không rơi khỏi mép bàn, tránh vật cản,
-  đi tới chỗ có đèn hồng ngoại gọi, và tự về trạm sạc khi pin yếu.</p>
+  <p class="lede">Một bộ não GRU <span class="mono" id="nparam">—</span> tham số điều khiển 2 cặp bánh DC
+  bằng LiDAR Camsense + 2 cảm biến vực + 1 mắt hồng ngoại: đi long nhong không rơi khỏi mép bàn,
+  thấy hộp 15×15 cm thì quay đầu hỏi hồng ngoại xem có phải trạm sạc không, và tự tính xem
+  còn đủ pin để về hay chưa.</p>
 
   <div class="facts" id="facts"></div>
+  <p class="sub" style="margin-top:14px;max-width:70ch">Các tab <b>viết tay</b> là bộ điều khiển
+  luật cứng — nó làm trọn quy trình: đi long nhong, thấy hộp 15 cm thì quay đầu hỏi hồng ngoại,
+  vào ổ sạc đầy rồi đi tiếp. Các tab <b>AI</b> là bộ não đang nuôi: hiện đã biết đi long nhong
+  và né mép bàn, chưa học xong phần tự về sạc.</p>
 
   <div class="deck">
     <div>
@@ -129,8 +134,12 @@ footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
         <div class="gauge"><i id="batt"></i></div>
       </div>
       <div class="inst">
-        <h3>Siêu âm (m)</h3>
-        <div class="fan" id="fan"></div>
+        <h3>LiDAR Camsense</h3>
+        <div class="readout"><b id="lid-n">—</b><span id="lid-hz">điểm/vòng</span></div>
+        <div class="pair">
+          <div class="chan">vật gần nhất<b id="lid-near">—</b></div>
+          <div class="chan">ứng viên 15 cm<b id="lid-cand">0</b></div>
+        </div>
       </div>
       <div class="inst">
         <h3>Hồng ngoại</h3>
@@ -172,14 +181,23 @@ footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
     <div class="tblwrap"><table>
       <thead><tr><th>Cảm biến</th><th>Góc / vị trí</th><th>Chi tiết</th></tr></thead>
       <tbody>
-        <tr><td>5 × siêu âm</td><td class="n">−90° −45° 0° +45° +90°</td>
-            <td>tầm 2 m, chùm tia ±7.5°, nhiễu 1.2 cm, 2% lần đo mất echo. <b>Không thấy được mép bàn.</b></td></tr>
+        <tr><td>LiDAR Camsense X1</td><td class="n">360°, 0.12–8 m</td>
+            <td>3000 điểm/giây, quay 5–8 Hz → ~460 điểm mỗi vòng (0.8°/điểm). Mỗi vòng mất
+            ~150 ms nên dữ liệu luôn cũ hơn thực tế 3 chu kỳ điều khiển; có nhiễu, rung góc
+            và 2% điểm mất. <b>Không thấy được mép bàn</b> — tia quét ngang, hố sâu không dội về.</td></tr>
+        <tr><td>Bộ dò hình 15×15 cm</td><td class="n">thuật toán, không phải mạng</td>
+            <td>cắt vòng quét thành đoạn, giữ đoạn rộng 10–25 cm và phẳng. Hộp mồi nhử cùng
+            kích thước cũng lọt qua — nên phải hỏi hồng ngoại mới biết đâu là trạm thật</td></tr>
         <tr><td>2 × cảm biến vực</td><td class="n">±10.5 cm trước/sau</td>
             <td>chiếu xuống; báo trước ~0.17 s ở tốc độ tối đa, trong khi xe cần ~0.07 s để phanh</td></tr>
         <tr><td>1 × mắt thu hồng ngoại</td><td class="n">đầu xe, ±46°</td>
-            <td>2 kênh tần số: đèn gọi và trạm sạc. Chỉ có một mắt nên phải xoay để dò hướng</td></tr>
+            <td>2 kênh tần số: đèn gọi và trạm sạc. Trạm chỉ phát về phía trước mặt nó, nên xe
+            phải vừa đứng đúng phía vừa quay đầu về đó mới bắt được tín hiệu</td></tr>
+        <tr><td>Odometry</td><td class="n">trôi dần</td>
+            <td>sai số đường kính bánh 2.5% + trôi góc — xe nhớ được chỗ trạm sạc nhưng trí nhớ
+            mờ dần, thấy lại đèn hồng ngoại thì mới làm mới được</td></tr>
         <tr><td>Đo pin</td><td class="n">0–100%</td>
-            <td>hao theo tải động cơ; chỉ nạp được khi đâm đầu đúng hướng vào trạm sạc</td></tr>
+            <td>xe tự đo hao pin mỗi mét rồi ước lượng còn đủ về trạm không — chỗ "kinh nghiệm"</td></tr>
         <tr><td>2 cặp bánh DC</td><td class="n">2 kênh PWM</td>
             <td>trễ động cơ 0.12 s, vùng chết PWM, trượt bánh 2% — hai bên không bao giờ bằng nhau</td></tr>
       </tbody>
@@ -197,8 +215,6 @@ const $ = id => document.getElementById(id);
 const cv = $('cv'), ctx = cv.getContext('2d');
 let ei = 0, fi = 0, playing = true, speed = 1, acc = 0, last = 0;
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-const SON_ANG = [-Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2];
-const SON_LBL = ['T90','T45','trước','P45','P90'];
 
 $('gen-tag').textContent = 'thế hệ ' + DATA.gen;
 $('nparam').textContent = DATA.params.toLocaleString('vi-VN');
@@ -208,14 +224,12 @@ $('facts').innerHTML = (DATA.facts || []).map(f =>
 DATA.episodes.forEach((e, i) => {
   const b = document.createElement('button');
   b.className = 'tab'; b.type = 'button';
-  b.textContent = 'Tập ' + (i + 1);
+  b.textContent = (e.who || 'Tập') + ' ' + (i + 1);
   b.setAttribute('aria-pressed', i === 0);
   b.onclick = () => { setEp(i); [...$('tabs').children].forEach((t, j) =>
     t.setAttribute('aria-pressed', j === i)); };
   $('tabs').appendChild(b);
 });
-$('fan').innerHTML = SON_LBL.map((l, i) =>
-  '<div><i id="son' + i + '"></i><em>' + l + '</em></div>').join('');
 
 const ep = () => DATA.episodes[ei];
 function view(){
@@ -261,18 +275,19 @@ function draw(){
     i ? ctx.lineTo(X(g.x,p), Y(g.y,p)) : ctx.moveTo(X(g.x,p), Y(g.y,p)); }
   ctx.stroke(); ctx.globalAlpha = 1;
 
-  const dock = (w.beacons||[]).find(b => b.ch === 1);
+  const dock = w.dock;
   if(dock){
-    const on = f.dock_on;
-    ctx.strokeStyle = css('--dock'); ctx.fillStyle = css('--dock');
-    ctx.globalAlpha = on ? 1 : .35;
-    ctx.beginPath(); ctx.arc(X(dock.x,p), Y(dock.y,p), 7, 0, 7); ctx.fill();
-    ctx.lineWidth = 2; ctx.beginPath();
-    ctx.moveTo(X(dock.x,p), Y(dock.y,p));
-    ctx.lineTo(X(dock.x - 0.26*Math.cos(w.dock_heading),p),
-               Y(dock.y - 0.26*Math.sin(w.dock_heading),p)); ctx.stroke();
-    ctx.font = '500 11px "IBM Plex Mono", monospace';
-    ctx.fillText('trạm sạc', X(dock.x,p) - 26, Y(dock.y,p) - 13);
+    const on = f.dock_on !== false;
+    const hs = (dock.size || 0.15) * 0.5 * p.s;
+    ctx.fillStyle = css('--dock'); ctx.globalAlpha = on ? 1 : .4;
+    ctx.fillRect(X(dock.x,p)-hs, Y(dock.y,p)-hs, 2*hs, 2*hs);
+    // o dau: cho xe phai dung dung vao day moi nap duoc dien
+    ctx.strokeStyle = css('--dock'); ctx.lineWidth = 1.5; ctx.setLineDash([4,3]);
+    ctx.beginPath();
+    ctx.arc(X(dock.pocket[0],p), Y(dock.pocket[1],p), 0.11*p.s, 0, 7);
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = css('--dock'); ctx.font = '500 11px "IBM Plex Mono", monospace';
+    ctx.fillText('trạm sạc', X(dock.x,p) - 26, Y(dock.y,p) - hs - 6);
     ctx.globalAlpha = 1;
   }
   if(f.call){
@@ -285,12 +300,33 @@ function draw(){
     ctx.fillText('đèn gọi', X(f.call[0],p) - 22, Y(f.call[1],p) - 15);
   }
 
-  for(let i=0;i<5;i++){
-    const a = f.th + SON_ANG[i], d = f.sonar[i], near = d < 0.4;
-    ctx.strokeStyle = near ? danger : css('--ink-3');
-    ctx.globalAlpha = near ? .9 : .22; ctx.lineWidth = near ? 2 : 1;
-    ctx.beginPath(); ctx.moveTo(X(f.x,p), Y(f.y,p));
-    ctx.lineTo(X(f.x + d*Math.cos(a),p), Y(f.y + d*Math.sin(a),p)); ctx.stroke();
+  // dam may diem LiDAR cua vong quet gan nhat (khung nao khong co thi lay
+  // lai khung truoc - dung nhu xe: vong quet cu duoc dung cho ~3 buoc)
+  let sf = f;
+  for(let k = fi; k >= 0 && !sf.scan; k--) sf = e.frames[k];
+  if(sf && sf.scan){
+    const n = sf.scan.length, off = (sf.scan_off || 0) + (sf.th - f.th);
+    ctx.fillStyle = css('--ink-3');
+    for(let i=0;i<n;i++){
+      const d = sf.scan[i];
+      if(d <= 0) continue;
+      const a = f.th + off - Math.PI + 2*Math.PI*i/n;
+      const near = d < 0.45;
+      ctx.globalAlpha = near ? .95 : .55;
+      ctx.fillStyle = near ? danger : css('--ink-3');
+      ctx.fillRect(X(f.x + d*Math.cos(a),p)-1.3, Y(f.y + d*Math.sin(a),p)-1.3, 2.6, 2.6);
+    }
+  }
+  // ung vien "hop 15 cm" ma bo do tim duoc
+  ctx.globalAlpha = 1;
+  if(f.cand){
+    for(const c of f.cand){
+      const a = f.th + c[0], cxp = X(f.x + c[1]*Math.cos(a),p), cyp = Y(f.y + c[1]*Math.sin(a),p);
+      ctx.strokeStyle = css('--call'); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(cxp, cyp, 10, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cxp-14, cyp); ctx.lineTo(cxp-10, cyp);
+      ctx.moveTo(cxp+10, cyp); ctx.lineTo(cxp+14, cyp); ctx.stroke();
+    }
   }
   ctx.globalAlpha = 1;
   ctx.restore();
@@ -308,20 +344,24 @@ function draw(){
     ctx.arc(X(f.x + off*Math.cos(f.th),p), Y(f.y + off*Math.sin(f.th),p), 3.2, 0, 7);
     ctx.fill();
   }
-  hud(f, e);
+  hud(f, e, fi);
 }
 
-function hud(f, e){
+function hud(f, e, fi){
   $('batt').style.width = (f.batt*100).toFixed(0) + '%';
   $('batt').style.background = f.batt < 0.4 ? css('--call') : css('--trace');
   $('batt-n').textContent = (f.batt*100).toFixed(0) + '%';
   $('batt-s').textContent = f.charging ? 'đang nạp' : (f.batt < 0.4 ? 'yếu — đi tìm sạc' : 'đủ dùng');
-  for(let i=0;i<5;i++){
-    const el = $('son' + i), d = f.sonar[i];
-    el.style.height = Math.max(3, Math.min(1, d/2) * 56) + 'px';
-    el.style.background = d < 0.4 ? css('--danger') : css('--ink-3');
-    el.title = d.toFixed(2) + ' m';
+  let sf2 = f;
+  for(let k = fi; k >= 0 && !sf2.scan; k--) sf2 = e.frames[k];
+  if(sf2 && sf2.scan){
+    let near = 9;
+    for(const d of sf2.scan) if(d > 0 && d < near) near = d;
+    $('lid-n').textContent = ep().lidar_n || f.scan.length;
+    $('lid-near').textContent = near < 9 ? near.toFixed(2) + ' m' : '—';
   }
+  $('lid-cand').textContent = f.cand ? f.cand.length : 0;
+  $('lid-hz').textContent = 'điểm/vòng · ' + (ep().scan_hz || 7) + ' Hz';
   $('ir0').textContent = f.ir[0].toFixed(2);
   $('ir0').style.color = f.ir[0] > .05 ? css('--call') : '';
   $('ir1').textContent = f.ir[1].toFixed(2);

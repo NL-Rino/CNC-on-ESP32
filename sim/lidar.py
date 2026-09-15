@@ -17,7 +17,9 @@ import numpy as np
 SAMPLE_HZ = 3000.0      # diem/giay
 RMIN = 0.12             # m
 RMAX = 8.0              # m
-SECTORS = 16            # so quat chia deu 360 do cho dau vao cua mang no-ron
+SECTORS = 12            # so quat chia deu 360 do cho dau vao cua mang no-ron
+                        # (LiDAR co ~460 diem/vong; nen lai 12 huong cho mang,
+                        #  phan tinh vi de bo do hinh dang lo)
 
 RANGE_NOISE = 0.010     # sai so tuyet doi (m)
 RANGE_NOISE_REL = 0.012 # sai so ti le theo khoang cach

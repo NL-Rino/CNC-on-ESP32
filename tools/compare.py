@@ -19,6 +19,7 @@ FIELDS = [
     ("flat", "het pin %", "%8.0f"),
     ("arrivals", "lan toi den goi", "%8.2f"),
     ("charged", "pin nap duoc", "%8.3f"),
+    ("full_charges", "lan sac day", "%8.2f"),
     ("distance", "quang duong m", "%8.1f"),
     ("bumps", "buoc va cham", "%8.1f"),
     ("cells", "o luoi da di", "%8.1f"),
@@ -41,7 +42,7 @@ def main():
     ap.add_argument("--episodes", type=int, default=30)
     ap.add_argument("--seed", type=int, default=5000)
     ap.add_argument("--stage", type=int, default=3)
-    ap.add_argument("--max-steps", type=int, default=900)
+    ap.add_argument("--max-steps", type=int, default=1300)
     args = ap.parse_args()
 
     pol, meta = GRUPolicy.load(args.policy)

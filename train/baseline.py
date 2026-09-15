@@ -11,14 +11,21 @@ Chi dung dung nhung tin hieu ma phan cung that co (xem OBS_NAMES trong env).
 import math
 import random
 
-NSEC = 16
-I_CLIFF_F, I_CLIFF_R = 16, 17
-I_CAND = 18                      # 3 ung vien x (seen, sin, cos, dist)
-I_IR_CALL, I_IR_CALL_SEEN = 30, 31
-I_IR_DOCK, I_IR_DOCK_SEEN = 32, 33
-I_MEM = 36                       # known, sin, cos, dist
-I_BATT, I_BATT_LOW, I_MARGIN = 40, 41, 42
-SEC_CLIP = 3.0
+from sim.dock_detector import MAX_CAND
+from sim.env import OBS_NAMES, SEC_CLIP
+from sim.lidar import SECTORS as NSEC
+
+I_CLIFF_F = OBS_NAMES.index("cliff_front")
+I_CLIFF_R = OBS_NAMES.index("cliff_rear")
+I_CAND = OBS_NAMES.index("cand0_seen")      # MAX_CAND x (seen, sin, cos, dist)
+I_IR_CALL = OBS_NAMES.index("ir_call")
+I_IR_CALL_SEEN = OBS_NAMES.index("ir_call_seen")
+I_IR_DOCK = OBS_NAMES.index("ir_dock")
+I_IR_DOCK_SEEN = OBS_NAMES.index("ir_dock_seen")
+I_MEM = OBS_NAMES.index("mem_known")        # known, sin, cos, dist
+I_BATT = OBS_NAMES.index("battery")
+I_BATT_LOW = OBS_NAMES.index("battery_low")
+I_MARGIN = OBS_NAMES.index("return_margin")
 
 CRUISE = 0.60
 BATT_FULL = 0.96
@@ -40,13 +47,29 @@ def sec_min(obs, lo_ang, hi_ang):
 
 
 class ReactiveController:
-    def __init__(self, seed=0):
+    """deterministic=True: bo het lua chon ngau nhien, de mang no-ron hoc theo.
+
+    Neu giao vien thinh thoang queo trai thinh thoang queo phai trong cung mot
+    tinh huong thi hoc sinh chi hoc duoc trung binh cua hai cai do - tuc la di
+    thang vao vat can.
+    """
+
+    def __init__(self, seed=0, deterministic=False):
         self.rng = random.Random(seed)
+        self.det = deterministic
         self.reset()
+
+    def _coin(self, obs=None):
+        if self.det:
+            return 1.0 if (self.t // 97) % 2 == 0 else -1.0
+        return self.rng.choice((-1.0, 1.0))
+
+    def _steps(self, base, span):
+        return base + (span // 2 if self.det else self.rng.randrange(span))
 
     def reset(self):
         self.queue = []
-        self.turn_bias = self.rng.choice((-1.0, 1.0))
+        self.turn_bias = 1.0
         self.t = 0
         self.prev_batt = 1.0
         self.charging = False
@@ -58,7 +81,7 @@ class ReactiveController:
 
     def _cands(self, obs):
         out = []
-        for i in range(3):
+        for i in range(MAX_CAND):
             b = I_CAND + 4 * i
             if obs[b] > 0.5:
                 out.append((math.atan2(obs[b + 1], obs[b + 2]),
@@ -78,7 +101,7 @@ class ReactiveController:
 
         # 1) Mep ban - cat ngang moi lenh khac
         if obs[I_CLIFF_F] > 0.5:
-            spin = self.rng.choice((-1.0, 1.0))
+            spin = self._coin()
             self.queue = [(-0.7, -0.7)] * 10 + [(0.55 * spin, -0.55 * spin)] * 16
             return self.queue.pop(0)
         if obs[I_CLIFF_R] > 0.5:
@@ -139,11 +162,11 @@ class ReactiveController:
             spin = -1.0 if left > right else 1.0
             if front < 0.20:
                 self.queue = [(-0.6, -0.6)] * 6
-            self._turn(spin, 8 + self.rng.randrange(8))
+            self._turn(spin, self._steps(8, 8))
             return self.queue.pop(0)
 
         # 7) Di long nhong
         if self.t % 140 == 0:
-            self.turn_bias = self.rng.choice((-1.0, 1.0))
+            self.turn_bias = self._coin()
         wobble = 0.10 * self.turn_bias * math.sin(self.t * 0.03)
         return (CRUISE - wobble, CRUISE + wobble)

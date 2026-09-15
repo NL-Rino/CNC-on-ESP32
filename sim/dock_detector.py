@@ -29,7 +29,7 @@ MAX_DIST = 3.0          # xa hon thi so diem qua it, khong tin duoc
 MIN_DIST = 0.10
 GAP_ABS = 0.035         # nguong cat doan (m)
 GAP_REL = 0.05          # cong them theo khoang cach
-MAX_CAND = 3            # so ung vien gan nhat tra ve cho policy
+MAX_CAND = 2            # so ung vien gan nhat tra ve cho policy
 PATCH_JUMP = 0.06       # va diem mat khi hai ben chenh nhau duoi muc nay
 
 

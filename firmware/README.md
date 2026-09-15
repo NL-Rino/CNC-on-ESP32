@@ -1,61 +1,67 @@
-# Nap bo nao xuong ESP32 (phan lam sau)
+# Nạp bộ não xuống ESP32 (phần làm sau)
 
-Thu muc nay chua **phan chay bo nao**, chua phai firmware hoan chinh. Muc dich
-la de khi lam phan cung thi khong phai viet lai tu dau, va de biet truoc phai
-do dac nhung gi.
+Thư mục này chứa **phần chạy bộ não + phần nhận dạng trạm sạc**, chưa phải
+firmware hoàn chỉnh. Mục đích là khi làm phần cứng thì không phải viết lại từ
+đầu, và để biết trước phải đo đạc những gì.
 
-## 1. Xuat trong so
+## 1. Xuất trọng số
 
 ```bash
-python3 tools/export_c.py runs/car/best.npz firmware/policy_weights.h
+python3 tools/export_c.py brains/car_v2.npz firmware/policy_weights.h
 ```
 
-Sinh ra mang `float` (~1.8k so, ~15 KB Flash). `brain.c` + `brain.h` chay dung
-phep toan GRU nhu trong `train/policy.py`. Mot buoc suy luan ~0.2 ms tren
-ESP32 240 MHz — thua suc chay vong 20 Hz.
+Sinh ra mảng `float` (~3.2k số, ~26 KB Flash). `brain.c` chạy đúng phép toán GRU
+như `train/policy.py`. Một bước suy luận ~0.3 ms trên ESP32 240 MHz — thừa sức
+chạy vòng 20 Hz.
 
-## 2. Vong dieu khien 20 Hz
+## 2. Vòng điều khiển 20 Hz
 
 ```
-moi 50 ms:
-  1. doc cam bien  -> dung mang obs[20] (thu tu trong brain.h, DUNG doi)
-  2. brain_step(&st, obs, u)
-  3. LOP PHAN XA AN TOAN (xem muc 4) co quyen ghi de u
-  4. xuat PWM cho 2 cap banh
+LiDAR Camsense đẩy gói UART liên tục
+   └─> gom đủ MỘT VÒNG (~150 ms ở 7 Hz)
+        └─> dock_detect()  -> tối đa 3 ứng viên hộp 15x15 cm
+mỗi 50 ms:
+   1. dựng obs[48]  (thứ tự trong brain.h — SAI MỘT Ô LÀ BỘ NÃO ĐIÊN)
+   2. brain_step(&st, obs, u)
+   3. LỚP PHẢN XẠ AN TOÀN ghi đè u nếu cảm biến vực kêu
+   4. xuất PWM cho 2 cặp bánh
 ```
 
-Thu tu 20 dau vao phai khop tuyet doi voi `sim/env.py` (`OBS_NAMES`) va phai
-chuan hoa giong het: sieu am chia 2.0 m va ket o [0,1], cam bien vuc la 0/1,
-pin 0..1, van toc chia `v_max`, `d_ir = (ir − ir_truoc) × 8` ket o [-1,1].
-**Sai mot o la bo nao dien.**
+`dock_detect.c` là bản C của `sim/dock_detector.py` — đã kiểm tra cho **kết quả
+trùng khít** với bản Python trên cùng dữ liệu quét (xem `tests/test_firmware.py`).
+Sửa một bên mà quên bên kia là bộ não sẽ gặp dữ liệu khác lúc huấn luyện.
 
-## 3. Goi y phan cung
+## 3. Gợi ý phần cứng
 
-| Khoi | Linh kien | Ghi chu |
+| Khối | Linh kiện | Ghi chú |
 |---|---|---|
-| 5 × sieu am | HC-SR04 | doc **xen ke** — moi chu ky trigger 1–2 cai, giu gia tri cu cho cac cai con lai. Doc tuan tu ca 5 ton toi 150 ms, qua cham cho vong 20 Hz. Muon nhanh/gon hon: VL53L0X (I2C, 3 ms). |
-| 2 × cam bien vuc | TCRT5000 / e18-d80nk chieu xuong | dat cach tam xe >= 10.5 cm, cang xa cang an toan. Lay nguong bang cach do gia tri tren mat ban vs. khong co gi. |
-| Mat thu IR | 2 module TSOP khac tan so (vd TSOP4838 38 kHz cho "goi", TSOP4856 56 kHz cho tram sac) | "Cuong do" lay bang cach dem ti le xung trong 50 ms, hoac dung photodiode + ADC. Dat o dau xe, nen co ong che de goc thu ~±45°. |
-| Do pin | chia ap + ADC1 | loc trung binh truot; nho hieu chinh vi ADC ESP32 khong tuyen tinh. |
-| Dong co | 2 driver (TB6612FNG / DRV8833) | LEDC PWM 20 kHz. Hai banh cung ben noi song song = 1 kenh. |
+| LiDAR | **Camsense X1/X2** | UART 115200 8N1, đẩy gói liên tục, mỗi gói vài điểm kèm góc + tốc độ quay. Dùng SDK/driver chính chủ hoặc parser ROS có sẵn. Cấp nguồn động cơ riêng, đừng lấy chung 3V3 với ESP32. Gom đủ một vòng (góc quay qua 360°) rồi mới gọi `dock_detect`. |
+| 2 × cảm biến vực | TCRT5000 / E18-D80NK chiếu xuống | đặt cách tâm xe **≥ 10.5 cm**, càng xa càng an toàn. Lấy ngưỡng bằng cách đo giá trị trên mặt bàn vs. không có gì |
+| Mắt thu IR | 2 module TSOP khác tần số (TSOP4838 38 kHz cho "gọi", TSOP4856 56 kHz cho trạm sạc) | "cường độ" lấy bằng cách đếm tỉ lệ xung trong 50 ms. Đặt ở đầu xe, có ống che để góc thu ~±45° |
+| Trạm sạc | hộp **15 × 15 cm** mặt phẳng + LED IR 56 kHz chiếu ra phía trước | mặt hộp phải phẳng và không bóng loáng thì LiDAR mới cắt ra được đoạn thẳng |
+| Odometry | encoder 2 bánh (bắt buộc) + IMU (nên có) | không có encoder thì xe không nhớ nổi đường về trạm |
+| Đo pin | chia áp + ADC1, lọc trung bình trượt | ADC ESP32 không tuyến tính, nhớ hiệu chỉnh |
+| Động cơ | 2 driver TB6612FNG / DRV8833 | LEDC PWM 20 kHz. Hai bánh cùng bên nối song song = 1 kênh |
 
-## 4. Lop phan xa an toan (BAT BUOC)
+## 4. Lớp phản xạ an toàn (BẮT BUỘC)
 
-Mang no-ron co the loi. Cam bien vuc phai co duong cat thang, khong qua bo nao:
+Mạng nơ-ron có thể lỗi. Cảm biến vực phải có đường cắt thẳng, không qua bộ não:
 
 ```c
-if (cliff_front && u_forward > 0) { u_left = u_right = -0.7f; }  // lui ngay
+if (cliff_front && u_forward > 0) { u_left = u_right = -0.7f; }
 if (cliff_rear  && u_forward < 0) { u_left = u_right = +0.6f; }
-if (battery_volt < CUTOFF)        { u_left = u_right = 0; }      // cuu pin
+if (battery_volt < CUTOFF)        { u_left = u_right = 0; }
 ```
 
-Luc huan luyen **khong** bat lop nay, de bo nao tu hoc so mep ban; lop nay chi
-la luoi do khi ra doi that.
+Lúc huấn luyện **không** bật lớp này, để bộ não tự học sợ mép bàn; lớp này chỉ
+là lưới đỡ khi ra đời thật.
 
-## 5. Kiem tra truoc khi tha xe len ban
+## 5. Kiểm tra trước khi thả xe lên bàn
 
-1. Cho xe chay tren san (khong co vuc) truoc, xem no co ne vat can khong.
-2. Do lai `v_max`, `motor_tau` that roi sua `sim/robot.py` va huan luyen lai.
-3. Dat ban thap + trai dem ben duoi trong vai chuc lan chay dau.
-4. Ghi log 20 so obs ra Serial, doi chieu voi mo phong — day la cach nhanh nhat
-   de phat hien sai thu tu hoac sai chuan hoa.
+1. Ghi log 48 số `obs` ra Serial và đối chiếu với mô phỏng — đây là cách nhanh
+   nhất để phát hiện sai thứ tự hoặc sai chuẩn hoá.
+2. Đo lại `v_max`, `motor_tau` thật rồi sửa `sim/robot.py` và huấn luyện lại.
+3. Đo dải cường độ IR thật theo góc và khoảng cách, sửa hàm trong `sim/sensors.py`.
+4. Kiểm tra `dock_detect` trên dữ liệu quét thật trước khi tin vào nó: in ra
+   bearing/dist của ứng viên rồi lấy thước đo lại.
+5. Chạy trên sàn (không có vực) trước, rồi mới lên bàn thấp có trải đệm bên dưới.

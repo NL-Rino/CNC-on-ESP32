@@ -72,6 +72,18 @@ class GRUPolicy:
         self.h = h
         return np.tanh(p["Wo"] @ h + p["bo"])
 
+    def act_batch(self, X, H):
+        """Chay mot buoc cho nhieu tap song song. X: [E,obs], H: [E,hidden]."""
+        p = self.p
+        xz = X @ p["Wz"].T
+        xr = X @ p["Wr"].T
+        xn = X @ p["Wn"].T
+        z = sigmoid(xz + H @ p["Uz"].T + p["bz"])
+        r = sigmoid(xr + H @ p["Ur"].T + p["br"])
+        n = np.tanh(xn + r * (H @ p["Un"].T) + p["bn"])
+        H = (1.0 - z) * H + z * n
+        return np.tanh(H @ p["Wo"].T + p["bo"]), H
+
     # ---------------------------------------------------------------- luu / doc
     def save(self, path, **meta):
         np.savez(path, theta=self.theta, obs_dim=self.obs_dim,

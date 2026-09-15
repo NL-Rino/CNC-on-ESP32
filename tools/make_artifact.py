@@ -10,6 +10,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from train.baseline import ReactiveController  # noqa: E402
 from train.policy import GRUPolicy  # noqa: E402
 from train.rollout import make_env, rollout  # noqa: E402
 
@@ -17,20 +18,41 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(HERE, "..", "viz", "artifact_template.html")
 
 
-def collect(npz, episodes=4, seed=4200, stride=2, max_steps=900, stage=3):
-    pol, meta = GRUPolicy.load(npz)
+def _run(agent, who, episodes, seed, stage, max_steps, want_charge=False):
+    """want_charge: tim seed ma xe co cam sac thanh cong (de xem cho ro)."""
     env = make_env(stage=stage, max_steps=max_steps, record=True)
     recs, stats = [], []
-    tried = 0
-    while len(recs) < episodes and tried < episodes * 6:
-        _, st = rollout(pol, env, seed + tried)
-        tried += 1
+    i = 0
+    tries = 0
+    while len(recs) < episodes and tries < episodes * 12:
+        tries += 1
+        if want_charge:
+            probe = make_env(stage=stage, max_steps=max_steps)
+            if hasattr(agent, "reset"):
+                agent.reset()
+            _, pst = rollout(agent, probe, seed + i)
+            if pst["charged"] < 0.15 and tries < episodes * 10:
+                i += 1
+                continue
+        _, st = rollout(agent, env, seed + i)
+        i += 1
         stats.append(st)
         rec = env.episode_record()
-        rec["frames"] = rec["frames"][::stride]
-        rec["dt"] = rec["dt"] * stride
         rec["stats"] = st
+        rec["who"] = who
+        rec["seed"] = seed + i - 1
         recs.append(rec)
+    return recs, stats
+
+
+def collect(npz, episodes=3, seed=4200, max_steps=1300, stage=3, teacher=2):
+    """Ghi hinh: vai tap cua bo nao da hoc + vai tap cua bo dieu khien viet tay."""
+    pol, meta = GRUPolicy.load(npz)
+    recs, stats = _run(pol, "AI", episodes, seed, stage, max_steps)
+    if teacher:
+        t_recs, _ = _run(ReactiveController(0), "viet tay", teacher,
+                         seed + 500, stage, max_steps, want_charge=True)
+        recs = t_recs + recs
     return pol, meta, recs, stats
 
 
@@ -50,21 +72,23 @@ def curve(log_path, max_points=400):
     return rows
 
 
-def build(npz, log_path, out_path, episodes=4):
+def build(npz, log_path, out_path, episodes=3):
     pol, meta, recs, stats = collect(npz, episodes=episodes)
     m = lambda k: statistics.mean(float(s[k]) for s in stats)  # noqa: E731
     all_stats = {
         "fell": 100 * m("fell"),
         "arrivals": m("arrivals"),
         "charged": m("charged"),
+        "full": m("full_charges"),
         "distance": m("distance"),
     }
+    ep0 = recs[0]
     facts = [
-        ["%.0f%%" % all_stats["fell"], "so tap roi khoi ban"],
-        ["%.1f" % all_stats["arrivals"], "lan toi den goi / tap"],
-        ["%.0f m" % all_stats["distance"], "quang duong / tap 45 giay"],
-        ["%d" % pol.n_params, "tham so trong bo nao"],
-        ["20 / 2", "dau vao cam bien / kenh dong co"],
+        ["%d" % ep0.get("lidar_n", 460), "điểm LiDAR mỗi vòng"],
+        ["%.1f Hz" % ep0.get("scan_hz", 7), "tốc độ quét — dữ liệu luôn cũ 3 chu kỳ"],
+        ["15 cm", "cạnh hộp trạm sạc phải nhận ra"],
+        ["10.5 cm", "khoảng báo trước của cảm biến vực"],
+        ["%d" % pol.n_params, "tham số trong bộ não"],
     ]
     data = {
         "policy": os.path.basename(npz),

@@ -20,7 +20,7 @@ from .world import IR_CALL, IR_DOCK, Beacon, make_world
 SEC_CLIP = 3.0          # tam nhin dua vao mang no-ron (m) - xa hon coi la "trong"
 MEM_CLIP = 3.0
 
-OBS_DIM = 16 + 2 + 4 * MAX_CAND + 6 + 4 + 3 + 5     # = 48
+OBS_DIM = SECTORS + 2 + 4 * MAX_CAND + 6 + 4 + 3 + 5
 ACT_DIM = 2
 
 OBS_NAMES = (
@@ -438,4 +438,6 @@ class CarEnv:
     def episode_record(self):
         return {"world": self.world.as_dict(), "frames": self.frames,
                 "dt": self.cfg.dt * self.cfg.record_every,
-                "scan_every": self.cfg.scan_every}
+                "scan_every": self.cfg.scan_every,
+                "lidar_n": self.lidar.n,
+                "scan_hz": round(self.lidar.scan_hz, 2)}

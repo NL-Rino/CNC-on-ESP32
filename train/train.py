@@ -109,8 +109,9 @@ def main():
     if args.resume:
         pol, meta = GRUPolicy.load(args.resume)
         hidden = pol.hidden
-        if "stage" in meta:
-            stage = int(meta["stage"])
+        # Cap hoc luon lay tu dong lenh (--curriculum -> cap 0, khong thi
+        # --stage), khong lay tu file: nap lai mot bo nao cu de cho no hoc bai
+        # KHAC la chuyen binh thuong.
         if "gen" in meta:
             start_gen = int(meta["gen"])
         print("resume tu %s (gen=%d, stage=%d)" % (args.resume, start_gen, stage))

@@ -439,9 +439,13 @@ def make_world(rng: random.Random, stage: int = 3) -> World:
                     "box", x0=x, y0=y, x1=x + bw, y1=y + bh))
 
     if stage >= 2:
-        # Hoc luon quay lung ra mep ban (nguoi that cung ke sat tuong nhu vay),
-        # nen huong cua no la 1 trong 4 huong chinh.
-        pad = 0.5 * BAY_OUT + 0.02
+        # Hoc quay lung ve phia mep ban (nguoi that cung ke sat tuong nhu
+        # vay) nen huong cua no la 1 trong 4 huong chinh. Nhung KHONG dat sat
+        # mep: de lui vao 25 cm. Sat mep thi luc cam sac mui xe chi cach vuc
+        # 7 cm, va quan trong hon - LiDAR khong thay duoc mep ban, xe phai
+        # doan mep bang "quat nay trong tron". Dat mot khoi 40 cm ngay tai
+        # mep la pha hong dung cai manh moi do.
+        pad = 0.5 * BAY_OUT + 0.25
         side = rng.randrange(4)
         if side == 0:
             dx, dy, head = rng.uniform(0.7, w - 0.7), pad, -math.pi / 2

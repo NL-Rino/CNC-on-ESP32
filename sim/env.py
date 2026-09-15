@@ -58,7 +58,10 @@ class EnvConfig:
     # xuong dat van gan nhu hoa von - va xe hoc dung cai do (rot ban 65%,
     # trong do 14/20 lan la dang pin yeu).
     w_fall = -150.0
-    w_flat = -60.0
+    # Phai BANG w_fall. Neu chet pin re hon roi ban thi xe se chon cai chet
+    # re hon: no dung quay tai cho cho het pin (roi 0%, het pin 85%, moi tap
+    # chi di qua 3 o luoi). Hai cai chet deu la chet, gia phai bang nhau.
+    w_flat = -150.0
     w_bump = -1.5
     w_cliff = -3.0            # phat lien tuc khi cam bien vuc keu ma van tien
     w_progress = 14.0
@@ -104,7 +107,11 @@ class CarEnv:
 
         x, y = self.world.free_spot(rng, self.spec.radius)
         th = rng.uniform(-math.pi, math.pi)
-        batt = rng.uniform(0.30, 1.0) if cfg.stage >= 2 else 1.0
+        # Stage 2 con dang hoc cam sac nen cho pin rong rai hon; stage 3 moi
+        # that su bop. Bat dau voi 0.30 tu stage 2 thi phan lon tap ket thuc
+        # vi het pin truoc khi xe kip hoc bat cu dieu gi ve cai hoc.
+        batt = rng.uniform(0.50, 1.0) if cfg.stage == 2 else (
+            rng.uniform(0.30, 1.0) if cfg.stage >= 3 else 1.0)
         self.robot.reset(x, y, th, batt, rng)
         self.sensors.reset()
         self.lidar.reset(self.nprng)
@@ -414,6 +421,11 @@ class CarEnv:
                 self.visited.add(cell)
                 rew += cfg.w_novel
                 P["novel"] += cfg.w_novel
+
+        # Phat quay tai cho ap dung LUC NAO CUNG THE. Truoc day no tat di khi
+        # dang co muc tieu, ma pin yeu thi luc nao cung co muc tieu (ve tram)
+        # - thanh ra xe duoc quay vong vong mien phi dung luc no can di nhat.
+        if not r.charging:
             om_max = 2.0 * self.spec.v_max / self.spec.wheel_base
             sp = cfg.w_spin * abs(r.omega) / om_max
             rew -= sp

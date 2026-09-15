@@ -17,48 +17,58 @@ python3 -m train.evaluate --policy brains/car_bay_v1.npz --ascii --seed 7
 ## Trạng thái hiện tại (đọc cái này trước)
 
 Phần **mô phỏng + nhận thức đã xong và đã kiểm chứng**: LiDAR, bộ dò hộc chữ U
-(cho ra cả trục), bắt tay hồng ngoại qua khe hẹp, va chạm thân vuông, trí nhớ vị
-trí + hướng trạm, ước lượng pin — chạy được, có 20 kiểm thử, và bản C cho ESP32
-đã đối chiếu **trùng khít** bản Python trên 25 cảnh.
+(cho ra cả trục), bắt tay hồng ngoại qua khe hẹp, cửa sổ bắt ở miệng hộc, trí nhớ
+vị trí + hướng trạm, ước lượng pin — chạy được, có **21 kiểm thử**, và bản C cho
+ESP32 đã đối chiếu **trùng khít** bản Python trên 25 cảnh.
 
-Phần **bộ não thì đang nuôi dở**. So trên 30 cảnh ngẫu nhiên, cùng seed:
+Phần **bộ não thì mới xong một nửa, và nửa nào xong thì xong hẳn**:
 
 | | AI đang nuôi | Bộ luật viết tay |
 |---|---:|---:|
-| Điểm | −58 | **171** |
-| Rơi khỏi bàn | 53% | **0%** |
-| Chết vì hết pin | 13% | **10%** |
-| Pin tự nạp được / tập | 0.000 | **0.417** |
-| Lần tự sạc đầy / tập | 0.00 | **0.40** |
-| Ô lưới đã đi qua | **7.5** | 5.4 |
+| **Đi long nhong (không có hộc)** | | |
+| Rơi khỏi bàn | **0%** | 0% |
+| Quãng đường / tập | **24.5 m** | — |
+| **Toàn bộ nhiệm vụ (có hộc, phải tự sạc)** | | |
+| Rơi khỏi bàn | 37% | **0%** |
+| Chết vì hết pin | 47% | **23%** |
+| Lần tự sạc đầy / tập | 0.00 | **0.23** |
 
-Nói thẳng: **bộ não hiện chưa dùng được** — nó rơi khỏi bàn hơn nửa số tập. Bộ
-luật viết tay (`train/baseline.py`) mới là cái làm trọn quy trình bạn mô tả, và
-đó là bằng chứng rằng bài toán **giải được** với đúng bộ cảm biến này.
+Kỹ năng **đi long nhong coi như xong**: 0% rơi, 24.5 m mỗi tập, 40 ô lưới đã đi
+qua, chỉ ~30 bước va chạm. Kỹ năng **tự về sạc thì chưa** — và đo ra thì thấy cứ
+thêm mấy cái hộc vào là kỹ năng nền cũng hỏng theo (0% rơi → 40–50% rơi).
 
-Vì sao lần này tụt so với bản siêu âm trước: bài đã khó hơn hẳn. Xe từ 18 cm lên
-**30 cm** trên cùng cái bàn, phải chui vào khe chỉ hở 5 mm, và đầu vào từ 40 lên
-**46 số**. Phiên này chỉ chạy được ~500 thế hệ, mà đường cong còn đang lên rõ
-(điểm đánh giá đi từ 30 lên 104 trong 200 thế hệ gần nhất). Chạy tiếp:
+Điều đó **không** phải do phần thưởng về sạc kéo nó ra mép. Tôi đã đoán vậy hai
+lần và cả hai lần đều sai. Phép thử dứt điểm: ghim pin luôn đầy (tức là xoá hẳn
+phần thưởng sạc ra khỏi phương trình) rồi thả vào cùng cảnh có hộc — **vẫn rơi
+70%**. Thủ phạm là chính mấy cái hộc: chúng đổi hẳn thống kê LiDAR mà chính sách
+đã quen ở bậc trước, nên nó phải học lại gần như từ đầu, và 37 thế hệ ở bậc đó
+thì chưa đủ.
+
+Chạy tiếp (mỗi thế hệ ~8 giây trên 4 nhân ở stage 2):
 
 ```bash
 python3 -m train.train --curriculum --resume brains/car_bay_v1.npz \
-        --jobs $(nproc) --pop 48 --gens 4000 --min-gens-per-stage 100 \
-        --eval-episodes 20 --out runs/bay6
+        --jobs $(nproc) --pop 48 --gens 6000 --min-gens-per-stage 150 \
+        --eval-episodes 20 --out runs/bay11
 ```
 
-Ba điều tôi sẽ làm nếu chạy tiếp, và lý do:
+Ước chừng cần 1.000–2.000 thế hệ ở stage 2, tức 2–4 giờ trên máy 8 nhân.
 
-1. **`--eval-episodes 20`** thay vì 8. Với 8 tập, hai lần đánh giá liên tiếp cho
-   ra 0% và 75% rơi trên **cùng một bộ trọng số**. Nhiễu đó khiến `best.npz` chọn
-   nhầm bộ may mắn chứ không phải bộ giỏi. Đây là lỗi phương pháp, không phải
-   thiếu tính toán.
-2. **`--pop 48`**. Với 2.150 tham số, quần thể 32 cho gradient quá nhiễu.
-3. **Kiên nhẫn ở stage 2.** Chương trình học hiện tại lên cấp khi rơi ≤ 10%, rồi
-   stage sau lại rơi ngược lên — dấu hiệu nó lên cấp lúc kỹ năng còn mong manh.
+### Bốn kẽ hở trong phần thưởng đã tìm và sửa trong phiên này
 
-Mỗi thế hệ ~6 giây trên 4 nhân ở stage 2. Ước chừng cần 1.500–2.500 thế hệ nữa,
-tức 3–5 giờ trên máy 8 nhân — chạy nền được, không phải ngồi canh.
+Đây là phần đáng đọc nhất, vì mấy lỗi này sẽ lặp lại y nguyên trên phần cứng
+(chi tiết trong `docs/DESIGN.md` mục 10):
+
+1. **Rơi khỏi bàn rẻ hơn giải thưởng sạc.** Phạt rơi −40, mà đi 2 m về phía trạm
+   đã được +28 và giải sạc tới +120. Xe học đúng cái đó: 14/20 lần rơi là **đang
+   lúc pin yếu**. Nâng phạt lên −150.
+2. **Sửa xong (1) thì xe học cách chết rẻ hơn**: đứng quay tại chỗ cho hết pin
+   (rơi 0%, hết pin 85%, mỗi tập đi qua 3 ô). Hết pin cũng là chết → cũng −150.
+3. **Phạt quay-tại-chỗ đang tắt khi có mục tiêu**, mà pin yếu thì lúc nào cũng
+   có mục tiêu — xe được quay vòng vòng miễn phí đúng lúc nó cần đi nhất.
+4. **Miễn phạt va chạm với vách hộc quá rộng.** Định miễn cho việc xát vách lúc
+   chui vào (khe hở 5 mm, xát là đương nhiên), nhưng lỡ miễn cả lúc xe tì vào
+   *sườn* hộc. Xe nằm lì vào vách **41% số bước**.
 
 ## Chiếc xe trong mô phỏng
 

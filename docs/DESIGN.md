@@ -218,6 +218,38 @@ bị hút hẳn vào trong rồi kẹt cứng — đó là lý do stage 2 từng
 Bài học: một "mô hình tuân thủ" viết ẩu sẽ âm thầm làm bài toán dễ đi, và bạn chỉ
 phát hiện khi ra phần cứng thật. Đặt `BAY_FLARE = 0.0` để xem lại hộc thẳng tuột.
 
+**(g) Rơi khỏi bàn rẻ hơn phần thưởng về sạc.** Phạt rơi −40, trong khi đi 2 m
+về phía trạm đã được +28 và giải sạc tới +120. Lao về trạm rồi rơi xuống đất gần
+như hoà vốn — và xe học đúng cái đó: stage 2 rơi bàn 65%, trong đó **14/20 lần là
+đang lúc pin yếu**, tức đúng lúc phần thưởng đang kéo nó đi. Nâng lên −150, tức
+lớn hơn mọi thứ kiếm được trong một tập cộng lại.
+
+**(h) Sửa xong (g) thì xe học cách chết rẻ hơn.** Rơi −150 nhưng hết pin chỉ −60,
+nên nó **đứng quay tại chỗ cho hết pin**: rơi 0–5%, hết pin 85–100%, mỗi tập chỉ
+đi qua 3 ô lưới. Hai cái chết đều là chết, giá phải bằng nhau → `w_flat` cũng −150.
+Kèm theo đó phát hiện phạt quay-tại-chỗ đang **tắt khi có mục tiêu**, mà pin yếu
+thì lúc nào cũng có mục tiêu — thành ra xe được quay vòng vòng miễn phí đúng lúc
+nó cần đi nhất.
+
+**(i) Miễn phạt va chạm quá rộng thành kẽ hở.** Khe hộc chỉ hở 5 mm mỗi bên nên
+xát vách lúc chui vào là đương nhiên, phạt thì xe sẽ học cách không bao giờ vào
+sạc. Nhưng tôi miễn cho **mọi** va chạm với vách hộc, kể cả khi xe tì vào *sườn*
+hộc. Xe tìm ra ngay: nó nằm lì vào vách **41% số bước**. Giờ chỉ miễn khi xe thật
+sự nằm trong lối vào và đang hướng vào trong (`World.in_bay_corridor`). Kiểm chứng
+bằng cách tách số va chạm làm hai loại: bộ luật viết tay xát hành lang 611 lần và
+húc vật cản thật 2441 lần trên 20 tập — tức định nghĩa hành lang đúng cỡ.
+
+**(j) Đặt trạm sạc sát mép bàn là phá chính manh mối của xe.** LiDAR quét ngang
+nên **không thấy mép bàn**; xe chỉ có thể đoán mép qua "quạt này trống trơn".
+Đặt một khối 40 cm ngay tại mép là làm hỏng đúng cái manh mối đó. Đo: chính sách
+đạt 4% rơi ở stage 1 tụt xuống **70% rơi** ở stage 2 **ngay cả khi ghim pin đầy**
+(tức là loại hẳn phần thưởng về sạc ra khỏi phương trình) — nên thủ phạm là cái
+hộc chứ không phải phần thưởng. Đã lùi hộc vào 25 cm khỏi mép.
+
+Cách đo đáng nhớ hơn cả kết luận: muốn biết A hay B gây ra lỗi thì **tắt hẳn B
+đi rồi đo lại**, đừng ngồi suy luận. Tôi đã đoán sai thủ phạm hai lần liền trước
+khi làm phép thử ghim-pin-đầy này.
+
 Bài học chung: khi agent **không** học được một kỹ năng, đừng tăng số thế hệ. Hãy
 đo xem nó thật sự đi tới đâu và dừng lại ở đâu — gần như lần nào nguyên nhân cũng
 là hai khoản thưởng đang kéo ngược nhau.

@@ -1,0 +1,143 @@
+resume tu runs/car/last.npz (gen=417, stage=3)
+tham so bo nao: 1810 | pop=64 | episodes=4 | jobs=4
+gen  417 | stage 3 | fit    127.0 (max    181.5) | sigma 0.080 |  4.1s
+         eval: R   114.6 | toi_diem 1.50 | sac 0.00 | o_da_di 10.1 | va_cham 17.0 | roi 0% | het_pin 50%
+gen  418 | stage 3 | fit    173.7 (max    269.6) | sigma 0.080 |  5.9s
+gen  419 | stage 3 | fit    132.4 (max    204.9) | sigma 0.080 |  4.9s
+         eval: R   158.5 | toi_diem 2.00 | sac 0.00 | o_da_di 11.4 | va_cham 7.1 | roi 0% | het_pin 50%
+gen  420 | stage 3 | fit     70.1 (max    115.7) | sigma 0.080 |  4.6s
+gen  421 | stage 3 | fit    149.1 (max    215.0) | sigma 0.080 |  5.5s
+gen  422 | stage 3 | fit    227.7 (max    290.7) | sigma 0.080 |  5.5s
+gen  423 | stage 3 | fit    162.3 (max    245.1) | sigma 0.079 |  5.0s
+gen  424 | stage 3 | fit     55.5 (max    123.8) | sigma 0.079 |  4.0s
+         eval: R   140.1 | toi_diem 1.58 | sac 0.00 | o_da_di 10.4 | va_cham 10.7 | roi 0% | het_pin 50%
+gen  425 | stage 3 | fit    257.9 (max    344.3) | sigma 0.079 |  6.5s
+gen  426 | stage 3 | fit    171.5 (max    221.6) | sigma 0.079 |  4.6s
+gen  427 | stage 3 | fit     86.0 (max    153.2) | sigma 0.079 |  4.9s
+gen  428 | stage 3 | fit    189.5 (max    234.3) | sigma 0.079 |  5.3s
+gen  429 | stage 3 | fit     89.1 (max    121.5) | sigma 0.079 |  3.5s
+         eval: R   141.4 | toi_diem 1.75 | sac 0.00 | o_da_di 10.4 | va_cham 9.2 | roi 0% | het_pin 50%
+gen  430 | stage 3 | fit    201.0 (max    285.5) | sigma 0.079 |  4.7s
+gen  431 | stage 3 | fit    153.6 (max    213.2) | sigma 0.079 |  4.8s
+gen  432 | stage 3 | fit     24.5 (max     71.7) | sigma 0.079 |  4.2s
+gen  433 | stage 3 | fit    187.5 (max    261.2) | sigma 0.079 |  5.6s
+gen  434 | stage 3 | fit    275.3 (max    412.5) | sigma 0.079 |  6.6s
+         eval: R   148.2 | toi_diem 1.92 | sac 0.00 | o_da_di 9.9 | va_cham 3.9 | roi 0% | het_pin 50%
+gen  435 | stage 3 | fit    242.3 (max    345.0) | sigma 0.078 |  5.4s
+gen  436 | stage 3 | fit    128.3 (max    220.4) | sigma 0.078 |  4.9s
+gen  437 | stage 3 | fit    221.2 (max    329.9) | sigma 0.078 |  6.1s
+gen  438 | stage 3 | fit    146.2 (max    257.0) | sigma 0.078 |  5.8s
+gen  439 | stage 3 | fit    254.9 (max    352.7) | sigma 0.078 |  6.1s
+         eval: R   161.2 | toi_diem 1.92 | sac 0.00 | o_da_di 10.5 | va_cham 6.6 | roi 0% | het_pin 50%
+gen  440 | stage 3 | fit    176.9 (max    236.9) | sigma 0.078 |  5.6s
+gen  441 | stage 3 | fit    275.1 (max    362.1) | sigma 0.078 |  5.8s
+gen  442 | stage 3 | fit    174.4 (max    247.8) | sigma 0.078 |  4.9s
+gen  443 | stage 3 | fit    180.9 (max    259.6) | sigma 0.078 |  4.7s
+gen  444 | stage 3 | fit    105.2 (max    163.9) | sigma 0.078 |  5.7s
+         eval: R   155.0 | toi_diem 2.08 | sac 0.00 | o_da_di 9.8 | va_cham 6.8 | roi 0% | het_pin 50%
+gen  445 | stage 3 | fit    233.5 (max    361.9) | sigma 0.078 |  5.8s
+gen  446 | stage 3 | fit    115.0 (max    165.0) | sigma 0.078 |  4.6s
+gen  447 | stage 3 | fit    103.0 (max    154.3) | sigma 0.078 |  4.2s
+gen  448 | stage 3 | fit     76.0 (max    147.8) | sigma 0.077 |  5.5s
+gen  449 | stage 3 | fit    120.0 (max    168.2) | sigma 0.077 |  4.8s
+         eval: R   114.0 | toi_diem 1.67 | sac 0.00 | o_da_di 9.5 | va_cham 17.2 | roi 0% | het_pin 50%
+gen  450 | stage 3 | fit    198.1 (max    257.5) | sigma 0.077 |  4.8s
+gen  451 | stage 3 | fit    185.9 (max    274.0) | sigma 0.077 |  6.0s
+gen  452 | stage 3 | fit    143.5 (max    194.5) | sigma 0.077 |  4.8s
+gen  453 | stage 3 | fit    140.7 (max    200.4) | sigma 0.077 |  4.1s
+gen  454 | stage 3 | fit    189.9 (max    254.3) | sigma 0.077 |  5.9s
+         eval: R   119.3 | toi_diem 1.42 | sac 0.00 | o_da_di 9.2 | va_cham 6.4 | roi 0% | het_pin 50%
+gen  455 | stage 3 | fit     96.5 (max    148.1) | sigma 0.077 |  3.9s
+gen  456 | stage 3 | fit    231.4 (max    291.2) | sigma 0.077 |  6.1s
+gen  457 | stage 3 | fit    139.8 (max    220.0) | sigma 0.077 |  5.3s
+gen  458 | stage 3 | fit    179.2 (max    254.2) | sigma 0.077 |  5.6s
+gen  459 | stage 3 | fit    151.7 (max    214.6) | sigma 0.077 |  4.8s
+         eval: R   111.6 | toi_diem 1.75 | sac 0.00 | o_da_di 10.1 | va_cham 28.7 | roi 0% | het_pin 50%
+gen  460 | stage 3 | fit    118.2 (max    212.6) | sigma 0.077 |  5.1s
+gen  461 | stage 3 | fit    180.1 (max    253.6) | sigma 0.076 |  6.1s
+gen  462 | stage 3 | fit     73.5 (max    128.5) | sigma 0.076 |  5.6s
+gen  463 | stage 3 | fit    282.6 (max    340.5) | sigma 0.076 |  5.6s
+gen  464 | stage 3 | fit    133.3 (max    196.2) | sigma 0.076 |  4.6s
+         eval: R   146.3 | toi_diem 1.58 | sac 0.00 | o_da_di 11.6 | va_cham 7.4 | roi 0% | het_pin 50%
+gen  465 | stage 3 | fit    120.3 (max    188.8) | sigma 0.076 |  5.3s
+gen  466 | stage 3 | fit     13.2 (max     45.6) | sigma 0.076 |  3.7s
+gen  467 | stage 3 | fit    243.7 (max    305.7) | sigma 0.076 |  5.6s
+gen  468 | stage 3 | fit     16.1 (max     62.4) | sigma 0.076 |  5.3s
+gen  469 | stage 3 | fit    236.3 (max    333.5) | sigma 0.076 |  5.5s
+         eval: R   134.5 | toi_diem 1.50 | sac 0.00 | o_da_di 10.8 | va_cham 17.2 | roi 8% | het_pin 42%
+gen  470 | stage 3 | fit    231.8 (max    291.3) | sigma 0.076 |  5.6s
+gen  471 | stage 3 | fit     63.1 (max    110.7) | sigma 0.076 |  4.3s
+gen  472 | stage 3 | fit     76.9 (max    124.7) | sigma 0.076 |  4.3s
+gen  473 | stage 3 | fit    143.9 (max    204.5) | sigma 0.076 |  5.5s
+gen  474 | stage 3 | fit     85.2 (max    120.8) | sigma 0.075 |  4.8s
+         eval: R   122.8 | toi_diem 1.50 | sac 0.00 | o_da_di 10.1 | va_cham 10.8 | roi 0% | het_pin 50%
+gen  475 | stage 3 | fit    310.3 (max    386.5) | sigma 0.075 |  5.2s
+gen  476 | stage 3 | fit     48.0 (max     76.2) | sigma 0.075 |  4.2s
+gen  477 | stage 3 | fit    174.6 (max    228.1) | sigma 0.075 |  4.2s
+gen  478 | stage 3 | fit     71.6 (max    138.2) | sigma 0.075 |  4.2s
+gen  479 | stage 3 | fit    139.8 (max    195.6) | sigma 0.075 |  5.0s
+         eval: R   151.1 | toi_diem 1.92 | sac 0.00 | o_da_di 10.6 | va_cham 8.4 | roi 0% | het_pin 50%
+gen  480 | stage 3 | fit    204.1 (max    284.9) | sigma 0.075 |  4.4s
+gen  481 | stage 3 | fit    183.3 (max    259.8) | sigma 0.075 |  4.9s
+gen  482 | stage 3 | fit    110.4 (max    154.6) | sigma 0.075 |  3.9s
+gen  483 | stage 3 | fit    266.0 (max    338.1) | sigma 0.075 |  5.8s
+gen  484 | stage 3 | fit    101.9 (max    149.0) | sigma 0.075 |  5.3s
+         eval: R   136.4 | toi_diem 1.92 | sac 0.00 | o_da_di 9.3 | va_cham 13.5 | roi 0% | het_pin 50%
+gen  485 | stage 3 | fit     83.9 (max    172.7) | sigma 0.075 |  5.5s
+gen  486 | stage 3 | fit     96.6 (max    142.9) | sigma 0.075 |  3.9s
+gen  487 | stage 3 | fit    182.8 (max    248.5) | sigma 0.075 |  5.2s
+gen  488 | stage 3 | fit    115.1 (max    152.6) | sigma 0.074 |  4.9s
+gen  489 | stage 3 | fit    132.1 (max    253.8) | sigma 0.074 |  5.2s
+         eval: R   157.8 | toi_diem 2.17 | sac 0.00 | o_da_di 9.8 | va_cham 7.3 | roi 0% | het_pin 50%
+gen  490 | stage 3 | fit     11.7 (max     55.3) | sigma 0.074 |  3.9s
+gen  491 | stage 3 | fit     79.9 (max    132.4) | sigma 0.074 |  5.7s
+gen  492 | stage 3 | fit    141.3 (max    234.0) | sigma 0.074 |  5.0s
+gen  493 | stage 3 | fit    132.6 (max    178.9) | sigma 0.074 |  4.3s
+gen  494 | stage 3 | fit    232.3 (max    310.9) | sigma 0.074 |  4.8s
+         eval: R   148.4 | toi_diem 2.08 | sac 0.00 | o_da_di 10.8 | va_cham 6.8 | roi 0% | het_pin 50%
+gen  495 | stage 3 | fit    140.2 (max    246.6) | sigma 0.074 |  5.1s
+gen  496 | stage 3 | fit    134.6 (max    194.9) | sigma 0.074 |  5.3s
+gen  497 | stage 3 | fit    165.0 (max    241.9) | sigma 0.074 |  5.6s
+gen  498 | stage 3 | fit    142.2 (max    215.4) | sigma 0.074 |  6.8s
+gen  499 | stage 3 | fit    175.7 (max    260.7) | sigma 0.074 |  5.0s
+         eval: R   155.0 | toi_diem 1.83 | sac 0.00 | o_da_di 10.2 | va_cham 1.2 | roi 0% | het_pin 50%
+gen  500 | stage 3 | fit    190.7 (max    279.8) | sigma 0.074 |  5.9s
+gen  501 | stage 3 | fit    108.8 (max    151.7) | sigma 0.073 |  4.9s
+gen  502 | stage 3 | fit    107.9 (max    170.5) | sigma 0.073 |  5.3s
+gen  503 | stage 3 | fit    108.0 (max    147.6) | sigma 0.073 |  4.4s
+gen  504 | stage 3 | fit    192.7 (max    278.1) | sigma 0.073 |  5.3s
+         eval: R   148.2 | toi_diem 1.83 | sac 0.00 | o_da_di 9.6 | va_cham 5.1 | roi 0% | het_pin 50%
+gen  505 | stage 3 | fit    116.8 (max    174.8) | sigma 0.073 |  4.7s
+gen  506 | stage 3 | fit    325.0 (max    405.0) | sigma 0.073 |  5.6s
+gen  507 | stage 3 | fit    127.4 (max    188.5) | sigma 0.073 |  5.2s
+gen  508 | stage 3 | fit    305.0 (max    373.5) | sigma 0.073 |  5.1s
+gen  509 | stage 3 | fit    260.6 (max    360.8) | sigma 0.073 |  4.4s
+         eval: R   147.6 | toi_diem 1.83 | sac 0.00 | o_da_di 10.1 | va_cham 2.5 | roi 0% | het_pin 50%
+gen  510 | stage 3 | fit    104.5 (max    202.5) | sigma 0.073 |  5.1s
+gen  511 | stage 3 | fit    142.5 (max    191.5) | sigma 0.073 |  5.7s
+gen  512 | stage 3 | fit    215.1 (max    325.3) | sigma 0.073 |  6.0s
+gen  513 | stage 3 | fit    167.2 (max    242.8) | sigma 0.073 |  5.4s
+gen  514 | stage 3 | fit    269.1 (max    315.3) | sigma 0.073 |  4.9s
+         eval: R   152.3 | toi_diem 2.08 | sac 0.00 | o_da_di 9.6 | va_cham 3.3 | roi 0% | het_pin 50%
+gen  515 | stage 3 | fit    113.3 (max    173.7) | sigma 0.072 |  5.5s
+gen  516 | stage 3 | fit    166.7 (max    255.6) | sigma 0.072 |  5.3s
+gen  517 | stage 3 | fit     53.3 (max     93.3) | sigma 0.072 |  4.9s
+gen  518 | stage 3 | fit    138.1 (max    189.7) | sigma 0.072 |  4.8s
+gen  519 | stage 3 | fit    126.0 (max    208.1) | sigma 0.072 |  5.2s
+         eval: R   145.0 | toi_diem 1.92 | sac 0.00 | o_da_di 9.7 | va_cham 8.2 | roi 0% | het_pin 50%
+gen  520 | stage 3 | fit     99.4 (max    178.4) | sigma 0.072 |  5.9s
+gen  521 | stage 3 | fit    274.3 (max    360.5) | sigma 0.072 |  5.5s
+gen  522 | stage 3 | fit    123.3 (max    195.0) | sigma 0.072 |  4.6s
+gen  523 | stage 3 | fit     50.0 (max    117.5) | sigma 0.072 |  4.7s
+gen  524 | stage 3 | fit    160.1 (max    248.4) | sigma 0.072 |  6.1s
+         eval: R   145.7 | toi_diem 1.92 | sac 0.00 | o_da_di 10.9 | va_cham 20.2 | roi 0% | het_pin 50%
+gen  525 | stage 3 | fit     56.7 (max    148.5) | sigma 0.072 |  6.1s
+gen  526 | stage 3 | fit    148.4 (max    202.4) | sigma 0.072 |  5.1s
+gen  527 | stage 3 | fit    107.6 (max    176.8) | sigma 0.072 |  4.9s
+gen  528 | stage 3 | fit    178.4 (max    250.7) | sigma 0.072 |  6.5s
+gen  529 | stage 3 | fit     30.3 (max     70.8) | sigma 0.071 |  4.3s
+         eval: R   143.6 | toi_diem 2.17 | sac 0.00 | o_da_di 9.4 | va_cham 13.2 | roi 0% | het_pin 50%
+gen  530 | stage 3 | fit    178.4 (max    239.9) | sigma 0.071 |  4.7s
+gen  531 | stage 3 | fit    148.4 (max    216.6) | sigma 0.071 |  5.8s
+gen  532 | stage 3 | fit    284.5 (max    338.8) | sigma 0.071 |  5.2s
+gen  533 | stage 3 | fit     99.2 (max    223.7) | sigma 0.071 |  5.3s

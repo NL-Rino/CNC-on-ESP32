@@ -1,21 +1,33 @@
-"""The gioi mo phong: mat ban co mep vuc, vat can, den hong ngoai, tram sac."""
+"""The gioi mo phong: mat ban co mep vuc, vat can, den hong ngoai, tram sac.
+
+Tram sac la mot HOP 15x15 cm that su nam tren ban, vi bay gio xe nhin bang
+LiDAR - no phai *thay hinh dang* cua tram roi moi dung hong ngoai xac nhan.
+Tren ban con co vai hop 15x15 cm khac khong phat hong ngoai (moi nhu) de xe
+khong the chi dua vao hinh dang.
+"""
 import math
 import random
 
+import numpy as np
+
 from .geometry import ray_aabb, ray_circle
 
-# Hai kenh hong ngoai (khac tan so tren phan cung that, vi du 38kHz / 56kHz)
 IR_CALL = 0     # nguoi dung "goi" xe toi
 IR_DOCK = 1     # den bao cua tram sac
+
+DOCK_SIZE = 0.15        # canh hop tram sac (m) - dung 15 x 15 cm
+DOCK_IR_CONE = 0.95     # nua goc phat hong ngoai cua tram (rad) ~ 54 do
+DOCK_POCKET = 0.20      # cho xe dung sac, tinh tu TAM hop ra phia truoc (m)
 
 
 class Obstacle:
     """Vat can tren ban. kind = 'circle' | 'box'."""
 
-    __slots__ = ("kind", "x", "y", "r", "x0", "y0", "x1", "y1")
+    __slots__ = ("kind", "x", "y", "r", "x0", "y0", "x1", "y1", "tag")
 
-    def __init__(self, kind, **kw):
+    def __init__(self, kind, tag="", **kw):
         self.kind = kind
+        self.tag = tag
         if kind == "circle":
             self.x = kw["x"]
             self.y = kw["y"]
@@ -42,31 +54,76 @@ class Obstacle:
         dx = max(self.x0 - px, 0.0, px - self.x1)
         dy = max(self.y0 - py, 0.0, py - self.y1)
         if dx == 0.0 and dy == 0.0:
-            # ben trong hop: khoang cach am toi canh gan nhat
             return -min(px - self.x0, self.x1 - px, py - self.y0, self.y1 - py)
         return math.hypot(dx, dy)
 
     def as_dict(self):
         if self.kind == "circle":
-            return {"kind": "circle", "x": self.x, "y": self.y, "r": self.r}
-        return {"kind": "box", "x0": self.x0, "y0": self.y0, "x1": self.x1, "y1": self.y1}
+            return {"kind": "circle", "x": self.x, "y": self.y, "r": self.r,
+                    "tag": self.tag}
+        return {"kind": "box", "x0": self.x0, "y0": self.y0, "x1": self.x1,
+                "y1": self.y1, "tag": self.tag}
 
 
 class Beacon:
-    """Den hong ngoai phat tin hieu tren mot kenh."""
+    """Den hong ngoai. dir_ang=None nghia la phat deu moi huong."""
 
-    __slots__ = ("x", "y", "channel", "active", "power")
+    __slots__ = ("x", "y", "channel", "active", "power", "dir_ang", "cone")
 
-    def __init__(self, x, y, channel, active=True, power=1.0):
+    def __init__(self, x, y, channel, active=True, power=1.0,
+                 dir_ang=None, cone=math.pi):
         self.x = x
         self.y = y
         self.channel = channel
         self.active = active
         self.power = power
+        self.dir_ang = dir_ang      # huong truc phat
+        self.cone = cone            # nua goc phat
 
     def as_dict(self):
         return {"x": self.x, "y": self.y, "ch": self.channel,
-                "active": bool(self.active), "power": self.power}
+                "active": bool(self.active), "power": self.power,
+                "dir": self.dir_ang, "cone": self.cone}
+
+
+class Dock:
+    """Tram sac: hop 15x15 cm + den hong ngoai phat ra phia truoc mat."""
+
+    def __init__(self, x, y, heading):
+        self.x = x                 # tam hop
+        self.y = y
+        self.heading = heading     # huong XE phai quay khi cam sac (chia vao hop)
+        h = DOCK_SIZE * 0.5
+        self.box = Obstacle("box", tag="dock", x0=x - h, y0=y - h,
+                            x1=x + h, y1=y + h)
+        # den phat nguoc lai huong xe vao, tu mat truoc cua hop
+        fx = x - (h + 0.005) * math.cos(heading)
+        fy = y - (h + 0.005) * math.sin(heading)
+        self.beacon = Beacon(fx, fy, IR_DOCK, active=True,
+                             dir_ang=heading + math.pi, cone=DOCK_IR_CONE)
+
+    @property
+    def pocket(self):
+        """Cho xe dung khi sac: cach tam hop DOCK_POCKET ve phia truoc mat."""
+        return (self.x - DOCK_POCKET * math.cos(self.heading),
+                self.y - DOCK_POCKET * math.sin(self.heading))
+
+    def approach(self, d=0.55):
+        return (self.x - d * math.cos(self.heading),
+                self.y - d * math.sin(self.heading))
+
+    @property
+    def active(self):
+        return self.beacon.active
+
+    @active.setter
+    def active(self, v):
+        self.beacon.active = bool(v)
+
+    def as_dict(self):
+        return {"x": self.x, "y": self.y, "heading": self.heading,
+                "size": DOCK_SIZE, "pocket": list(self.pocket),
+                "active": bool(self.beacon.active)}
 
 
 class World:
@@ -77,8 +134,61 @@ class World:
         self.height = height
         self.obstacles = []
         self.beacons = []
-        self.dock = None          # Beacon kenh IR_DOCK (tram sac)
-        self.dock_heading = 0.0   # huong xe phai quay khi cam sac (dam dau vao)
+        self.dock = None
+        self._arrays_dirty = True
+
+    # ---------------------------------------------------------------- dung mang
+    def bake(self):
+        """Gom vat can thanh mang numpy de ban ca vong LiDAR trong mot luot."""
+        cir = [o for o in self.obstacles if o.kind == "circle"]
+        box = [o for o in self.obstacles if o.kind == "box"]
+        f32 = np.float32
+        self._cxy = np.array([[o.x for o in cir], [o.y for o in cir]], dtype=f32)
+        self._cr2 = np.array([o.r * o.r for o in cir], dtype=f32)
+        self._b0 = np.array([[o.x0 for o in box], [o.y0 for o in box]], dtype=f32)
+        self._b1 = np.array([[o.x1 for o in box], [o.y1 for o in box]], dtype=f32)
+        self._arrays_dirty = False
+
+    def raycast_batch(self, ox, oy, angles, max_range):
+        """Ban ca vong tia cung luc. angles: ndarray goc tuyet doi (rad).
+
+        Mang duoc bo tri [so_vat_can, so_tia] chu khong phai nguoc lai: rut gon
+        theo truc 0 nhanh hon ~12 lan vi du lieu nam lien nhau trong bo nho.
+        """
+        if self._arrays_dirty:
+            self.bake()
+        dx = np.cos(angles, dtype=np.float32)
+        dy = np.sin(angles, dtype=np.float32)
+        out = np.full(angles.shape[0], max_range, dtype=np.float32)
+
+        if self._cr2.size:
+            vx = ox - self._cxy[0]
+            vy = oy - self._cxy[1]
+            b = np.outer(vx, dx)
+            b += np.outer(vy, dy)
+            c = (vx * vx + vy * vy - self._cr2)[:, None]
+            disc = b * b - c
+            sq = np.sqrt(np.maximum(disc, 0.0))
+            t0 = -b - sq
+            t1 = -b + sq
+            t = np.where(t0 > 0.0, t0, t1)
+            t = np.where((disc > 0.0) & (t > 0.0), t, max_range)
+            np.minimum(out, t.min(axis=0), out=out)
+
+        if self._b0.size:
+            idx = 1.0 / np.where(dx == 0.0, 1e-9, dx)
+            idy = 1.0 / np.where(dy == 0.0, 1e-9, dy)
+            tx1 = np.outer(self._b0[0] - ox, idx)
+            tx2 = np.outer(self._b1[0] - ox, idx)
+            ty1 = np.outer(self._b0[1] - oy, idy)
+            ty2 = np.outer(self._b1[1] - oy, idy)
+            lo = np.maximum(np.minimum(tx1, tx2), np.minimum(ty1, ty2))
+            hi = np.minimum(np.maximum(tx1, tx2), np.maximum(ty1, ty2))
+            t = np.where(lo > 0.0, lo, hi)
+            ok = (hi >= np.maximum(lo, 0.0)) & (t > 0.0)
+            np.minimum(out, np.where(ok, t, max_range).min(axis=0), out=out)
+
+        return out
 
     # ---------------------------------------------------------------- truy van
     def on_table(self, x, y, margin=0.0):
@@ -86,11 +196,9 @@ class World:
                 margin <= y <= self.height - margin)
 
     def edge_distance(self, x, y):
-        """Khoang cach ngan nhat toi mep ban (am neu da ra ngoai)."""
         return min(x, y, self.width - x, self.height - y)
 
     def raycast(self, ox, oy, ang, max_range):
-        """Ban tia tim vat can gan nhat. Mep ban KHONG phan xa sieu am."""
         dx = math.cos(ang)
         dy = math.sin(ang)
         best = max_range
@@ -100,8 +208,7 @@ class World:
                 best = t
         return best
 
-    def line_of_sight(self, x0, y0, x1, y1):
-        """True neu doan thang khong bi vat can chan (cho tia hong ngoai)."""
+    def line_of_sight(self, x0, y0, x1, y1, skip_tag=None):
         dx = x1 - x0
         dy = y1 - y0
         L = math.hypot(dx, dy)
@@ -110,6 +217,8 @@ class World:
         dx /= L
         dy /= L
         for ob in self.obstacles:
+            if skip_tag is not None and ob.tag == skip_tag:
+                continue
             t = ob.ray(x0, y0, dx, dy, L)
             if t is not None and t < L - 1e-3:
                 return False
@@ -124,7 +233,6 @@ class World:
         return best
 
     def free_spot(self, rng, radius, margin=0.12, tries=200):
-        """Tim vi tri trong tren ban, cach vat can it nhat `radius`."""
         for _ in range(tries):
             x = rng.uniform(margin, self.width - margin)
             y = rng.uniform(margin, self.height - margin)
@@ -138,59 +246,71 @@ class World:
             "height": self.height,
             "obstacles": [o.as_dict() for o in self.obstacles],
             "beacons": [b.as_dict() for b in self.beacons],
-            "dock_heading": self.dock_heading,
+            "dock": self.dock.as_dict() if self.dock else None,
         }
 
 
 # --------------------------------------------------------------------- scenario
 def make_world(rng: random.Random, stage: int = 3) -> World:
-    """Sinh ngau nhien mot canh: kich thuoc ban, vat can, tram sac.
+    """Sinh ngau nhien mot canh.
 
-    stage 0: ban trong, chi hoc khong roi khoi mep
+    stage 0: ban trong
     stage 1: them vat can
-    stage 2+: them tram sac / den goi
+    stage 2: them tram sac that + hop moi nhu cung kich thuoc
     """
-    w = rng.uniform(1.8, 3.0)
-    h = rng.uniform(1.4, 2.4)
+    w = rng.uniform(2.0, 3.2)
+    h = rng.uniform(1.6, 2.6)
     world = World(w, h)
 
     if stage >= 1:
-        n = rng.randint(1, 4) if stage == 1 else rng.randint(2, 6)
+        n = rng.randint(1, 4) if stage == 1 else rng.randint(2, 5)
         for _ in range(n):
             if rng.random() < 0.5:
-                r = rng.uniform(0.05, 0.16)
-                x = rng.uniform(0.25, w - 0.25)
-                y = rng.uniform(0.25, h - 0.25)
-                world.obstacles.append(Obstacle("circle", x=x, y=y, r=r))
+                r = rng.uniform(0.06, 0.18)
+                world.obstacles.append(Obstacle(
+                    "circle", x=rng.uniform(0.3, w - 0.3),
+                    y=rng.uniform(0.3, h - 0.3), r=r))
             else:
-                bw = rng.uniform(0.10, 0.45)
-                bh = rng.uniform(0.10, 0.45)
-                x = rng.uniform(0.2, w - 0.2 - bw)
-                y = rng.uniform(0.2, h - 0.2 - bh)
-                world.obstacles.append(
-                    Obstacle("box", x0=x, y0=y, x1=x + bw, y1=y + bh))
+                bw = rng.uniform(0.20, 0.50)
+                bh = rng.uniform(0.20, 0.50)
+                x = rng.uniform(0.25, w - 0.25 - bw)
+                y = rng.uniform(0.25, h - 0.25 - bh)
+                world.obstacles.append(Obstacle(
+                    "box", x0=x, y0=y, x1=x + bw, y1=y + bh))
 
     if stage >= 2:
-        # Tram sac dat sat mep ban, quay mat vao trong
+        pad = DOCK_SIZE * 0.5 + 0.015     # hop nam tron ven tren ban
         side = rng.randrange(4)
-        pad = 0.10
-        # head = huong xe phai QUAY KHI CAM SAC, tuc la huong tu giua ban
-        # chia ra mep: xe dam dau vao tram (mat thu IR o dau xe nen phai the,
-        # neu bat xe lui vao tram thi no mu hoan toan luc cam).
         if side == 0:
-            dx, dy, head = rng.uniform(0.3, w - 0.3), pad, -math.pi / 2
+            dx, dy, head = rng.uniform(0.45, w - 0.45), pad, -math.pi / 2
         elif side == 1:
-            dx, dy, head = rng.uniform(0.3, w - 0.3), h - pad, math.pi / 2
+            dx, dy, head = rng.uniform(0.45, w - 0.45), h - pad, math.pi / 2
         elif side == 2:
-            dx, dy, head = pad, rng.uniform(0.3, h - 0.3), math.pi
+            dx, dy, head = pad, rng.uniform(0.45, h - 0.45), math.pi
         else:
-            dx, dy, head = w - pad, rng.uniform(0.3, h - 0.3), 0.0
-        # don sach vat can quanh tram sac
+            dx, dy, head = w - pad, rng.uniform(0.45, h - 0.45), 0.0
+        dock = Dock(dx, dy, head)
+        # don quang duong vao tram
+        px, py = dock.pocket
         world.obstacles = [o for o in world.obstacles
-                           if o.dist_to_point(dx, dy) > 0.30]
-        dock = Beacon(dx, dy, IR_DOCK, active=True)
+                           if o.dist_to_point(dx, dy) > 0.45
+                           and o.dist_to_point(px, py) > 0.30]
         world.dock = dock
-        world.dock_heading = head
-        world.beacons.append(dock)
+        world.obstacles.append(dock.box)
+        world.beacons.append(dock.beacon)
 
+        # hop moi nhu: nhin giong het tram sac tren LiDAR nhung khong phat IR
+        for _ in range(rng.randint(1, 2)):
+            for _ in range(30):
+                mx = rng.uniform(0.35, w - 0.35)
+                my = rng.uniform(0.35, h - 0.35)
+                if (math.hypot(mx - dx, my - dy) > 0.8 and
+                        world.min_obstacle_clearance(mx, my) > 0.35):
+                    hs = DOCK_SIZE * 0.5
+                    world.obstacles.append(Obstacle(
+                        "box", tag="decoy", x0=mx - hs, y0=my - hs,
+                        x1=mx + hs, y1=my + hs))
+                    break
+
+    world.bake()
     return world

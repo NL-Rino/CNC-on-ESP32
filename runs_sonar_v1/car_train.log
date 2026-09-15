@@ -1,0 +1,377 @@
+tham so bo nao: 1810 | pop=64 | episodes=4 | jobs=4
+gen    0 | stage 0 | fit     33.9 (max    158.4) | sigma 0.080 |  2.8s
+         eval: R    53.7 | toi_diem 0.00 | sac 0.00 | o_da_di 6.1 | va_cham 0.0 | roi 60% | het_pin 0%
+gen    1 | stage 0 | fit     39.5 (max    131.7) | sigma 0.080 |  2.3s
+gen    2 | stage 0 | fit     66.9 (max    182.0) | sigma 0.080 |  2.8s
+gen    3 | stage 0 | fit     51.2 (max    117.0) | sigma 0.080 |  2.3s
+gen    4 | stage 0 | fit     84.2 (max    181.6) | sigma 0.080 |  3.0s
+         eval: R   107.7 | toi_diem 0.00 | sac 0.00 | o_da_di 4.4 | va_cham 0.0 | roi 20% | het_pin 0%
+gen    5 | stage 0 | fit     44.4 (max    117.5) | sigma 0.080 |  2.1s
+gen    6 | stage 0 | fit     83.8 (max    148.8) | sigma 0.079 |  2.5s
+gen    7 | stage 0 | fit    141.5 (max    212.8) | sigma 0.079 |  3.0s
+gen    8 | stage 0 | fit    174.8 (max    246.2) | sigma 0.079 |  2.9s
+gen    9 | stage 0 | fit     93.0 (max    178.0) | sigma 0.079 |  1.7s
+         eval: R   134.3 | toi_diem 0.00 | sac 0.00 | o_da_di 8.8 | va_cham 0.0 | roi 60% | het_pin 0%
+gen   10 | stage 0 | fit     24.0 (max    190.5) | sigma 0.079 |  0.9s
+gen   11 | stage 0 | fit    121.3 (max    245.5) | sigma 0.079 |  1.9s
+gen   12 | stage 0 | fit    104.9 (max    195.1) | sigma 0.079 |  1.7s
+gen   13 | stage 0 | fit    152.9 (max    269.8) | sigma 0.079 |  2.5s
+gen   14 | stage 0 | fit    127.7 (max    213.6) | sigma 0.079 |  2.4s
+         eval: R   134.0 | toi_diem 0.00 | sac 0.00 | o_da_di 5.6 | va_cham 0.0 | roi 30% | het_pin 0%
+gen   15 | stage 0 | fit    139.8 (max    242.2) | sigma 0.079 |  2.8s
+gen   16 | stage 0 | fit    147.3 (max    220.1) | sigma 0.079 |  3.2s
+gen   17 | stage 0 | fit    154.5 (max    277.7) | sigma 0.079 |  3.2s
+gen   18 | stage 0 | fit    171.7 (max    265.7) | sigma 0.078 |  3.2s
+gen   19 | stage 0 | fit    149.8 (max    213.0) | sigma 0.078 |  2.7s
+         eval: R   164.9 | toi_diem 0.00 | sac 0.00 | o_da_di 7.4 | va_cham 0.0 | roi 30% | het_pin 0%
+gen   20 | stage 0 | fit    152.7 (max    212.7) | sigma 0.078 |  2.4s
+gen   21 | stage 0 | fit    176.5 (max    241.1) | sigma 0.078 |  2.6s
+gen   22 | stage 0 | fit    199.0 (max    302.0) | sigma 0.078 |  2.7s
+gen   23 | stage 0 | fit    163.2 (max    251.3) | sigma 0.078 |  2.2s
+gen   24 | stage 0 | fit    132.7 (max    251.2) | sigma 0.078 |  2.0s
+         eval: R   153.2 | toi_diem 0.00 | sac 0.00 | o_da_di 9.0 | va_cham 0.0 | roi 50% | het_pin 0%
+gen   25 | stage 0 | fit    133.9 (max    204.6) | sigma 0.078 |  1.9s
+gen   26 | stage 0 | fit      2.2 (max     87.8) | sigma 0.078 |  0.7s
+gen   27 | stage 0 | fit    172.0 (max    228.9) | sigma 0.078 |  2.9s
+gen   28 | stage 0 | fit     73.1 (max    193.4) | sigma 0.078 |  1.8s
+gen   29 | stage 0 | fit    140.3 (max    223.0) | sigma 0.078 |  2.9s
+         eval: R   146.4 | toi_diem 0.00 | sac 0.00 | o_da_di 5.2 | va_cham 0.0 | roi 20% | het_pin 0%
+gen   30 | stage 0 | fit     97.0 (max    172.2) | sigma 0.078 |  2.4s
+gen   31 | stage 0 | fit    176.7 (max    290.8) | sigma 0.077 |  3.3s
+gen   32 | stage 0 | fit     96.8 (max    214.5) | sigma 0.077 |  2.4s
+gen   33 | stage 0 | fit    122.8 (max    208.0) | sigma 0.077 |  2.8s
+gen   34 | stage 0 | fit    174.2 (max    269.7) | sigma 0.077 |  3.2s
+         eval: R   166.4 | toi_diem 0.00 | sac 0.00 | o_da_di 6.1 | va_cham 0.0 | roi 20% | het_pin 0%
+gen   35 | stage 0 | fit    204.2 (max    294.8) | sigma 0.077 |  3.2s
+gen   36 | stage 0 | fit    124.2 (max    205.3) | sigma 0.077 |  2.2s
+gen   37 | stage 0 | fit     84.5 (max    255.7) | sigma 0.077 |  1.8s
+gen   38 | stage 0 | fit    137.0 (max    264.5) | sigma 0.077 |  2.0s
+gen   39 | stage 0 | fit    101.7 (max    221.1) | sigma 0.077 |  1.7s
+         eval: R   203.8 | toi_diem 0.00 | sac 0.00 | o_da_di 10.2 | va_cham 0.0 | roi 30% | het_pin 0%
+gen   40 | stage 0 | fit    181.1 (max    314.6) | sigma 0.077 |  2.7s
+gen   41 | stage 0 | fit    171.0 (max    298.9) | sigma 0.077 |  2.7s
+gen   42 | stage 0 | fit    187.8 (max    291.5) | sigma 0.077 |  3.1s
+gen   43 | stage 0 | fit    139.8 (max    249.7) | sigma 0.077 |  2.6s
+gen   44 | stage 0 | fit    146.4 (max    259.3) | sigma 0.076 |  3.2s
+         eval: R   194.9 | toi_diem 0.00 | sac 0.00 | o_da_di 6.3 | va_cham 0.0 | roi 0% | het_pin 0%
+gen   45 | stage 0 | fit    165.8 (max    280.4) | sigma 0.076 |  3.3s
+gen   46 | stage 0 | fit    178.8 (max    329.2) | sigma 0.076 |  3.1s
+gen   47 | stage 0 | fit    132.3 (max    254.5) | sigma 0.076 |  2.7s
+gen   48 | stage 0 | fit    209.2 (max    377.6) | sigma 0.076 |  3.2s
+gen   49 | stage 0 | fit    224.8 (max    365.5) | sigma 0.076 |  3.3s
+         eval: R   285.3 | toi_diem 0.00 | sac 0.00 | o_da_di 15.9 | va_cham 0.0 | roi 10% | het_pin 0%
+>>> len cap: stage 1 (xe da qua bai truoc)
+gen   50 | stage 1 | fit     72.7 (max    183.1) | sigma 0.076 |  2.4s
+gen   51 | stage 1 | fit     66.2 (max    196.7) | sigma 0.076 |  2.5s
+gen   52 | stage 1 | fit    108.6 (max    248.9) | sigma 0.076 |  3.3s
+gen   53 | stage 1 | fit     82.4 (max    220.0) | sigma 0.076 |  3.5s
+gen   54 | stage 1 | fit    124.5 (max    253.5) | sigma 0.076 |  4.0s
+         eval: R   180.5 | toi_diem 0.00 | sac 0.00 | o_da_di 8.1 | va_cham 1.3 | roi 0% | het_pin 0%
+gen   55 | stage 1 | fit    171.9 (max    271.1) | sigma 0.076 |  5.0s
+gen   56 | stage 1 | fit    113.7 (max    204.1) | sigma 0.076 |  4.8s
+gen   57 | stage 1 | fit    145.7 (max    239.4) | sigma 0.075 |  4.5s
+gen   58 | stage 1 | fit    177.7 (max    286.5) | sigma 0.075 |  5.1s
+gen   59 | stage 1 | fit    182.2 (max    297.5) | sigma 0.075 |  5.1s
+         eval: R   199.7 | toi_diem 0.00 | sac 0.00 | o_da_di 11.2 | va_cham 2.5 | roi 20% | het_pin 0%
+gen   60 | stage 1 | fit    188.6 (max    318.1) | sigma 0.075 |  4.1s
+gen   61 | stage 1 | fit    105.9 (max    228.1) | sigma 0.075 |  3.2s
+gen   62 | stage 1 | fit     96.4 (max    221.7) | sigma 0.075 |  2.7s
+gen   63 | stage 1 | fit    227.6 (max    337.2) | sigma 0.075 |  4.7s
+gen   64 | stage 1 | fit    142.2 (max    254.8) | sigma 0.075 |  3.3s
+         eval: R   197.9 | toi_diem 0.00 | sac 0.00 | o_da_di 12.4 | va_cham 8.1 | roi 30% | het_pin 0%
+gen   65 | stage 1 | fit    117.2 (max    230.6) | sigma 0.075 |  3.2s
+gen   66 | stage 1 | fit     94.2 (max    177.8) | sigma 0.075 |  3.9s
+gen   67 | stage 1 | fit    135.9 (max    239.2) | sigma 0.075 |  4.5s
+gen   68 | stage 1 | fit    112.5 (max    178.6) | sigma 0.075 |  4.6s
+gen   69 | stage 1 | fit    151.9 (max    251.2) | sigma 0.075 |  4.4s
+         eval: R   139.3 | toi_diem 0.00 | sac 0.00 | o_da_di 6.5 | va_cham 0.1 | roi 0% | het_pin 0%
+gen   70 | stage 1 | fit    143.9 (max    245.1) | sigma 0.075 |  4.8s
+gen   71 | stage 1 | fit    138.5 (max    266.7) | sigma 0.074 |  4.8s
+gen   72 | stage 1 | fit    169.9 (max    271.3) | sigma 0.074 |  5.2s
+gen   73 | stage 1 | fit    195.9 (max    278.8) | sigma 0.074 |  4.8s
+gen   74 | stage 1 | fit     81.1 (max    228.3) | sigma 0.074 |  3.7s
+         eval: R   219.0 | toi_diem 0.00 | sac 0.00 | o_da_di 15.6 | va_cham 20.3 | roi 30% | het_pin 0%
+gen   75 | stage 1 | fit    104.4 (max    242.3) | sigma 0.074 |  3.1s
+gen   76 | stage 1 | fit     67.2 (max    266.8) | sigma 0.074 |  2.0s
+gen   77 | stage 1 | fit    101.3 (max    251.4) | sigma 0.074 |  2.9s
+gen   78 | stage 1 | fit     51.3 (max    160.5) | sigma 0.074 |  2.5s
+gen   79 | stage 1 | fit    168.3 (max    272.2) | sigma 0.074 |  4.5s
+         eval: R   189.4 | toi_diem 0.00 | sac 0.00 | o_da_di 10.1 | va_cham 1.5 | roi 30% | het_pin 0%
+gen   80 | stage 1 | fit    170.4 (max    277.0) | sigma 0.074 |  4.7s
+gen   81 | stage 1 | fit    211.5 (max    292.6) | sigma 0.074 |  4.8s
+gen   82 | stage 1 | fit    166.1 (max    239.5) | sigma 0.074 |  4.9s
+gen   83 | stage 1 | fit    194.8 (max    307.1) | sigma 0.074 |  4.4s
+gen   84 | stage 1 | fit    201.8 (max    286.3) | sigma 0.073 |  4.8s
+         eval: R   199.8 | toi_diem 0.00 | sac 0.00 | o_da_di 9.6 | va_cham 4.2 | roi 0% | het_pin 0%
+gen   85 | stage 1 | fit    218.3 (max    324.8) | sigma 0.073 |  4.8s
+gen   86 | stage 1 | fit    174.0 (max    238.3) | sigma 0.073 |  4.1s
+gen   87 | stage 1 | fit    200.5 (max    308.8) | sigma 0.073 |  4.2s
+gen   88 | stage 1 | fit    185.8 (max    309.3) | sigma 0.073 |  3.9s
+gen   89 | stage 1 | fit    161.1 (max    272.7) | sigma 0.073 |  3.4s
+         eval: R   225.9 | toi_diem 0.00 | sac 0.00 | o_da_di 14.7 | va_cham 6.3 | roi 30% | het_pin 0%
+gen   90 | stage 1 | fit    181.0 (max    296.0) | sigma 0.073 |  3.4s
+gen   91 | stage 1 | fit    159.5 (max    272.1) | sigma 0.073 |  3.3s
+gen   92 | stage 1 | fit    244.0 (max    347.4) | sigma 0.073 |  3.8s
+gen   93 | stage 1 | fit    194.3 (max    307.7) | sigma 0.073 |  4.6s
+gen   94 | stage 1 | fit    206.0 (max    311.4) | sigma 0.073 |  5.1s
+         eval: R   203.5 | toi_diem 0.00 | sac 0.00 | o_da_di 8.4 | va_cham 5.4 | roi 0% | het_pin 0%
+gen   95 | stage 1 | fit    176.8 (max    240.1) | sigma 0.073 |  5.4s
+gen   96 | stage 1 | fit    182.2 (max    256.0) | sigma 0.073 |  5.6s
+gen   97 | stage 1 | fit    219.1 (max    339.0) | sigma 0.073 |  4.3s
+gen   98 | stage 1 | fit    209.1 (max    317.1) | sigma 0.072 |  5.0s
+gen   99 | stage 1 | fit    101.1 (max    190.6) | sigma 0.072 |  5.0s
+         eval: R   245.7 | toi_diem 0.00 | sac 0.00 | o_da_di 17.2 | va_cham 20.8 | roi 10% | het_pin 0%
+>>> len cap: stage 2 (xe da qua bai truoc)
+gen  100 | stage 2 | fit      0.4 (max     76.1) | sigma 0.072 |  4.4s
+gen  101 | stage 2 | fit     26.0 (max    103.0) | sigma 0.072 |  4.4s
+gen  102 | stage 2 | fit     45.5 (max    129.0) | sigma 0.072 |  4.4s
+gen  103 | stage 2 | fit     21.8 (max     83.0) | sigma 0.072 |  5.3s
+gen  104 | stage 2 | fit     76.8 (max    152.2) | sigma 0.072 |  5.7s
+         eval: R    67.7 | toi_diem 0.00 | sac 0.00 | o_da_di 10.3 | va_cham 14.3 | roi 0% | het_pin 0%
+gen  105 | stage 2 | fit     57.4 (max    152.6) | sigma 0.072 |  5.5s
+gen  106 | stage 2 | fit     55.9 (max    121.1) | sigma 0.072 |  6.0s
+gen  107 | stage 2 | fit     40.8 (max    119.8) | sigma 0.072 |  6.3s
+gen  108 | stage 2 | fit     75.1 (max    158.7) | sigma 0.072 |  6.8s
+gen  109 | stage 2 | fit     80.8 (max    240.2) | sigma 0.072 |  5.6s
+         eval: R    97.8 | toi_diem 0.10 | sac 0.00 | o_da_di 11.7 | va_cham 13.7 | roi 0% | het_pin 0%
+gen  110 | stage 2 | fit     75.9 (max    240.7) | sigma 0.072 |  5.8s
+gen  111 | stage 2 | fit    163.1 (max    271.0) | sigma 0.072 |  7.0s
+gen  112 | stage 2 | fit    160.4 (max    278.5) | sigma 0.071 |  5.3s
+gen  113 | stage 2 | fit     89.9 (max    278.2) | sigma 0.071 |  5.5s
+gen  114 | stage 2 | fit    161.6 (max    337.1) | sigma 0.071 |  5.0s
+         eval: R   213.5 | toi_diem 1.50 | sac 0.00 | o_da_di 22.4 | va_cham 58.3 | roi 20% | het_pin 0%
+gen  115 | stage 2 | fit    161.4 (max    334.2) | sigma 0.071 |  4.7s
+gen  116 | stage 2 | fit    253.9 (max    388.7) | sigma 0.071 |  5.9s
+gen  117 | stage 2 | fit    278.1 (max    422.6) | sigma 0.071 |  5.1s
+gen  118 | stage 2 | fit    173.4 (max    295.8) | sigma 0.071 |  5.6s
+gen  119 | stage 2 | fit    156.4 (max    298.0) | sigma 0.071 |  6.3s
+         eval: R   220.9 | toi_diem 1.70 | sac 0.00 | o_da_di 15.7 | va_cham 20.2 | roi 0% | het_pin 0%
+>>> len cap: stage 3 (xe da qua bai truoc)
+gen  120 | stage 3 | fit    107.3 (max    257.6) | sigma 0.071 |  5.4s
+gen  121 | stage 3 | fit    201.0 (max    313.8) | sigma 0.071 |  5.2s
+gen  122 | stage 3 | fit    176.9 (max    294.7) | sigma 0.071 |  5.4s
+gen  123 | stage 3 | fit    147.0 (max    229.2) | sigma 0.071 |  5.5s
+gen  124 | stage 3 | fit    155.1 (max    232.9) | sigma 0.071 |  5.0s
+         eval: R   206.5 | toi_diem 2.40 | sac 0.00 | o_da_di 11.3 | va_cham 3.8 | roi 0% | het_pin 0%
+gen  125 | stage 3 | fit    130.4 (max    231.4) | sigma 0.071 |  6.0s
+gen  126 | stage 3 | fit    127.5 (max    209.0) | sigma 0.070 |  5.1s
+gen  127 | stage 3 | fit     58.1 (max    160.0) | sigma 0.070 |  5.8s
+gen  128 | stage 3 | fit    100.0 (max    179.5) | sigma 0.070 |  5.4s
+gen  129 | stage 3 | fit    132.2 (max    235.6) | sigma 0.070 |  5.4s
+         eval: R   168.5 | toi_diem 1.80 | sac 0.00 | o_da_di 14.2 | va_cham 17.1 | roi 20% | het_pin 0%
+gen  130 | stage 3 | fit    151.5 (max    293.1) | sigma 0.070 |  5.3s
+gen  131 | stage 3 | fit     60.9 (max    153.8) | sigma 0.070 |  5.7s
+gen  132 | stage 3 | fit     69.1 (max    199.0) | sigma 0.070 |  5.3s
+gen  133 | stage 3 | fit    123.5 (max    265.2) | sigma 0.070 |  5.0s
+gen  134 | stage 3 | fit    278.2 (max    416.2) | sigma 0.070 |  4.9s
+         eval: R   135.9 | toi_diem 1.70 | sac 0.00 | o_da_di 10.8 | va_cham 12.9 | roi 30% | het_pin 0%
+gen  135 | stage 3 | fit    220.8 (max    367.3) | sigma 0.070 |  5.6s
+gen  136 | stage 3 | fit    134.4 (max    247.5) | sigma 0.070 |  5.7s
+gen  137 | stage 3 | fit    152.6 (max    244.2) | sigma 0.070 |  4.8s
+gen  138 | stage 3 | fit    301.0 (max    437.0) | sigma 0.070 |  5.1s
+gen  139 | stage 3 | fit    236.6 (max    337.3) | sigma 0.070 |  5.3s
+         eval: R   130.1 | toi_diem 1.60 | sac 0.00 | o_da_di 13.1 | va_cham 37.6 | roi 0% | het_pin 0%
+gen  140 | stage 3 | fit    163.6 (max    284.2) | sigma 0.069 |  5.8s
+gen  141 | stage 3 | fit    132.6 (max    242.8) | sigma 0.069 |  5.9s
+gen  142 | stage 3 | fit    183.6 (max    323.8) | sigma 0.069 |  5.9s
+gen  143 | stage 3 | fit    269.8 (max    351.0) | sigma 0.069 |  5.4s
+gen  144 | stage 3 | fit    115.1 (max    220.4) | sigma 0.069 |  6.2s
+         eval: R   199.9 | toi_diem 2.20 | sac 0.00 | o_da_di 12.9 | va_cham 24.0 | roi 0% | het_pin 0%
+gen  145 | stage 3 | fit    165.3 (max    281.9) | sigma 0.069 |  5.8s
+gen  146 | stage 3 | fit    214.4 (max    311.1) | sigma 0.069 |  5.8s
+gen  147 | stage 3 | fit    243.0 (max    387.4) | sigma 0.069 |  5.9s
+gen  148 | stage 3 | fit    201.8 (max    310.8) | sigma 0.069 |  6.1s
+gen  149 | stage 3 | fit    246.3 (max    335.0) | sigma 0.069 |  5.2s
+         eval: R   188.6 | toi_diem 1.90 | sac 0.00 | o_da_di 11.0 | va_cham 13.5 | roi 10% | het_pin 0%
+gen  150 | stage 3 | fit     55.0 (max    145.9) | sigma 0.069 |  5.8s
+gen  151 | stage 3 | fit    207.5 (max    323.8) | sigma 0.069 |  5.0s
+gen  152 | stage 3 | fit    142.6 (max    259.7) | sigma 0.069 |  5.9s
+gen  153 | stage 3 | fit    128.8 (max    266.3) | sigma 0.069 |  6.3s
+gen  154 | stage 3 | fit    179.0 (max    273.5) | sigma 0.069 |  5.0s
+         eval: R   243.8 | toi_diem 2.70 | sac 0.00 | o_da_di 12.0 | va_cham 16.2 | roi 0% | het_pin 0%
+gen  155 | stage 3 | fit    244.9 (max    427.0) | sigma 0.068 |  5.7s
+gen  156 | stage 3 | fit    135.0 (max    234.4) | sigma 0.068 |  6.0s
+gen  157 | stage 3 | fit    230.8 (max    372.8) | sigma 0.068 |  6.1s
+gen  158 | stage 3 | fit    136.3 (max    243.9) | sigma 0.068 |  6.0s
+gen  159 | stage 3 | fit     97.0 (max    214.6) | sigma 0.068 |  6.8s
+         eval: R   249.8 | toi_diem 2.40 | sac 0.00 | o_da_di 15.1 | va_cham 15.6 | roi 0% | het_pin 0%
+gen  160 | stage 3 | fit    210.8 (max    336.7) | sigma 0.068 |  6.0s
+gen  161 | stage 3 | fit    138.9 (max    196.2) | sigma 0.068 |  5.5s
+gen  162 | stage 3 | fit    190.8 (max    294.4) | sigma 0.068 |  6.1s
+gen  163 | stage 3 | fit     54.1 (max    221.5) | sigma 0.068 |  5.7s
+gen  164 | stage 3 | fit    207.8 (max    320.7) | sigma 0.068 |  6.4s
+         eval: R   188.4 | toi_diem 1.80 | sac 0.00 | o_da_di 11.5 | va_cham 6.6 | roi 0% | het_pin 0%
+gen  165 | stage 3 | fit    193.3 (max    358.7) | sigma 0.068 |  5.9s
+gen  166 | stage 3 | fit    128.5 (max    222.1) | sigma 0.068 |  6.2s
+gen  167 | stage 3 | fit    145.2 (max    270.7) | sigma 0.068 |  6.4s
+gen  168 | stage 3 | fit    141.7 (max    224.9) | sigma 0.068 |  7.0s
+gen  169 | stage 3 | fit    150.7 (max    274.3) | sigma 0.067 |  6.5s
+         eval: R   238.3 | toi_diem 2.30 | sac 0.00 | o_da_di 18.5 | va_cham 38.8 | roi 0% | het_pin 0%
+gen  170 | stage 3 | fit    162.3 (max    284.5) | sigma 0.067 |  6.5s
+gen  171 | stage 3 | fit    313.8 (max    406.6) | sigma 0.067 |  5.0s
+gen  172 | stage 3 | fit    133.3 (max    274.8) | sigma 0.067 |  6.7s
+gen  173 | stage 3 | fit     90.0 (max    258.5) | sigma 0.067 |  5.9s
+gen  174 | stage 3 | fit    136.6 (max    301.4) | sigma 0.067 |  6.0s
+         eval: R   238.5 | toi_diem 2.30 | sac 0.00 | o_da_di 14.2 | va_cham 13.7 | roi 0% | het_pin 0%
+gen  175 | stage 3 | fit     91.1 (max    174.5) | sigma 0.067 |  6.1s
+gen  176 | stage 3 | fit    238.2 (max    318.9) | sigma 0.067 |  6.0s
+gen  177 | stage 3 | fit    248.0 (max    371.9) | sigma 0.067 |  6.0s
+gen  178 | stage 3 | fit    162.9 (max    261.5) | sigma 0.067 |  6.6s
+gen  179 | stage 3 | fit    153.1 (max    261.1) | sigma 0.067 |  5.8s
+         eval: R   214.9 | toi_diem 1.80 | sac 0.00 | o_da_di 13.5 | va_cham 4.7 | roi 0% | het_pin 0%
+gen  180 | stage 3 | fit    146.1 (max    286.6) | sigma 0.067 |  5.8s
+gen  181 | stage 3 | fit    204.2 (max    356.1) | sigma 0.067 |  5.4s
+gen  182 | stage 3 | fit    220.8 (max    291.4) | sigma 0.067 |  6.1s
+gen  183 | stage 3 | fit    184.5 (max    352.6) | sigma 0.067 |  6.8s
+gen  184 | stage 3 | fit    194.8 (max    297.6) | sigma 0.066 |  5.6s
+         eval: R   213.6 | toi_diem 1.80 | sac 0.00 | o_da_di 15.6 | va_cham 14.4 | roi 0% | het_pin 0%
+gen  185 | stage 3 | fit    233.8 (max    372.9) | sigma 0.066 |  6.2s
+gen  186 | stage 3 | fit    126.4 (max    253.8) | sigma 0.066 |  6.1s
+gen  187 | stage 3 | fit    193.8 (max    314.5) | sigma 0.066 |  5.9s
+gen  188 | stage 3 | fit     50.5 (max    170.1) | sigma 0.066 |  6.0s
+gen  189 | stage 3 | fit    184.8 (max    280.9) | sigma 0.066 |  6.1s
+         eval: R   273.0 | toi_diem 2.50 | sac 0.00 | o_da_di 15.1 | va_cham 8.7 | roi 0% | het_pin 0%
+gen  190 | stage 3 | fit    231.8 (max    397.3) | sigma 0.066 |  5.7s
+gen  191 | stage 3 | fit    147.1 (max    246.3) | sigma 0.066 |  6.0s
+gen  192 | stage 3 | fit    165.0 (max    226.1) | sigma 0.066 |  5.7s
+gen  193 | stage 3 | fit    211.2 (max    311.2) | sigma 0.066 |  6.3s
+gen  194 | stage 3 | fit    221.7 (max    317.0) | sigma 0.066 |  5.7s
+         eval: R   270.9 | toi_diem 2.30 | sac 0.00 | o_da_di 17.9 | va_cham 13.0 | roi 0% | het_pin 0%
+gen  195 | stage 3 | fit    138.6 (max    225.1) | sigma 0.066 |  6.6s
+gen  196 | stage 3 | fit    222.5 (max    350.0) | sigma 0.066 |  5.8s
+Process ForkPoolWorker-3:
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+  File "/usr/lib/python3.11/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.11/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.11/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+  File "/usr/lib/python3.11/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+BrokenPipeError: [Errno 32] Broken pipe
+Process ForkPoolWorker-4:
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+  File "/usr/lib/python3.11/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.11/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.11/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+  File "/usr/lib/python3.11/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+BrokenPipeError: [Errno 32] Broken pipe
+Process ForkPoolWorker-1:
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+  File "/usr/lib/python3.11/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.11/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.11/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+  File "/usr/lib/python3.11/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+BrokenPipeError: [Errno 32] Broken pipe
+Process ForkPoolWorker-2:
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/multiprocessing/pool.py", line 131, in worker
+    put((job, i, result))
+  File "/usr/lib/python3.11/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+BrokenPipeError: [Errno 32] Broken pipe
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/usr/lib/python3.11/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.11/multiprocessing/pool.py", line 136, in worker
+    put((job, i, (False, wrapped)))
+  File "/usr/lib/python3.11/multiprocessing/queues.py", line 377, in put
+    self._writer.send_bytes(obj)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+  File "/usr/lib/python3.11/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+BrokenPipeError: [Errno 32] Broken pipe

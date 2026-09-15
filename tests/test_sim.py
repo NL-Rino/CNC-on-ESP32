@@ -9,13 +9,22 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 
+from sim.dock_detector import detect, detect_lidar
 from sim.env import OBS_DIM, OBS_NAMES, CarEnv, EnvConfig
+from sim.lidar import RMAX, RMIN, SECTORS, Lidar
 from sim.robot import Robot, RobotSpec
-from sim.sensors import SONAR_MAX, SensorSuite
-from sim.world import IR_CALL, Beacon, Obstacle, World
+from sim.sensors import SensorSuite
+from sim.world import IR_CALL, IR_DOCK, Beacon, Dock, Obstacle, World, make_world
 from train.es import ES
 from train.policy import GRUPolicy
 from train.rollout import make_env, rollout
+
+
+def _lidar_on(world, robot, seed=0):
+    ld = Lidar()
+    ld.reset(np.random.default_rng(seed), 7.0)
+    ld._scan(robot, world)
+    return ld
 
 
 def test_obs_names_khop_kich_thuoc():
@@ -23,34 +32,89 @@ def test_obs_names_khop_kich_thuoc():
 
 
 def test_cung_seed_thi_cung_ket_qua():
-    env = make_env(stage=3, max_steps=120)
+    env = make_env(stage=3, max_steps=150)
     pol = GRUPolicy(OBS_DIM, 2, 8, seed=3)
     r1, s1 = rollout(pol, env, 42)
     r2, s2 = rollout(pol, env, 42)
     assert abs(r1 - r2) < 1e-9 and s1 == s2
 
 
-def test_sieu_am_do_dung_khoang_cach():
-    w = World(4.0, 4.0)
-    w.obstacles.append(Obstacle("box", x0=2.5, y0=1.5, x1=3.0, y1=2.5))
-    spec = RobotSpec()
-    rb = Robot(spec)
-    rb.reset(1.0, 2.0, 0.0)
-    s = SensorSuite(spec)
-    rng = random.Random(0)
-    best = min(s.read_sonar(rb, w, rng)[2] for _ in range(20))
-    assert 1.3 < best < 1.6, best          # ~1.5 m tinh tu mat cam bien
-    rb.reset(1.0, 2.0, math.pi)            # quay lung lai -> khong thay gi
-    s.read_sonar(rb, w, rng)
-    assert s.sonar[2] == SONAR_MAX
+def test_lidar_do_dung_khoang_cach():
+    w = World(6.0, 6.0)
+    w.obstacles.append(Obstacle("box", x0=3.5, y0=2.5, x1=4.0, y1=3.5))
+    w.bake()
+    rb = Robot()
+    rb.reset(1.0, 3.0, 0.0)
+    ld = _lidar_on(w, rb)
+    a, r = ld.base, ld.r
+    fwd = np.argmin(np.abs(a))            # tia thang truoc mat
+    assert 2.4 < r[fwd] < 2.6, r[fwd]     # hop cach 2.5 m
+    back = np.argmin(np.abs(np.abs(a) - math.pi))
+    assert r[back] == 0.0                 # phia sau khong co gi -> khong phan hoi
+
+
+def test_lidar_ton_trong_tam_do():
+    w = World(6.0, 6.0)
+    w.obstacles.append(Obstacle("circle", x=1.05, y=3.0, r=0.02))  # rat gan
+    w.bake()
+    rb = Robot()
+    rb.reset(1.0, 3.0, 0.0)
+    ld = _lidar_on(w, rb)
+    ok = ld.r[ld.r > 0.0]
+    assert ok.size == 0 or ok.min() >= RMIN - 1e-6
+    assert ld.r.max() < RMAX
+
+
+def test_lidar_bu_goc_khi_xe_quay():
+    """Vong quet cu van phai chi dung huong sau khi xe da quay (de-skew)."""
+    w = World(6.0, 6.0)
+    w.obstacles.append(Obstacle("box", x0=3.0, y0=2.9, x1=3.2, y1=3.1))
+    w.bake()
+    rb = Robot()
+    rb.reset(1.0, 3.0, 0.0)
+    ld = _lidar_on(w, rb)
+    s0 = ld.sector_ranges(rb.theta)
+    front = int(np.argmin(s0))
+    rb.theta = math.pi / 2                # xe quay trai 90 do, chua quet lai
+    s1 = ld.sector_ranges(rb.theta)
+    moved = (front - int(np.argmin(s1))) % SECTORS
+    assert moved == SECTORS // 4, moved   # vat phai nhay sang ben phai 90 do
+
+
+def test_bo_do_tim_duoc_hop_15cm():
+    w = World(6.0, 6.0)
+    dock = Dock(3.0, 3.0, math.pi)        # xe se dam dau theo huong +x
+    w.obstacles.append(dock.box)
+    w.dock = dock
+    w.bake()
+    rb = Robot()
+    hit = 0
+    for k in range(12):
+        rb.reset(3.0 - 1.0, 3.0, 0.0)
+        ld = _lidar_on(w, rb, seed=k)
+        for c in detect_lidar(ld, rb.theta):
+            if abs(c.bearing) < 0.2 and abs(c.dist - 0.93) < 0.25:
+                hit += 1
+                break
+    assert hit >= 8, "chi tim thay %d/12 lan" % hit
+
+
+def test_bo_do_bo_qua_tuong_dai():
+    w = World(8.0, 8.0)
+    w.obstacles.append(Obstacle("box", x0=3.0, y0=0.0, x1=3.2, y1=6.0))
+    w.bake()
+    rb = Robot()
+    rb.reset(1.0, 3.0, 0.0)
+    ld = _lidar_on(w, rb)
+    for c in detect_lidar(ld, rb.theta):
+        assert abs(c.bearing) > 0.3, "tuong dai bi nham la tram sac"
 
 
 def test_cam_bien_vuc_bao_truoc_khi_roi():
     w = World(1.0, 1.0)
-    spec = RobotSpec()
-    rb = Robot(spec)
+    rb = Robot()
     rb.reset(0.5, 0.5, 0.0, 1.0)
-    s = SensorSuite(spec)
+    s = SensorSuite(RobotSpec())
     rng = random.Random(1)
     warned = False
     for _ in range(200):
@@ -63,47 +127,82 @@ def test_cam_bien_vuc_bao_truoc_khi_roi():
     assert rb.fallen and warned, "cam bien vuc phai keu truoc khi xe roi"
 
 
-def test_hong_ngoai_chi_thay_phia_truoc():
-    w = World(3.0, 3.0)
-    w.beacons.append(Beacon(2.5, 1.5, IR_CALL))
-    spec = RobotSpec()
-    rb = Robot(spec)
-    s = SensorSuite(spec)
-    rng = random.Random(2)
-    rb.reset(1.0, 1.5, 0.0)
-    v, seen = s.read_ir(rb, w, rng)
-    assert v[IR_CALL] > 0.1 and seen[IR_CALL] > 0.5
-    rb.reset(1.0, 1.5, math.pi)
-    v, seen = s.read_ir(rb, w, rng)
-    assert v[IR_CALL] < 0.05 and seen[IR_CALL] < 0.5
-
-
-def test_hong_ngoai_bi_vat_can_che():
-    w = World(3.0, 3.0)
-    w.beacons.append(Beacon(2.5, 1.5, IR_CALL))
-    w.obstacles.append(Obstacle("box", x0=1.6, y0=1.2, x1=1.8, y1=1.8))
-    spec = RobotSpec()
-    rb = Robot(spec)
-    rb.reset(1.0, 1.5, 0.0)
-    v, _ = SensorSuite(spec).read_ir(rb, w, random.Random(3))
-    assert v[IR_CALL] == 0.0
-
-
-def test_pin_tut_khi_chay_va_len_khi_sac():
-    env = CarEnv(EnvConfig(stage=3, max_steps=50))
-    env.reset(5)
-    b0 = env.robot.battery
-    for _ in range(40):
-        env.step((0.0, 0.0))
-    assert env.robot.battery < b0                      # van hao khi dung yen
-
-    w = World(2.0, 2.0)
-    w.dock = Beacon(1.0, 1.0, 1)
-    w.dock_heading = 0.0
+def test_hong_ngoai_tram_sac_chi_thay_tu_phia_truoc():
+    w = World(6.0, 6.0)
+    dock = Dock(3.0, 3.0, math.pi)
+    w.dock = dock
+    w.obstacles.append(dock.box)
+    w.beacons.append(dock.beacon)
+    w.bake()
     rb = Robot()
-    rb.reset(1.02, 1.0, 0.0, 0.3)
-    gained = sum(rb.try_charge(w, 0.05) for _ in range(20))
-    assert gained > 0.0 and rb.battery > 0.3
+    s = SensorSuite(RobotSpec())
+    rng = random.Random(2)
+    # dock quay mat ve phia +x, nen cho dau xe la x > 3
+    rb.reset(3.8, 3.0, math.pi)           # dung truoc mat tram, nhin vao
+    v, seen = s.read_ir(rb, w, rng)
+    assert seen[IR_DOCK] > 0.5 and v[IR_DOCK] > 0.1
+    rb.reset(2.2, 3.0, 0.0)               # dung sau lung tram, nhin vao
+    v, seen = s.read_ir(rb, w, rng)
+    assert seen[IR_DOCK] < 0.5, "khong duoc thay den tu phia sau tram"
+
+
+def test_khong_bat_tay_hong_ngoai_thi_khong_sac():
+    w = World(4.0, 4.0)
+    dock = Dock(2.0, 2.0, math.pi)
+    w.dock = dock
+    rb = Robot()
+    px, py = dock.pocket
+    rb.reset(px, py, dock.heading, 0.3)
+    assert rb.try_charge(w, 0.05, ir_ok=False) == 0.0
+    assert rb.try_charge(w, 0.05, ir_ok=True) > 0.0
+
+
+def test_odometry_troi_nhung_van_bam_theo():
+    rb = Robot()
+    rng = random.Random(5)
+    rb.reset(1.0, 1.0, 0.0, 1.0, rng)
+    w = World(20.0, 20.0)
+    travelled = 0.0
+    for _ in range(200):
+        px, py = rb.x, rb.y
+        rb.step(0.8, 0.8, 0.05, w, rng)
+        travelled += math.hypot(rb.x - px, rb.y - py)
+    err = math.hypot(rb.x - rb.ox, rb.y - rb.oy)
+    assert err > 0.0, "odometry phai troi chu khong the chinh xac tuyet doi"
+    assert err < 0.25 * travelled, "troi %.2f m tren %.2f m la qua nhieu" % (
+        err, travelled)
+
+
+def test_nho_vi_tri_tram_sac_sau_khi_sac():
+    env = CarEnv(EnvConfig(stage=3, max_steps=60))
+    for seed in range(40):
+        env.reset(seed)
+        if env.world.dock is None:
+            continue
+        d = env.world.dock
+        px, py = d.pocket
+        env.robot.reset(px, py, d.heading, 0.3, env.rng)
+        env.ir_hand = env.steps
+        env.step((0.0, 0.0))
+        assert env.mem is not None, "sac xong phai nho vi tri tram"
+        # lui ra 0.6 m roi hoi lai: tri nho phai chi nguoc ve phia tram
+        back = d.heading + math.pi
+        env.robot.ox += 0.6 * math.cos(back)
+        env.robot.oy += 0.6 * math.sin(back)
+        dist, bear = env._memory_polar()
+        assert 0.4 < dist < 0.8, dist
+        assert abs(bear) < 0.3, bear
+        return
+    raise AssertionError("khong sinh duoc canh nao co tram sac")
+
+
+def test_uoc_luong_pin_ve_tram():
+    env = CarEnv(EnvConfig(stage=3, max_steps=80))
+    env.reset(3)
+    env.mem = (env.robot.ox + 2.0, env.robot.oy)
+    far = env._return_margin(2.0)
+    near = env._return_margin(0.2)
+    assert near > far, "cang xa tram thi bien an toan cang mong"
 
 
 def test_luu_va_nap_lai_bo_nao():
@@ -115,19 +214,16 @@ def test_luu_va_nap_lai_bo_nao():
         pol.save(p, gen=3, stage=2)
         pol2, meta = GRUPolicy.load(p)
     pol2.reset()
-    a2 = pol2.act(obs)
-    assert np.allclose(a1, a2) and int(meta["gen"]) == 3
+    assert np.allclose(a1, pol2.act(obs)) and int(meta["gen"]) == 3
 
 
 def test_gru_co_tri_nho():
-    """Cung mot dau vao nhung trang thai an khac -> hanh dong khac."""
     pol = GRUPolicy(OBS_DIM, 2, 8, seed=11)
     obs = [0.3] * OBS_DIM
     a1 = pol.act(obs)
     for _ in range(5):
         pol.act([0.9] * OBS_DIM)
-    a2 = pol.act(obs)
-    assert not np.allclose(a1, a2)
+    assert not np.allclose(a1, pol.act(obs))
 
 
 def test_es_cai_thien_ham_don_gian():
@@ -139,60 +235,20 @@ def test_es_cai_thien_ham_don_gian():
     es = ES(np.zeros(25), popsize=32, sigma=0.15, lr=0.12, weight_decay=0.0)
     first = fit(es.theta)
     for _ in range(120):
-        pop = es.ask()
-        es.tell([fit(p) for p in pop])
-    assert fit(es.theta) > first * 0.2, "ES phai giam duoc sai so"
+        es.tell([fit(p) for p in es.ask()])
+    assert fit(es.theta) > first * 0.2
 
 
 def test_ghi_hinh_tap():
-    env = make_env(stage=3, max_steps=40, record=True)
+    env = make_env(stage=3, max_steps=60, record=True)
     pol = GRUPolicy(OBS_DIM, 2, 8, seed=1)
     rollout(pol, env, 9)
     rec = env.episode_record()
-    assert len(rec["frames"]) == env.steps
+    assert rec["frames"]
     f = rec["frames"][0]
-    for k in ("x", "y", "th", "sonar", "cliff", "ir", "u", "batt"):
+    for k in ("x", "y", "th", "cliff", "ir", "u", "batt", "cand"):
         assert k in f
-
-
-def test_cam_sac_di_qua_diem_tiep_can():
-    """Khi con xa, muc tieu phai la diem tiep can truoc mat tram sac,
-    khong phai chinh tram sac - neu khong xe se dam vao ngang hong."""
-    env = CarEnv(EnvConfig(stage=3, max_steps=50))
-    for seed in range(30):
-        env.reset(seed)
-        if env.world.dock is None:
-            continue
-        env.robot.battery = 0.2
-        env.world.dock.active = True
-        d = env.world.dock
-        h = env.world.dock_heading
-        env.robot.x = d.x - 0.9 * math.cos(h)
-        env.robot.y = d.y - 0.9 * math.sin(h)
-        g = env._active_goal()
-        assert g is not None and g[2] == "dock_app"
-        gx, gy = g[0], g[1]
-        assert abs(math.hypot(gx - d.x, gy - d.y) - env.cfg.dock_approach) < 1e-6
-        # dung sat truoc mat tram -> chuyen sang dam thang vao
-        env.robot.x = d.x - 0.32 * math.cos(h)
-        env.robot.y = d.y - 0.32 * math.sin(h)
-        assert env._active_goal()[2] == "dock"
-        return
-    raise AssertionError("khong sinh duoc canh nao co tram sac")
-
-
-def test_uu_tien_sac_hon_den_goi_khi_pin_yeu():
-    env = CarEnv(EnvConfig(stage=3, max_steps=50))
-    for seed in range(30):
-        env.reset(seed)
-        if env.world.dock is None:
-            continue
-        env.robot.battery = 0.1
-        env.world.dock.active = True
-        env._spawn_call()
-        g = env._active_goal()
-        assert g[2].startswith("dock"), "pin yeu thi phai di sac truoc"
-        return
+    assert any("scan" in fr for fr in rec["frames"])
 
 
 def main():

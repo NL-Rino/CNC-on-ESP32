@@ -16,11 +16,15 @@ class RobotSpec:
     cliff_rear = -0.105     # vi tri cam bien vuc sau
     ir_offset = 0.085       # mat thu hong ngoai o dau xe
 
+    # Odometry (dung de nho vi tri tram sac giua cac chuyen di)
+    odo_scale_err = 0.025   # sai so ti le duong kinh banh moi ben
+    odo_gyro_bias = 0.010   # troi goc (rad/s)
+
     # Pin
     batt_capacity = 1.0
-    batt_idle = 0.0016      # tieu hao khi dung yen (don vi/giay)
-    batt_drive = 0.0110     # tieu hao them khi chay het ga (don vi/giay)
-    charge_rate = 0.060     # toc do sac khi cam dung dock (don vi/giay)
+    batt_idle = 0.0020      # tieu hao khi dung yen (don vi/giay)
+    batt_drive = 0.0170     # tieu hao them khi chay het ga (don vi/giay)
+    charge_rate = 0.100     # toc do sac khi cam dung dock (don vi/giay)
 
 
 class Robot:
@@ -30,10 +34,21 @@ class Robot:
         self.spec = spec or RobotSpec()
         self.reset(0.0, 0.0, 0.0, 1.0)
 
-    def reset(self, x, y, theta, battery=1.0):
+    def reset(self, x, y, theta, battery=1.0, rng=None):
         self.x = x
         self.y = y
         self.theta = theta
+        # Odometry bat dau trung voi that, roi troi dan - dung nhu ngoai doi
+        self.ox = x
+        self.oy = y
+        self.oth = theta
+        if rng is not None:
+            self.sl = 1.0 + rng.gauss(0.0, self.spec.odo_scale_err)
+            self.sr = 1.0 + rng.gauss(0.0, self.spec.odo_scale_err)
+            self.gbias = rng.gauss(0.0, self.spec.odo_gyro_bias)
+        else:
+            self.sl = self.sr = 1.0
+            self.gbias = 0.0
         self.vl = 0.0          # toc do banh trai thuc te (m/s)
         self.vr = 0.0
         self.v = 0.0           # toc do tien (m/s)
@@ -83,6 +98,16 @@ class Robot:
 
         self.x, self.y, self.theta = nx, ny, ntheta
 
+        # Odometry: xe chi biet minh di duoc bao nhieu qua banh xe, ma banh
+        # thi truot va hai ben khong bang nhau -> uoc luong troi dan.
+        vlo = self.vl * self.sl
+        vro = self.vr * self.sr
+        vo = 0.5 * (vlo + vro)
+        wo = (vro - vlo) / s.wheel_base + self.gbias
+        self.ox += vo * math.cos(self.oth) * dt
+        self.oy += vo * math.sin(self.oth) * dt
+        self.oth = wrap_angle(self.oth + wo * dt)
+
         # Roi khoi ban khi tam xe vuot qua mep
         if not world.on_table(self.x, self.y):
             self.fallen = True
@@ -95,15 +120,20 @@ class Robot:
         return self.fallen
 
     # ------------------------------------------------------------------- tram sac
-    def try_charge(self, world, dt):
-        """Sac neu dang dung dung vi tri va huong cua tram sac."""
+    def try_charge(self, world, dt, ir_ok=True):
+        """Sac neu dang dung dung o cam, dung huong, va da bat tay hong ngoai.
+
+        `ir_ok`: vua nhan duoc tin hieu hong ngoai cua tram trong vai buoc gan
+        day. Tram sac that cung lam vay - khong co bat tay thi khong dong dien.
+        """
         self.charging = False
         dock = world.dock
-        if dock is None:
+        if dock is None or not ir_ok:
             return 0.0
-        d = math.hypot(self.x - dock.x, self.y - dock.y)
-        align = abs(wrap_angle(self.theta - world.dock_heading))
-        if d < 0.20 and align < 0.9 and abs(self.v) < 0.12:
+        px, py = dock.pocket
+        d = math.hypot(self.x - px, self.y - py)
+        align = abs(wrap_angle(self.theta - dock.heading))
+        if d < 0.11 and align < 0.7 and abs(self.v) < 0.10:
             before = self.battery
             self.battery = min(self.spec.batt_capacity,
                                self.battery + self.spec.charge_rate * dt)
@@ -116,6 +146,9 @@ class Robot:
         s = math.sin(self.theta)
         return (self.x + offset_fwd * c - offset_side * s,
                 self.y + offset_fwd * s + offset_side * c)
+
+    def odo_pose(self):
+        return self.ox, self.oy, self.oth
 
     def as_dict(self):
         return {"x": self.x, "y": self.y, "th": self.theta,

@@ -22,6 +22,14 @@ from train.rollout import make_env, rollout  # noqa: E402
 _ENV = None
 _POL = None
 
+# Cap 0-1 chi can tap ngan (song sot + ne vat can); cap 3 phai du dai de pin
+# can it nhat mot lan, neu khong xe khong co ly do gi de hoc di sac.
+STAGE_STEPS = (600, 700, 1000, 1300)
+
+
+def steps_for(stage, cap):
+    return min(cap, STAGE_STEPS[max(0, min(3, stage))])
+
 
 def _init_worker(hidden, max_steps):
     global _ENV, _POL
@@ -30,10 +38,11 @@ def _init_worker(hidden, max_steps):
 
 
 def _score(job):
-    """job = (theta, seeds, stage) -> diem trung binh cua mot ca the."""
-    theta, seeds, stage = job
+    """job = (theta, seeds, stage, max_steps) -> diem trung binh cua mot ca the."""
+    theta, seeds, stage, cap = job
     _POL.set_params(theta)
     _ENV.cfg.stage = stage
+    _ENV.cfg.max_steps = steps_for(stage, cap)
     tot = 0.0
     for s in seeds:
         r, _ = rollout(_POL, _ENV, s)
@@ -44,9 +53,10 @@ def _score(job):
 def evaluate(theta, hidden, stage, seeds, max_steps):
     pol = GRUPolicy(OBS_DIM, ACT_DIM, hidden)
     pol.set_params(theta)
-    env = make_env(stage=stage, max_steps=max_steps)
+    env = make_env(stage=stage, max_steps=steps_for(stage, max_steps))
     agg = {"return": 0.0, "arrivals": 0.0, "charged": 0.0, "distance": 0.0,
-           "bumps": 0.0, "fell": 0.0, "flat": 0.0, "cells": 0.0}
+           "bumps": 0.0, "fell": 0.0, "flat": 0.0, "cells": 0.0,
+           "full_charges": 0.0}
     for s in seeds:
         _, st = rollout(pol, env, s)
         for k in agg:
@@ -59,11 +69,11 @@ def evaluate(theta, hidden, stage, seeds, max_steps):
 # Dieu kien len cap trong chuong trinh hoc
 def stage_passed(stage, ev):
     if stage == 0:
-        return ev["fell"] <= 0.10 and ev["cells"] >= 14
+        return ev["fell"] <= 0.10 and ev["cells"] >= 10
     if stage == 1:
-        return ev["fell"] <= 0.10 and ev["cells"] >= 12 and ev["bumps"] <= 60
+        return ev["fell"] <= 0.10 and ev["cells"] >= 9 and ev["bumps"] <= 50
     if stage == 2:
-        return ev["fell"] <= 0.10 and ev["arrivals"] >= 1.0
+        return ev["fell"] <= 0.12 and ev["arrivals"] >= 0.8
     return False
 
 
@@ -75,7 +85,7 @@ def main():
     ap.add_argument("--sigma", type=float, default=0.08)
     ap.add_argument("--lr", type=float, default=0.035)
     ap.add_argument("--hidden", type=int, default=16)
-    ap.add_argument("--max-steps", type=int, default=900)
+    ap.add_argument("--max-steps", type=int, default=1600)
     ap.add_argument("--stage", type=int, default=3)
     ap.add_argument("--curriculum", action="store_true",
                     help="bat dau tu stage 0 va tu dong len cap")
@@ -116,8 +126,8 @@ def main():
     log = csv.writer(log_f)
     if new_log:
         log.writerow(["gen", "stage", "mean_fit", "max_fit", "sigma",
-                      "eval_return", "arrivals", "charged", "cells",
-                      "bumps", "fell", "flat", "secs"])
+                      "eval_return", "arrivals", "charged", "full_charges",
+                      "cells", "bumps", "fell", "flat", "secs"])
 
     best_score = -1e18
     stage_gen0 = 0
@@ -134,7 +144,7 @@ def main():
             t0 = time.time()
             pop = es.ask()
             seeds = [int(rng.integers(0, 2 ** 31 - 1)) for _ in range(args.episodes)]
-            jobs = [(pop[i], seeds, stage) for i in range(len(pop))]
+            jobs = [(pop[i], seeds, stage, args.max_steps) for i in range(len(pop))]
             if pool is not None:
                 fits = pool.map(_score, jobs, chunksize=max(1, len(jobs) // (args.jobs * 4)))
             else:
@@ -153,10 +163,11 @@ def main():
                 ev = evaluate(es.theta.astype(np.float32), hidden, stage,
                               eseeds, args.max_steps)
                 line += ("\n         eval: R %7.1f | toi_diem %.2f | sac %.2f"
-                         " | o_da_di %.1f | va_cham %.1f | roi %.0f%% | het_pin %.0f%%"
+                         " (day %.2f) | o_da_di %.1f | va_cham %.1f"
+                         " | roi %.0f%% | het_pin %.0f%%"
                          % (ev["return"], ev["arrivals"], ev["charged"],
-                            ev["cells"], ev["bumps"], 100 * ev["fell"],
-                            100 * ev["flat"]))
+                            ev["full_charges"], ev["cells"], ev["bumps"],
+                            100 * ev["fell"], 100 * ev["flat"]))
                 if ev["return"] > best_score:
                     best_score = ev["return"]
                     pol.set_params(es.theta.astype(np.float32))
@@ -169,6 +180,7 @@ def main():
                           round(ev["return"], 2) if ev else "",
                           round(ev["arrivals"], 3) if ev else "",
                           round(ev["charged"], 3) if ev else "",
+                          round(ev["full_charges"], 3) if ev else "",
                           round(ev["cells"], 2) if ev else "",
                           round(ev["bumps"], 2) if ev else "",
                           round(ev["fell"], 3) if ev else "",

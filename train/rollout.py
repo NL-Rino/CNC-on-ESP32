@@ -25,6 +25,7 @@ def rollout(policy, env, seed, render_cb=None):
         "steps": env.steps,
         "arrivals": env.arrivals,
         "charged": env.charged,
+        "full_charges": env.full_charges,
         "distance": env.distance,
         "bumps": env.bumps,
         "fell": bool(info.get("fell", False)),

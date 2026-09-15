@@ -6,7 +6,6 @@ policy hoc duoc khong tin tuyet doi vao mot lan doc.
 import math
 
 from .geometry import wrap_angle
-from .world import IR_CALL, IR_DOCK
 
 # Goc lap 5 cam bien sieu am so voi dau xe (rad)
 SONAR_ANGLES = (-math.pi / 2, -math.pi / 4, 0.0, math.pi / 4, math.pi / 2)

@@ -1,0 +1,398 @@
+<title>Xe hai bánh học lái</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#eef1f4; --panel:#ffffff; --sunk:#e3e8ed; --line:#ccd5dd;
+  --ink:#16202b; --ink-2:#4a5b6b; --ink-3:#7d8d9b;
+  --trace:#0f7d52; --call:#b4620a; --dock:#0b6d94; --danger:#b3241f;
+  --scope:#f6f8f9; --grid:#d9e1e7;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0b1116; --panel:#111a21; --sunk:#0a1015; --line:#1e2c36;
+    --ink:#dfe8ee; --ink-2:#93a6b4; --ink-3:#647886;
+    --trace:#3ddc97; --call:#f2a33c; --dock:#4cc4ef; --danger:#ff6b63;
+    --scope:#070c10; --grid:#16232c;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0b1116; --panel:#111a21; --sunk:#0a1015; --line:#1e2c36;
+  --ink:#dfe8ee; --ink-2:#93a6b4; --ink-3:#647886;
+  --trace:#3ddc97; --call:#f2a33c; --dock:#4cc4ef; --danger:#ff6b63;
+  --scope:#070c10; --grid:#16232c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font:15px/1.5 "IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.page{max-width:1160px;margin:0 auto;padding-block:28px 40px;padding-left:18px;padding-right:18px}
+h1{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;font-weight:700;
+  font-size:clamp(26px,4.5vw,40px);line-height:1.05;margin:0;text-wrap:balance;letter-spacing:-.01em}
+.lede{color:var(--ink-2);margin:10px 0 0;max-width:62ch}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-3)}
+.mono{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+
+.facts{display:flex;flex-wrap:wrap;gap:8px 28px;margin-top:20px;padding-top:18px;
+  border-top:1px solid var(--line)}
+.fact b{display:block;font-family:"IBM Plex Mono",monospace;font-size:20px;font-weight:600;
+  font-variant-numeric:tabular-nums}
+.fact span{font-size:12px;color:var(--ink-3)}
+
+.deck{display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:18px;margin-top:26px;align-items:start}
+@media (max-width:820px){.deck{grid-template-columns:minmax(0,1fr)}}
+
+.scope{background:var(--scope);border:1px solid var(--line);border-radius:3px;padding:10px}
+canvas{display:block;width:100%;height:auto}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+button,select{font:inherit;font-size:13px;color:var(--ink);background:var(--panel);
+  border:1px solid var(--line);border-radius:2px;padding:7px 12px;cursor:pointer}
+button:hover,select:hover{border-color:var(--ink-3)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--trace);outline-offset:2px}
+#scrub{flex:1 1 120px;min-width:100px;accent-color:var(--trace)}
+.clock{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+
+.rail{display:flex;flex-direction:column;gap:14px}
+.inst{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:12px 13px}
+.inst h3{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink-3);margin:0 0 10px;font-weight:500}
+.gauge{height:7px;background:var(--sunk);border-radius:1px;overflow:hidden}
+.gauge>i{display:block;height:100%;background:var(--trace);width:0;transition:width .08s linear}
+.readout{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}
+.readout b{font-family:"IBM Plex Mono",monospace;font-size:19px;font-weight:600;font-variant-numeric:tabular-nums}
+.readout span{font-size:11px;color:var(--ink-3)}
+.fan{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;align-items:end;height:74px}
+.fan div{display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+.fan i{display:block;background:var(--ink-3);border-radius:1px 1px 0 0}
+.fan em{font-family:"IBM Plex Mono",monospace;font-style:normal;font-size:9.5px;color:var(--ink-3);
+  text-align:center;margin-top:4px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chan{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-3)}
+.chan b{display:block;font-size:16px;color:var(--ink);font-weight:600}
+.leds{display:flex;flex-direction:column;gap:6px}
+.led{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-2)}
+.led i{width:9px;height:9px;border-radius:50%;background:var(--sunk);
+  border:1px solid var(--line);flex:none}
+.led.on i{background:var(--danger);border-color:var(--danger)}
+.led.ok i{background:var(--dock);border-color:var(--dock)}
+
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.tab{font-family:"IBM Plex Mono",monospace;font-size:12px;padding:5px 10px;border:1px solid var(--line);
+  background:transparent;border-radius:2px;color:var(--ink-2)}
+.tab[aria-pressed="true"]{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+
+section{margin-top:40px}
+h2{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:21px;margin:0 0 4px;font-weight:700}
+.sub{color:var(--ink-3);font-size:13px;margin:0 0 16px}
+.chartwrap{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:14px 12px 8px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:9px 12px 9px 0;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:500}
+td.n{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tblwrap{overflow-x:auto}
+footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
+  font-size:12.5px;color:var(--ink-3)}
+@media (prefers-reduced-motion:reduce){.gauge>i{transition:none}}
+</style>
+
+<div class="page">
+  <p class="eyebrow">Mô phỏng · Evolution Strategies · <span id="gen-tag">—</span></p>
+  <h1>Xe hai bánh học lái</h1>
+  <p class="lede">Một bộ não GRU <span class="mono" id="nparam">—</span> tham số, tiến hoá hoàn toàn
+  trong mô phỏng, điều khiển 2 cặp bánh DC: không rơi khỏi mép bàn, tránh vật cản,
+  đi tới chỗ có đèn hồng ngoại gọi, và tự về trạm sạc khi pin yếu.</p>
+
+  <div class="facts" id="facts"></div>
+
+  <div class="deck">
+    <div>
+      <div class="tabs" id="tabs"></div>
+      <div class="scope"><canvas id="cv" width="1000" height="660"></canvas></div>
+      <div class="controls">
+        <button id="play">Tạm dừng</button>
+        <input type="range" id="scrub" min="0" value="0" aria-label="Thời điểm">
+        <span class="clock" id="clock">0.0s</span>
+        <select id="spd" aria-label="Tốc độ phát">
+          <option value="0.5">0.5×</option><option value="1" selected>1×</option>
+          <option value="2">2×</option><option value="4">4×</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="rail">
+      <div class="inst">
+        <h3>Pin</h3>
+        <div class="readout"><b id="batt-n">—</b><span id="batt-s">đang chạy</span></div>
+        <div class="gauge"><i id="batt"></i></div>
+      </div>
+      <div class="inst">
+        <h3>Siêu âm (m)</h3>
+        <div class="fan" id="fan"></div>
+      </div>
+      <div class="inst">
+        <h3>Hồng ngoại</h3>
+        <div class="pair">
+          <div class="chan">đèn gọi<b id="ir0">0.00</b></div>
+          <div class="chan">trạm sạc<b id="ir1">0.00</b></div>
+        </div>
+      </div>
+      <div class="inst">
+        <h3>Ga động cơ</h3>
+        <div class="pair">
+          <div class="chan">trái<b id="ul">0.00</b></div>
+          <div class="chan">phải<b id="ur">0.00</b></div>
+        </div>
+      </div>
+      <div class="inst">
+        <h3>Cảnh báo</h3>
+        <div class="leds">
+          <div class="led" id="l-cf"><i></i>cảm biến vực trước</div>
+          <div class="led" id="l-cr"><i></i>cảm biến vực sau</div>
+          <div class="led" id="l-bump"><i></i>chạm vật cản</div>
+          <div class="led" id="l-chg"><i></i>đang nạp pin</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <h2>Đường tiến hoá</h2>
+    <p class="sub">Điểm trung bình của cả quần thể qua từng thế hệ. Mỗi vùng màu là một cấp
+    trong chương trình học — xe chỉ được lên cấp khi qua được bài trước.</p>
+    <div class="chartwrap"><div id="chart"></div></div>
+  </section>
+
+  <section>
+    <h2>Xe có gì</h2>
+    <p class="sub">Tất cả đều được mô phỏng kèm nhiễu và lỗi thật — bộ não không bao giờ
+    được nhìn thấy bản đồ hay toạ độ.</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Cảm biến</th><th>Góc / vị trí</th><th>Chi tiết</th></tr></thead>
+      <tbody>
+        <tr><td>5 × siêu âm</td><td class="n">−90° −45° 0° +45° +90°</td>
+            <td>tầm 2 m, chùm tia ±7.5°, nhiễu 1.2 cm, 2% lần đo mất echo. <b>Không thấy được mép bàn.</b></td></tr>
+        <tr><td>2 × cảm biến vực</td><td class="n">±10.5 cm trước/sau</td>
+            <td>chiếu xuống; báo trước ~0.17 s ở tốc độ tối đa, trong khi xe cần ~0.07 s để phanh</td></tr>
+        <tr><td>1 × mắt thu hồng ngoại</td><td class="n">đầu xe, ±46°</td>
+            <td>2 kênh tần số: đèn gọi và trạm sạc. Chỉ có một mắt nên phải xoay để dò hướng</td></tr>
+        <tr><td>Đo pin</td><td class="n">0–100%</td>
+            <td>hao theo tải động cơ; chỉ nạp được khi đâm đầu đúng hướng vào trạm sạc</td></tr>
+        <tr><td>2 cặp bánh DC</td><td class="n">2 kênh PWM</td>
+            <td>trễ động cơ 0.12 s, vùng chết PWM, trượt bánh 2% — hai bên không bao giờ bằng nhau</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <footer>Mô phỏng, bộ não và công cụ xuất trọng số ra ESP32 nằm trong repo
+  <span class="mono">CNC-on-ESP32</span>. Đường xanh lá là vệt bánh xe, vòng cam là đèn gọi,
+  chấm xanh dương là trạm sạc, tia đỏ là siêu âm đang thấy vật cản gần.</footer>
+</div>
+
+<script>
+const DATA = /*__DATA__*/{"policy":"","params":0,"gen":0,"stats":{},"curve":[],"episodes":[]};
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+let ei = 0, fi = 0, playing = true, speed = 1, acc = 0, last = 0;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const SON_ANG = [-Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2];
+const SON_LBL = ['T90','T45','trước','P45','P90'];
+
+$('gen-tag').textContent = 'thế hệ ' + DATA.gen;
+$('nparam').textContent = DATA.params.toLocaleString('vi-VN');
+$('facts').innerHTML = (DATA.facts || []).map(f =>
+  '<div class="fact"><b>' + f[0] + '</b><span>' + f[1] + '</span></div>').join('');
+
+DATA.episodes.forEach((e, i) => {
+  const b = document.createElement('button');
+  b.className = 'tab'; b.type = 'button';
+  b.textContent = 'Tập ' + (i + 1);
+  b.setAttribute('aria-pressed', i === 0);
+  b.onclick = () => { setEp(i); [...$('tabs').children].forEach((t, j) =>
+    t.setAttribute('aria-pressed', j === i)); };
+  $('tabs').appendChild(b);
+});
+$('fan').innerHTML = SON_LBL.map((l, i) =>
+  '<div><i id="son' + i + '"></i><em>' + l + '</em></div>').join('');
+
+const ep = () => DATA.episodes[ei];
+function view(){
+  const w = ep().world, pad = 26;
+  const s = Math.min((cv.width - 2*pad)/w.width, (cv.height - 2*pad)/w.height);
+  return {s, ox:(cv.width - w.width*s)/2, oy:(cv.height - w.height*s)/2, w};
+}
+const X = (v,p) => p.ox + v*p.s, Y = (v,p) => p.oy + (p.w.height - v)*p.s;
+
+function draw(){
+  const e = ep(), f = e.frames[fi], p = view(), w = e.world;
+  const inkGrid = css('--grid'), danger = css('--danger'), trace = css('--trace');
+  ctx.clearRect(0,0,cv.width,cv.height);
+
+  ctx.fillStyle = css('--panel');
+  ctx.fillRect(p.ox, p.oy, w.width*p.s, w.height*p.s);
+  ctx.strokeStyle = inkGrid; ctx.lineWidth = 1;
+  for(let g=0.3; g<w.width; g+=0.3){ ctx.beginPath();
+    ctx.moveTo(X(g,p), Y(0,p)); ctx.lineTo(X(g,p), Y(w.height,p)); ctx.stroke(); }
+  for(let g=0.3; g<w.height; g+=0.3){ ctx.beginPath();
+    ctx.moveTo(X(0,p), Y(g,p)); ctx.lineTo(X(w.width,p), Y(g,p)); ctx.stroke(); }
+
+  // mep ban = vuc
+  ctx.setLineDash([9,6]); ctx.strokeStyle = danger; ctx.lineWidth = 2;
+  ctx.strokeRect(p.ox, p.oy, w.width*p.s, w.height*p.s); ctx.setLineDash([]);
+  ctx.fillStyle = danger; ctx.font = '500 11px "IBM Plex Mono", monospace';
+  ctx.fillText('mép bàn', p.ox + 4, p.oy - 7);
+
+  ctx.fillStyle = css('--sunk'); ctx.strokeStyle = css('--line');
+  for(const o of w.obstacles){
+    ctx.beginPath();
+    if(o.kind === 'circle') ctx.arc(X(o.x,p), Y(o.y,p), o.r*p.s, 0, 7);
+    else ctx.rect(X(o.x0,p), Y(o.y1,p), (o.x1-o.x0)*p.s, (o.y1-o.y0)*p.s);
+    ctx.fill(); ctx.stroke();
+  }
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(p.ox, p.oy, w.width*p.s, w.height*p.s); ctx.clip();
+
+  ctx.strokeStyle = trace; ctx.globalAlpha = .45; ctx.lineWidth = 2;
+  ctx.beginPath();
+  for(let i=0;i<=fi;i++){ const g = e.frames[i];
+    i ? ctx.lineTo(X(g.x,p), Y(g.y,p)) : ctx.moveTo(X(g.x,p), Y(g.y,p)); }
+  ctx.stroke(); ctx.globalAlpha = 1;
+
+  const dock = (w.beacons||[]).find(b => b.ch === 1);
+  if(dock){
+    const on = f.dock_on;
+    ctx.strokeStyle = css('--dock'); ctx.fillStyle = css('--dock');
+    ctx.globalAlpha = on ? 1 : .35;
+    ctx.beginPath(); ctx.arc(X(dock.x,p), Y(dock.y,p), 7, 0, 7); ctx.fill();
+    ctx.lineWidth = 2; ctx.beginPath();
+    ctx.moveTo(X(dock.x,p), Y(dock.y,p));
+    ctx.lineTo(X(dock.x - 0.26*Math.cos(w.dock_heading),p),
+               Y(dock.y - 0.26*Math.sin(w.dock_heading),p)); ctx.stroke();
+    ctx.font = '500 11px "IBM Plex Mono", monospace';
+    ctx.fillText('trạm sạc', X(dock.x,p) - 26, Y(dock.y,p) - 13);
+    ctx.globalAlpha = 1;
+  }
+  if(f.call){
+    const t = fi * 0.35;
+    ctx.strokeStyle = css('--call'); ctx.fillStyle = css('--call'); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(X(f.call[0],p), Y(f.call[1],p), 9 + 5*Math.abs(Math.sin(t)), 0, 7);
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(X(f.call[0],p), Y(f.call[1],p), 4.5, 0, 7); ctx.fill();
+    ctx.font = '500 11px "IBM Plex Mono", monospace';
+    ctx.fillText('đèn gọi', X(f.call[0],p) - 22, Y(f.call[1],p) - 15);
+  }
+
+  for(let i=0;i<5;i++){
+    const a = f.th + SON_ANG[i], d = f.sonar[i], near = d < 0.4;
+    ctx.strokeStyle = near ? danger : css('--ink-3');
+    ctx.globalAlpha = near ? .9 : .22; ctx.lineWidth = near ? 2 : 1;
+    ctx.beginPath(); ctx.moveTo(X(f.x,p), Y(f.y,p));
+    ctx.lineTo(X(f.x + d*Math.cos(a),p), Y(f.y + d*Math.sin(a),p)); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  const R = 0.09 * p.s;
+  ctx.fillStyle = f.charging ? css('--dock') : (f.bump ? danger : trace);
+  ctx.beginPath(); ctx.arc(X(f.x,p), Y(f.y,p), R, 0, 7); ctx.fill();
+  ctx.strokeStyle = css('--scope'); ctx.lineWidth = 2.5; ctx.beginPath();
+  ctx.moveTo(X(f.x,p), Y(f.y,p));
+  ctx.lineTo(X(f.x + 0.115*Math.cos(f.th),p), Y(f.y + 0.115*Math.sin(f.th),p)); ctx.stroke();
+  for(let k=0;k<2;k++){
+    const off = k ? -0.105 : 0.105;
+    ctx.fillStyle = f.cliff[k] > .5 ? danger : css('--ink-3');
+    ctx.beginPath();
+    ctx.arc(X(f.x + off*Math.cos(f.th),p), Y(f.y + off*Math.sin(f.th),p), 3.2, 0, 7);
+    ctx.fill();
+  }
+  hud(f, e);
+}
+
+function hud(f, e){
+  $('batt').style.width = (f.batt*100).toFixed(0) + '%';
+  $('batt').style.background = f.batt < 0.4 ? css('--call') : css('--trace');
+  $('batt-n').textContent = (f.batt*100).toFixed(0) + '%';
+  $('batt-s').textContent = f.charging ? 'đang nạp' : (f.batt < 0.4 ? 'yếu — đi tìm sạc' : 'đủ dùng');
+  for(let i=0;i<5;i++){
+    const el = $('son' + i), d = f.sonar[i];
+    el.style.height = Math.max(3, Math.min(1, d/2) * 56) + 'px';
+    el.style.background = d < 0.4 ? css('--danger') : css('--ink-3');
+    el.title = d.toFixed(2) + ' m';
+  }
+  $('ir0').textContent = f.ir[0].toFixed(2);
+  $('ir0').style.color = f.ir[0] > .05 ? css('--call') : '';
+  $('ir1').textContent = f.ir[1].toFixed(2);
+  $('ir1').style.color = f.ir[1] > .05 ? css('--dock') : '';
+  $('ul').textContent = f.u[0].toFixed(2);
+  $('ur').textContent = f.u[1].toFixed(2);
+  $('l-cf').className = 'led' + (f.cliff[0] > .5 ? ' on' : '');
+  $('l-cr').className = 'led' + (f.cliff[1] > .5 ? ' on' : '');
+  $('l-bump').className = 'led' + (f.bump ? ' on' : '');
+  $('l-chg').className = 'led' + (f.charging ? ' ok' : '');
+  $('clock').textContent = (fi*e.dt).toFixed(1) + 's / ' + ((e.frames.length-1)*e.dt).toFixed(1) + 's';
+}
+
+function setEp(i){ ei = i; fi = 0; $('scrub').max = ep().frames.length - 1; draw(); }
+$('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Tạm dừng' : 'Chạy'; };
+$('scrub').oninput = e => { fi = +e.target.value; draw(); };
+$('spd').onchange = e => speed = +e.target.value;
+
+function loop(t){
+  const e = ep();
+  if(playing && e){
+    acc += Math.min(0.25, (t - last)/1000) * speed;
+    while(acc >= e.dt){ acc -= e.dt; fi = (fi + 1) % e.frames.length; }
+    $('scrub').value = fi;
+    draw();
+  }
+  last = t;
+  requestAnimationFrame(loop);
+}
+
+// ---- duong tien hoa (SVG) --------------------------------------------------
+function chart(){
+  const c = DATA.curve; if(!c.length) return;
+  const W = 900, H = 260, L = 46, R = 14, T = 14, B = 30;
+  const gmax = c[c.length-1][0], vs = c.map(p => p[1]);
+  const lo = Math.min(...vs), hi = Math.max(...vs);
+  const px = g => L + (W-L-R) * g / Math.max(1, gmax);
+  const py = v => T + (H-T-B) * (1 - (v - lo) / Math.max(1e-6, hi - lo));
+  const bands = [];
+  let cur = c[0][2], st = 0;
+  const NAMES = ['sống sót', 'né vật cản', 'tìm đèn gọi', 'pin + trạm sạc'];
+  const TINT = ['--ink-3', '--dock', '--call', '--trace'];
+  c.forEach((p, i) => {
+    if(p[2] !== cur || i === c.length-1){ bands.push([st, p[0], cur]); st = p[0]; cur = p[2]; }
+  });
+  let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" ' +
+          'aria-label="Điểm trung bình theo thế hệ"><g>';
+  for(const [a, b, k] of bands){
+    s += '<rect x="' + px(a).toFixed(1) + '" y="' + T + '" width="' + (px(b)-px(a)).toFixed(1) +
+         '" height="' + (H-T-B) + '" fill="var(' + TINT[k] + ')" opacity="0.10"></rect>';
+    if(px(b) - px(a) > 64)
+      s += '<text x="' + (px(a)+7).toFixed(1) + '" y="' + (T+15) + '" font-size="11" ' +
+           'font-family="IBM Plex Mono, monospace" fill="var(--ink-3)">' + NAMES[k] + '</text>';
+  }
+  for(let k=0;k<=3;k++){
+    const v = lo + (hi-lo)*k/3, y = py(v).toFixed(1);
+    s += '<line x1="' + L + '" x2="' + (W-R) + '" y1="' + y + '" y2="' + y +
+         '" stroke="var(--line)"></line>' +
+         '<text x="' + (L-8) + '" y="' + (+y+4) + '" text-anchor="end" font-size="11" ' +
+         'font-family="IBM Plex Mono, monospace" fill="var(--ink-3)">' + v.toFixed(0) + '</text>';
+  }
+  s += '<polyline fill="none" stroke="var(--trace)" stroke-width="2" points="' +
+       c.map(p => px(p[0]).toFixed(1) + ',' + py(p[1]).toFixed(1)).join(' ') + '"></polyline>';
+  s += '<text x="' + L + '" y="' + (H-8) + '" font-size="11" font-family="IBM Plex Mono, monospace" ' +
+       'fill="var(--ink-3)">thế hệ 0</text>' +
+       '<text x="' + (W-R) + '" y="' + (H-8) + '" text-anchor="end" font-size="11" ' +
+       'font-family="IBM Plex Mono, monospace" fill="var(--ink-3)">thế hệ ' + gmax + '</text>';
+  s += '</g></svg>';
+  $('chart').innerHTML = s;
+}
+
+chart();
+if(DATA.episodes.length){ setEp(0); requestAnimationFrame(loop); }
+</script>

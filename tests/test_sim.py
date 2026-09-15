@@ -155,6 +155,46 @@ def test_ghi_hinh_tap():
         assert k in f
 
 
+def test_cam_sac_di_qua_diem_tiep_can():
+    """Khi con xa, muc tieu phai la diem tiep can truoc mat tram sac,
+    khong phai chinh tram sac - neu khong xe se dam vao ngang hong."""
+    env = CarEnv(EnvConfig(stage=3, max_steps=50))
+    for seed in range(30):
+        env.reset(seed)
+        if env.world.dock is None:
+            continue
+        env.robot.battery = 0.2
+        env.world.dock.active = True
+        d = env.world.dock
+        h = env.world.dock_heading
+        env.robot.x = d.x - 0.9 * math.cos(h)
+        env.robot.y = d.y - 0.9 * math.sin(h)
+        g = env._active_goal()
+        assert g is not None and g[2] == "dock_app"
+        gx, gy = g[0], g[1]
+        assert abs(math.hypot(gx - d.x, gy - d.y) - env.cfg.dock_approach) < 1e-6
+        # dung sat truoc mat tram -> chuyen sang dam thang vao
+        env.robot.x = d.x - 0.32 * math.cos(h)
+        env.robot.y = d.y - 0.32 * math.sin(h)
+        assert env._active_goal()[2] == "dock"
+        return
+    raise AssertionError("khong sinh duoc canh nao co tram sac")
+
+
+def test_uu_tien_sac_hon_den_goi_khi_pin_yeu():
+    env = CarEnv(EnvConfig(stage=3, max_steps=50))
+    for seed in range(30):
+        env.reset(seed)
+        if env.world.dock is None:
+            continue
+        env.robot.battery = 0.1
+        env.world.dock.active = True
+        env._spawn_call()
+        g = env._active_goal()
+        assert g[2].startswith("dock"), "pin yeu thi phai di sac truoc"
+        return
+
+
 def main():
     fns = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]
     bad = 0

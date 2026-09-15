@@ -1,6 +1,5 @@
 """Ve khung hinh ASCII cho terminal - xem nhanh xe dang lam gi."""
 import math
-import os
 import sys
 
 GLYPH_DIR = ">^<v"

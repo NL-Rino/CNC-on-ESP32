@@ -2,7 +2,7 @@
 import math
 import random
 
-from .geometry import ray_aabb, ray_circle, point_segment_dist
+from .geometry import ray_aabb, ray_circle
 
 # Hai kenh hong ngoai (khac tan so tren phan cung that, vi du 38kHz / 56kHz)
 IR_CALL = 0     # nguoi dung "goi" xe toi

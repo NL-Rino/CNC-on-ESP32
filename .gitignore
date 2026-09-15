@@ -1,6 +1,6 @@
 __pycache__/
 *.pyc
 runs/
-*.npz
 demo*.json
 viz/replay.html
+!brains/*.npz

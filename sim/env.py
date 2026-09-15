@@ -31,6 +31,7 @@ class EnvConfig:
     max_steps = 900           # 45 giay
     stage = 3
     battery_low = 0.40        # nguong bat den tram sac
+    p_low_batt = 0.5          # ti le tap bat dau voi pin da yeu san
     call_radius = 0.25        # coi nhu "da toi noi" khi vao ban kinh nay
     call_timeout = (200, 500) # den goi tat sau bao nhieu buoc neu xe khong toi
     record = False
@@ -44,6 +45,9 @@ class EnvConfig:
     w_arrive = 40.0
     w_dock = 15.0
     w_charge = 150.0
+    w_align = 0.35        # thuong khi da gan tram sac va quay dung huong cam
+    dock_approach = 0.30  # diem cho tiep can, cach tram sac bao xa (m)
+    dock_pocket = 0.15    # cho xe dung khi sac, cach tram sac bao xa (m)
     w_speed = 0.6
     w_novel = 6.0
     w_spin = 0.25
@@ -79,7 +83,12 @@ class CarEnv:
         x, y = self.world.free_spot(rng, self.spec.radius)
         th = rng.uniform(-math.pi, math.pi)
         if cfg.stage >= 3:
-            batt = rng.uniform(0.25, 1.0)
+            # Mot nua so tap bat dau voi pin da yeu: neu khong, 45 giay khong
+            # du de pin can va xe chang bao gio phai hoc di sac.
+            if rng.random() < cfg.p_low_batt:
+                batt = rng.uniform(0.18, 0.35)
+            else:
+                batt = rng.uniform(0.45, 0.95)
         else:
             batt = 1.0
         self.robot.reset(x, y, th, batt)
@@ -101,7 +110,8 @@ class CarEnv:
         self.distance = 0.0
         self.rew_parts = {"fall": 0.0, "flat": 0.0, "bump": 0.0, "cliff": 0.0,
                           "progress": 0.0, "arrive": 0.0, "charge": 0.0,
-                          "speed": 0.0, "novel": 0.0, "spin": 0.0, "cost": 0.0}
+                          "speed": 0.0, "novel": 0.0, "spin": 0.0, "cost": 0.0,
+                          "align": 0.0}
         self.frames = []
         if self.world.dock is not None:
             self.world.dock.active = (self.robot.battery < cfg.battery_low)
@@ -163,13 +173,36 @@ class CarEnv:
         return obs
 
     # --------------------------------------------------------------------- goal
+    def dock_points(self):
+        """Hai diem tren truc tram sac: diem tiep can, va cho dung khi sac.
+
+        Dich KHONG duoc dat dung vao toa do tram sac: tram nam cach mep ban co
+        10 cm, keo xe toi tan do la keo no ra mep - cam bien vuc keu, phan xa
+        tranh vuc day xe ra, va xe khong bao giờ cam duoc sac.
+        """
+        d = self.world.dock
+        h = self.world.dock_heading
+        c, sn = math.cos(h), math.sin(h)
+        return (d.x - self.cfg.dock_approach * c, d.y - self.cfg.dock_approach * sn,
+                d.x - self.cfg.dock_pocket * c, d.y - self.cfg.dock_pocket * sn)
+
     def _active_goal(self):
-        """Muc tieu hien tai (dung cho phan thuong): den goi > tram sac."""
-        if self.call is not None and self.call.active:
-            return self.call.x, self.call.y, "call"
+        """Muc tieu hien tai (chi dung cho phan thuong).
+
+        Song sot truoc: den tram sac chi bat khi pin yeu, va luc do no duoc
+        uu tien hon ca den goi - dung cua het pin giua duong vi ham di choi.
+        """
         d = self.world.dock
         if d is not None and d.active:
-            return d.x, d.y, "dock"
+            # Cam sac la bai hai buoc: truoc het ra DIEM TIEP CAN nam thang
+            # truoc mat tram sac, roi moi dam thang vao. Neu chi thuong theo
+            # khoang cach toi tram, xe se lao vao ngang hong va khong cam duoc.
+            ax, ay, px, py = self.dock_points()
+            if math.hypot(self.robot.x - ax, self.robot.y - ay) > 0.18:
+                return ax, ay, "dock_app"
+            return px, py, "dock"
+        if self.call is not None and self.call.active:
+            return self.call.x, self.call.y, "call"
         return None
 
     # --------------------------------------------------------------------- step
@@ -254,6 +287,19 @@ class CarEnv:
                 self.arrivals += 1
                 info["arrived"] = True
                 self._drop_call()
+
+        # da toi gan tram sac: thuong them cho viec quay dung huong cam
+        dock = self.world.dock
+        if dock is not None and dock.active:
+            dd = math.hypot(r.x - dock.x, r.y - dock.y)
+            if dd < 0.6:
+                err = wrap_angle(r.theta - self.world.dock_heading)
+                bonus = cfg.w_align * math.cos(err) * (1.0 - dd / 0.6)
+                # vao dung o cam roi thi con phai DUNG LAI moi nap duoc dien
+                if dd < 0.22 and abs(err) < 0.9:
+                    bonus += cfg.w_align * (1.0 - min(1.0, abs(r.v) / 0.20))
+                rew += bonus
+                self.rew_parts["align"] += bonus
 
         # sac pin
         if gained > 0.0:

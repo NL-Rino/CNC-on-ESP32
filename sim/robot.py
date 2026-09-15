@@ -19,7 +19,7 @@ class RobotSpec:
     # Pin
     batt_capacity = 1.0
     batt_idle = 0.0016      # tieu hao khi dung yen (don vi/giay)
-    batt_drive = 0.0075     # tieu hao them khi chay het ga (don vi/giay)
+    batt_drive = 0.0110     # tieu hao them khi chay het ga (don vi/giay)
     charge_rate = 0.060     # toc do sac khi cam dung dock (don vi/giay)
 
 

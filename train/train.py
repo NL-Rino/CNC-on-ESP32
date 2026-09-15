@@ -5,7 +5,6 @@ Vi du:
 """
 import argparse
 import csv
-import math
 import os
 import sys
 import time

@@ -126,3 +126,33 @@ Nhung cho gan nhu chac chan lech, can do lai tren xe that roi sua trong
 
 Meo: giu **nhieu trong mo phong hoi lon hon doi that**. Bo nao quen song trong
 moi truong "ban" se chiu duoc moi truong sach, chieu nguoc lai thi khong.
+
+## 9. Nhat ky nuoi: 4 loi khien xe khong hoc duoc
+
+Ghi lai vi day deu la loi *thiet ke phan thuong / moi truong*, khong phai loi
+thuat toan - va deu se lap lai y het tren phan cung that.
+
+**(a) Bo dieu khien viet tay rung tai cho.** Moc so sanh dau tien chi duoc 22
+diem: sieu am nhieu lam no doi huong queo moi 50 ms nen xe dung mot cho lac qua
+lac lai. Sua bang cach **cam ket** mot huong trong ~0.5 giay. Mang GRU tu giai
+quyet viec nay bang trang thai an, nhung firmware viet tay thi phai co hysteresis.
+
+**(b) Bat xe lui vao tram sac.** `dock_heading` ban dau quay vao trong ban, tuc
+la xe phai lui vao o cam - trong khi mat thu hong ngoai nam o **dau** xe. Xe cam
+trong trang thai mu hoan toan, khong bao gio hoc duoc. Doi thanh dam dau vao.
+
+**(c) Dich sac dat dung vao toa do tram sac.** Day la loi kho thay nhat. Tram sac
+cach mep ban 10 cm, nen phan thuong "tien gan tram" keo xe ra tan mep - cam bien
+vuc keu, phan xa tranh vuc (da hoc o cap 0) day xe ra, hai thu trieu tieu nhau.
+Do dac cho thay xe **den cach tram 1-2 cm** nhung goc lech 70-150°, va khong bao
+gio sac duoc. Sua: dich khong phai la tram sac ma la **o dau** cach tram 15 cm ve
+phia trong ban, cong mot diem tiep can cach 30 cm de xe vao thang truc.
+Sau khi sua, ti le chet vi het pin tut tu 50% xuong 8%.
+
+**(d) Tap qua ngan nen pin khong quan trong.** Voi tap 45 giay va pin bat dau
+0.2-0.9, hau het tap ket thuc khi pin van con - xe khong co ly do gi de hoc di
+sac. Sua: mot nua so tap bat dau voi pin 0.18-0.35, va tang toc do hao pin.
+
+Bai hoc chung: khi agent **khong** hoc duoc mot ky nang, dung tang so the he.
+Hay do xem no that su di toi dau va dung lai o dau - gan nhu lan nao nguyen nhan
+cung la hai khoan thuong dang keo nguoc nhau.

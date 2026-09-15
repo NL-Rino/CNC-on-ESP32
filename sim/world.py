@@ -78,7 +78,7 @@ class World:
         self.obstacles = []
         self.beacons = []
         self.dock = None          # Beacon kenh IR_DOCK (tram sac)
-        self.dock_heading = 0.0   # huong xe phai quay khi cam sac
+        self.dock_heading = 0.0   # huong xe phai quay khi cam sac (dam dau vao)
 
     # ---------------------------------------------------------------- truy van
     def on_table(self, x, y, margin=0.0):
@@ -174,14 +174,17 @@ def make_world(rng: random.Random, stage: int = 3) -> World:
         # Tram sac dat sat mep ban, quay mat vao trong
         side = rng.randrange(4)
         pad = 0.10
+        # head = huong xe phai QUAY KHI CAM SAC, tuc la huong tu giua ban
+        # chia ra mep: xe dam dau vao tram (mat thu IR o dau xe nen phai the,
+        # neu bat xe lui vao tram thi no mu hoan toan luc cam).
         if side == 0:
-            dx, dy, head = rng.uniform(0.3, w - 0.3), pad, math.pi / 2
+            dx, dy, head = rng.uniform(0.3, w - 0.3), pad, -math.pi / 2
         elif side == 1:
-            dx, dy, head = rng.uniform(0.3, w - 0.3), h - pad, -math.pi / 2
+            dx, dy, head = rng.uniform(0.3, w - 0.3), h - pad, math.pi / 2
         elif side == 2:
-            dx, dy, head = pad, rng.uniform(0.3, h - 0.3), 0.0
+            dx, dy, head = pad, rng.uniform(0.3, h - 0.3), math.pi
         else:
-            dx, dy, head = w - pad, rng.uniform(0.3, h - 0.3), math.pi
+            dx, dy, head = w - pad, rng.uniform(0.3, h - 0.3), 0.0
         # don sach vat can quanh tram sac
         world.obstacles = [o for o in world.obstacles
                            if o.dist_to_point(dx, dy) > 0.30]

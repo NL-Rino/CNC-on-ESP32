@@ -103,7 +103,7 @@ class Robot:
             return 0.0
         d = math.hypot(self.x - dock.x, self.y - dock.y)
         align = abs(wrap_angle(self.theta - world.dock_heading))
-        if d < 0.16 and align < 0.9 and abs(self.v) < 0.12:
+        if d < 0.20 and align < 0.9 and abs(self.v) < 0.12:
             before = self.battery
             self.battery = min(self.spec.batt_capacity,
                                self.battery + self.spec.charge_rate * dt)

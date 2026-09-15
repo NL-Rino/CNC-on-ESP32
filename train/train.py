@@ -73,7 +73,9 @@ def stage_passed(stage, ev):
     if stage == 1:
         return ev["fell"] <= 0.10 and ev["cells"] >= 9 and ev["bumps"] <= 50
     if stage == 2:
-        return ev["fell"] <= 0.12 and ev["arrivals"] >= 0.8
+        # Stage 2 chua co den goi, nen khong doi hoi arrivals. Chi doi hoi
+        # song chung duoc voi may cai hoc ma khong roi ban, khong huc lien tuc.
+        return ev["fell"] <= 0.10 and ev["cells"] >= 9 and ev["bumps"] <= 90
     return False
 
 

@@ -100,7 +100,7 @@ class CarEnv:
 
         x, y = self.world.free_spot(rng, self.spec.radius)
         th = rng.uniform(-math.pi, math.pi)
-        batt = rng.uniform(0.30, 1.0) if cfg.stage >= 3 else 1.0
+        batt = rng.uniform(0.30, 1.0) if cfg.stage >= 2 else 1.0
         self.robot.reset(x, y, th, batt, rng)
         self.sensors.reset()
         self.lidar.reset(self.nprng)
@@ -134,7 +134,10 @@ class CarEnv:
         return self._obs()
 
     def _draw_call_delay(self):
-        if self.cfg.stage < 2:
+        # Den goi chi xuat hien tu stage 3. Stage 2 danh rieng cho viec song
+        # chung voi may cai hoc va tu di sac - dua ca hai thu vao cung mot
+        # buoc thi xe hoc duoc ca hai deu do.
+        if self.cfg.stage < 3:
             return 10 ** 9
         return self.rng.randint(40, 400)
 
@@ -309,7 +312,7 @@ class CarEnv:
             self.e_per_m = 0.9 * self.e_per_m + 0.1 * (self.batt_used / self.distance)
 
         self.call_timer -= 1
-        if self.call is None and self.call_timer <= 0 and cfg.stage >= 2:
+        if self.call is None and self.call_timer <= 0 and cfg.stage >= 3:
             self._spawn_call()
         elif self.call is not None:
             self.call_expire -= 1

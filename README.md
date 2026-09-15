@@ -10,45 +10,55 @@ Chạy bằng Python 3 + numpy, không cần GPU, không cần thư viện RL n�
 pip install numpy
 python3 tests/test_sim.py                                  # kiểm tra mô phỏng
 python3 tests/test_firmware.py                             # bản C khớp bản Python
-python3 tools/compare.py brains/car_lidar_v2.npz           # AI vs bộ điều khiển viết tay
-python3 -m train.evaluate --policy brains/car_lidar_v2.npz --ascii --seed 7
+python3 tools/compare.py brains/car_bay_v1.npz              # AI vs bộ điều khiển viết tay
+python3 -m train.evaluate --policy brains/car_bay_v1.npz --ascii --seed 7
 ```
 
 ## Trạng thái hiện tại (đọc cái này trước)
 
-Phần **mô phỏng + nhận thức đã xong và đã kiểm chứng**: LiDAR, bộ dò hộp 15 cm,
-bắt tay hồng ngoại, trí nhớ vị trí trạm, ước lượng pin — tất cả chạy được, có
-kiểm thử, và bản C cho ESP32 đã đối chiếu trùng khít bản Python.
+Phần **mô phỏng + nhận thức đã xong và đã kiểm chứng**: LiDAR, bộ dò hộc chữ U
+(cho ra cả trục), bắt tay hồng ngoại qua khe hẹp, va chạm thân vuông, trí nhớ vị
+trí + hướng trạm, ước lượng pin — chạy được, có 20 kiểm thử, và bản C cho ESP32
+đã đối chiếu **trùng khít** bản Python trên 25 cảnh.
 
-Phần **bộ não thì mới nuôi được một nửa**. So trên 30 cảnh ngẫu nhiên, cùng seed:
+Phần **bộ não thì đang nuôi dở**. So trên 30 cảnh ngẫu nhiên, cùng seed:
 
-| | AI đã học | Bộ luật viết tay |
+| | AI đang nuôi | Bộ luật viết tay |
 |---|---:|---:|
-| Rơi khỏi bàn | 7% | **0%** |
-| Bước va chạm | **19.8** | 107 |
-| Quãng đường / tập 65 s | **16.6 m** | 10.2 m |
-| Lần tới đèn gọi / tập | 0.27 | **0.47** |
-| Pin tự nạp được / tập | 0.000 | **0.258** |
-| Lần tự sạc đầy / tập | 0.00 | **0.20** |
-| Chết vì hết pin | 60% | **7%** |
+| Điểm | −58 | **171** |
+| Rơi khỏi bàn | 53% | **0%** |
+| Chết vì hết pin | 13% | **10%** |
+| Pin tự nạp được / tập | 0.000 | **0.417** |
+| Lần tự sạc đầy / tập | 0.00 | **0.40** |
+| Ô lưới đã đi qua | **7.5** | 5.4 |
 
-Nói thẳng: bộ não hiện **biết đi long nhong, né vật cản và gần như không rơi khỏi
-bàn**, nhưng **chưa học xong phần tự về trạm sạc** — nó vẫn chết vì hết pin 60%
-số tập. Bộ luật viết tay (`train/baseline.py`) mới là cái làm trọn quy trình, và
-đó cũng là bằng chứng rằng bài toán giải được với đúng bộ cảm biến này.
+Nói thẳng: **bộ não hiện chưa dùng được** — nó rơi khỏi bàn hơn nửa số tập. Bộ
+luật viết tay (`train/baseline.py`) mới là cái làm trọn quy trình bạn mô tả, và
+đó là bằng chứng rằng bài toán **giải được** với đúng bộ cảm biến này.
 
-Lý do đơn giản là **thiếu thế hệ**: đổi từ 5 siêu âm sang LiDAR làm đầu vào tăng
-từ 20 lên 40 số, mạng từ 1.810 lên 1.934 tham số, và bài khó hơn hẳn (phải nhận
-hình, quay đầu hỏi hồng ngoại, rồi mới cắm). Máy chạy phiên này chỉ kịp ~550 thế
-hệ. Chạy tiếp trên máy bạn:
+Vì sao lần này tụt so với bản siêu âm trước: bài đã khó hơn hẳn. Xe từ 18 cm lên
+**30 cm** trên cùng cái bàn, phải chui vào khe chỉ hở 5 mm, và đầu vào từ 40 lên
+**46 số**. Phiên này chỉ chạy được ~500 thế hệ, mà đường cong còn đang lên rõ
+(điểm đánh giá đi từ 30 lên 104 trong 200 thế hệ gần nhất). Chạy tiếp:
 
 ```bash
-python3 -m train.train --stage 3 --resume brains/car_lidar_v2.npz \
-        --jobs $(nproc) --gens 2000 --out runs/car3
+python3 -m train.train --curriculum --resume brains/car_bay_v1.npz \
+        --jobs $(nproc) --pop 48 --gens 4000 --min-gens-per-stage 100 \
+        --eval-episodes 20 --out runs/bay6
 ```
 
-Mỗi thế hệ ~14 giây trên 4 nhân. Cần khoảng 500–1000 thế hệ nữa cho phần sạc,
-tức 2–4 giờ trên máy 8 nhân — và chạy nền được, không phải ngồi canh.
+Ba điều tôi sẽ làm nếu chạy tiếp, và lý do:
+
+1. **`--eval-episodes 20`** thay vì 8. Với 8 tập, hai lần đánh giá liên tiếp cho
+   ra 0% và 75% rơi trên **cùng một bộ trọng số**. Nhiễu đó khiến `best.npz` chọn
+   nhầm bộ may mắn chứ không phải bộ giỏi. Đây là lỗi phương pháp, không phải
+   thiếu tính toán.
+2. **`--pop 48`**. Với 2.150 tham số, quần thể 32 cho gradient quá nhiễu.
+3. **Kiên nhẫn ở stage 2.** Chương trình học hiện tại lên cấp khi rơi ≤ 10%, rồi
+   stage sau lại rơi ngược lên — dấu hiệu nó lên cấp lúc kỹ năng còn mong manh.
+
+Mỗi thế hệ ~6 giây trên 4 nhân ở stage 2. Ước chừng cần 1.500–2.500 thế hệ nữa,
+tức 3–5 giờ trên máy 8 nhân — chạy nền được, không phải ngồi canh.
 
 ## Chiếc xe trong mô phỏng
 

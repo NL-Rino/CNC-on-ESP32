@@ -386,9 +386,16 @@ class World:
         """
         for bay in self.bays:
             u, v, dth = bay.to_local(x, y, theta)
-            if u > bay.half_out + 0.10 or u < -bay.half_out - 0.20:
+            # CHI nan khi xe that su dang ti vao mat vat o mieng hoc va dang
+            # huong vao trong. Khong co ba dieu kien nay thi cai nem tro thanh
+            # nam cham: xe huc vao SUON hoc cung bi keo ve truc - tuc la di
+            # xuyen qua vach, va xe lo dam vao hoc moi nhu thi bi hut han vao
+            # trong roi ket cung o do.
+            if u < -bay.half_out - 0.16 or u > bay.half_in:
                 continue
-            if abs(v) > bay.half_out + half:
+            if abs(v) > bay.half_in + half - 0.02:
+                continue
+            if abs(dth) > 0.55:
                 continue
             # Mat vat la mot cai CAM: no vua day xe sang ngang vua XOAY xe.
             # Phan xoay moi la phan quan trong - xe vuong 30 cm nghieng 8 do
@@ -477,7 +484,9 @@ def make_world(rng: random.Random, stage: int = 3) -> World:
 
         # Hoc moi nhu: tren LiDAR giong het tram sac nhung khong phat hong ngoai.
         # Khong co no thi xe chi can thay hinh la lao vao, khoi hoi hong ngoai.
-        for _ in range(rng.randint(1, 2)):
+        # stage 2 mot cai moi nhu, stage 3 thi hai - vao hoc moi nhu roi phai
+        # biet lui ra la ky nang kho, cho hoc dan.
+        for _ in range(1 if stage == 2 else rng.randint(1, 2)):
             for _ in range(40):
                 mx = rng.uniform(0.6, w - 0.6)
                 my = rng.uniform(0.6, h - 0.6)

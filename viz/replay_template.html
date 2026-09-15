@@ -1,0 +1,232 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Xe tu hanh - xem lai</title>
+<style>
+  :root{color-scheme:light dark;--bg:#0f1115;--panel:#171a21;--ink:#e8ecf3;--dim:#8a94a6;
+        --line:#252a34;--acc:#4ade80;--warn:#f87171;--ir:#f59e0b;--dock:#38bdf8}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:14px/1.45 ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif;padding:16px}
+  h1{font-size:17px;margin:0 0 2px}
+  .sub{color:var(--dim);font-size:12px;margin-bottom:12px}
+  .wrap{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+  canvas{display:block;width:100%;height:auto;border-radius:8px;background:#0b0d11}
+  .stage{flex:1 1 520px;min-width:300px;max-width:820px}
+  .side{flex:0 1 260px;min-width:240px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  button,select{background:#222733;color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer}
+  button:hover{border-color:#3a4150}
+  input[type=range]{flex:1 1 140px;min-width:120px}
+  .k{color:var(--dim);font-size:12px;margin:10px 0 3px}
+  .bar{height:9px;background:#0b0d11;border-radius:5px;overflow:hidden}
+  .bar>i{display:block;height:100%;background:var(--acc);width:0}
+  .grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;font-size:11px;
+         text-align:center;color:var(--dim)}
+  .grid5 b{display:block;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+  .tag{display:inline-block;padding:2px 7px;border-radius:999px;font-size:11px;
+       border:1px solid var(--line);color:var(--dim)}
+  .on{color:#0b0d11;background:var(--acc);border-color:transparent}
+  .alert{color:#0b0d11;background:var(--warn);border-color:transparent}
+</style>
+<h1>Xe tu hanh 2 banh — xem lai mo phong</h1>
+<div class="sub" id="meta"></div>
+<div class="wrap">
+  <div class="card stage">
+    <canvas id="cv" width="900" height="620"></canvas>
+    <div class="row">
+      <button id="play">⏸ Tam dung</button>
+      <input type="range" id="scrub" min="0" value="0">
+      <span id="clock" style="font-variant-numeric:tabular-nums;color:var(--dim)"></span>
+      <select id="ep"></select>
+      <select id="spd">
+        <option value="0.5">0.5x</option>
+        <option value="1" selected>1x</option>
+        <option value="2">2x</option>
+        <option value="4">4x</option>
+      </select>
+    </div>
+  </div>
+  <div class="card side">
+    <div class="k">PIN</div>
+    <div class="bar"><i id="batt"></i></div>
+    <div class="k">SIEU AM (m) — trai90 / trai45 / truoc / phai45 / phai90</div>
+    <div class="grid5" id="son"></div>
+    <div class="k">HONG NGOAI</div>
+    <div class="grid5" style="grid-template-columns:1fr 1fr">
+      <div>goi<b id="ir0">0</b></div><div>tram sac<b id="ir1">0</b></div>
+    </div>
+    <div class="k">DONG CO (trai / phai)</div>
+    <div class="grid5" style="grid-template-columns:1fr 1fr">
+      <div>L<b id="ul">0</b></div><div>R<b id="ur">0</b></div>
+    </div>
+    <div class="k">TRANG THAI</div>
+    <div class="row" style="margin-top:2px">
+      <span class="tag" id="t-cliff">vuc: an toan</span>
+      <span class="tag" id="t-bump">va cham: khong</span>
+      <span class="tag" id="t-chg">sac: tat</span>
+    </div>
+    <div class="k">KET QUA TAP NAY</div>
+    <div id="stats" style="font-size:12px;color:var(--dim)"></div>
+  </div>
+</div>
+<script>
+const DATA = /*__DATA__*/{"policy":"(chua co du lieu)","episodes":[]};
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+let ei = 0, fi = 0, playing = true, speed = 1, acc = 0, last = 0;
+
+const epSel = document.getElementById('ep');
+DATA.episodes.forEach((e, i) => {
+  const o = document.createElement('option');
+  o.value = i; o.textContent = 'Tap ' + (i + 1) + ' (seed ' + (e.seed ?? '?') + ')';
+  epSel.appendChild(o);
+});
+document.getElementById('meta').textContent =
+  'policy: ' + DATA.policy + ' — ' + DATA.episodes.length + ' tap';
+
+function ep(){ return DATA.episodes[ei]; }
+function view(){
+  const w = ep().world, pad = 30;
+  const sx = (cv.width - 2*pad) / w.width, sy = (cv.height - 2*pad) / w.height;
+  const s = Math.min(sx, sy);
+  return {s, ox: (cv.width - w.width*s)/2, oy: (cv.height - w.height*s)/2, w};
+}
+const X = (v,p)=> p.ox + v*p.s, Y = (v,p)=> p.oy + (p.w.height - v)*p.s;
+
+function draw(){
+  const e = ep(), f = e.frames[fi], p = view(), w = e.world;
+  ctx.clearRect(0,0,cv.width,cv.height);
+
+  // mat ban + mep vuc
+  ctx.fillStyle = '#141821';
+  ctx.fillRect(p.ox, p.oy, w.width*p.s, w.height*p.s);
+  ctx.strokeStyle = '#f87171'; ctx.lineWidth = 3;
+  ctx.strokeRect(p.ox, p.oy, w.width*p.s, w.height*p.s);
+  ctx.strokeStyle = '#1f2430'; ctx.lineWidth = 1;
+  for(let gx=0; gx<w.width; gx+=0.3){ ctx.beginPath();
+    ctx.moveTo(X(gx,p),Y(0,p)); ctx.lineTo(X(gx,p),Y(w.height,p)); ctx.stroke(); }
+  for(let gy=0; gy<w.height; gy+=0.3){ ctx.beginPath();
+    ctx.moveTo(X(0,p),Y(gy,p)); ctx.lineTo(X(w.width,p),Y(gy,p)); ctx.stroke(); }
+
+  // vat can
+  ctx.fillStyle = '#39414f';
+  for(const o of w.obstacles){
+    ctx.beginPath();
+    if(o.kind === 'circle') ctx.arc(X(o.x,p), Y(o.y,p), o.r*p.s, 0, 7);
+    else ctx.rect(X(o.x0,p), Y(o.y1,p), (o.x1-o.x0)*p.s, (o.y1-o.y0)*p.s);
+    ctx.fill();
+  }
+
+  // duong da di
+  ctx.strokeStyle = 'rgba(74,222,128,.35)'; ctx.lineWidth = 2; ctx.beginPath();
+  for(let i=0;i<=fi;i++){ const g = e.frames[i];
+    i ? ctx.lineTo(X(g.x,p),Y(g.y,p)) : ctx.moveTo(X(g.x,p),Y(g.y,p)); }
+  ctx.stroke();
+
+  // tram sac
+  const dock = (w.beacons||[]).find(b => b.ch === 1);
+  if(dock){
+    ctx.fillStyle = f.dock_on ? '#38bdf8' : '#2b3947';
+    ctx.beginPath(); ctx.arc(X(dock.x,p), Y(dock.y,p), 9, 0, 7); ctx.fill();
+    ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 2; ctx.beginPath();
+    ctx.moveTo(X(dock.x,p), Y(dock.y,p));
+    ctx.lineTo(X(dock.x + 0.22*Math.cos(w.dock_heading),p),
+               Y(dock.y + 0.22*Math.sin(w.dock_heading),p)); ctx.stroke();
+    ctx.fillStyle = '#8a94a6'; ctx.font = '11px system-ui';
+    ctx.fillText('tram sac', X(dock.x,p)-22, Y(dock.y,p)-14);
+  }
+  // den goi
+  if(f.call){
+    const t = performance.now()/300;
+    ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(X(f.call[0],p), Y(f.call[1],p), 8+4*Math.sin(t),0,7); ctx.stroke();
+    ctx.fillStyle = '#f59e0b';
+    ctx.beginPath(); ctx.arc(X(f.call[0],p), Y(f.call[1],p), 5,0,7); ctx.fill();
+    ctx.fillStyle='#8a94a6'; ctx.font='11px system-ui';
+    ctx.fillText('den goi', X(f.call[0],p)-18, Y(f.call[1],p)-14);
+  }
+
+  // tia sieu am
+  const ang = [-Math.PI/2, -Math.PI/4, 0, Math.PI/4, Math.PI/2];
+  for(let i=0;i<5;i++){
+    const a = f.th + ang[i], d = f.sonar[i];
+    ctx.strokeStyle = d < 0.35 ? 'rgba(248,113,113,.85)' : 'rgba(120,180,255,.30)';
+    ctx.lineWidth = d < 0.35 ? 2 : 1;
+    ctx.beginPath(); ctx.moveTo(X(f.x,p), Y(f.y,p));
+    ctx.lineTo(X(f.x + d*Math.cos(a),p), Y(f.y + d*Math.sin(a),p)); ctx.stroke();
+  }
+  // than xe
+  const R = 0.09*p.s;
+  ctx.fillStyle = f.charging ? '#38bdf8' : (f.bump ? '#f87171' : '#4ade80');
+  ctx.beginPath(); ctx.arc(X(f.x,p), Y(f.y,p), R, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#0b0d11'; ctx.lineWidth = 2; ctx.beginPath();
+  ctx.moveTo(X(f.x,p), Y(f.y,p));
+  ctx.lineTo(X(f.x + 0.13*Math.cos(f.th),p), Y(f.y + 0.13*Math.sin(f.th),p)); ctx.stroke();
+  // 2 cam bien vuc
+  for(let k=0;k<2;k++){
+    const off = k ? -0.105 : 0.105;
+    const cx = X(f.x + off*Math.cos(f.th), p), cy = Y(f.y + off*Math.sin(f.th), p);
+    ctx.fillStyle = f.cliff[k] > 0.5 ? '#f87171' : '#1f2937';
+    ctx.beginPath(); ctx.arc(cx, cy, 3.5, 0, 7); ctx.fill();
+  }
+  hud(f, e);
+}
+
+function hud(f, e){
+  document.getElementById('batt').style.width = (f.batt*100).toFixed(0)+'%';
+  document.getElementById('batt').style.background =
+    f.batt < 0.4 ? 'var(--warn)' : 'var(--acc)';
+  document.getElementById('son').innerHTML =
+    f.sonar.map(v => '<div><b>'+v.toFixed(2)+'</b></div>').join('');
+  document.getElementById('ir0').textContent = f.ir[0].toFixed(2);
+  document.getElementById('ir1').textContent = f.ir[1].toFixed(2);
+  document.getElementById('ul').textContent = f.u[0].toFixed(2);
+  document.getElementById('ur').textContent = f.u[1].toFixed(2);
+  const c = f.cliff[0] > .5 || f.cliff[1] > .5;
+  const tc = document.getElementById('t-cliff');
+  tc.textContent = c ? 'VUC! ' + (f.cliff[0]>.5?'truoc':'sau') : 'vuc: an toan';
+  tc.className = 'tag' + (c ? ' alert' : '');
+  const tb = document.getElementById('t-bump');
+  tb.textContent = f.bump ? 'DANG VA CHAM' : 'va cham: khong';
+  tb.className = 'tag' + (f.bump ? ' alert' : '');
+  const tg = document.getElementById('t-chg');
+  tg.textContent = f.charging ? 'DANG SAC' : 'sac: tat';
+  tg.className = 'tag' + (f.charging ? ' on' : '');
+  document.getElementById('clock').textContent =
+    (fi*e.dt).toFixed(1)+'s / '+((e.frames.length-1)*e.dt).toFixed(1)+'s';
+  const s = e.stats || {};
+  document.getElementById('stats').innerHTML =
+    'diem: <b>'+(s.return??0).toFixed(1)+'</b><br>lan toi den goi: '+(s.arrivals??0)+
+    '<br>pin nap duoc: '+(s.charged??0).toFixed(2)+
+    '<br>quang duong: '+(s.distance??0).toFixed(1)+' m'+
+    '<br>roi khoi ban: '+(s.fell?'CO':'khong');
+}
+
+function setEpisode(i){
+  ei = i; fi = 0;
+  document.getElementById('scrub').max = ep().frames.length - 1;
+  draw();
+}
+document.getElementById('play').onclick = e => {
+  playing = !playing; e.target.textContent = playing ? '⏸ Tam dung' : '▶ Chay';
+};
+document.getElementById('scrub').oninput = e => { fi = +e.target.value; draw(); };
+epSel.onchange = e => setEpisode(+e.target.value);
+document.getElementById('spd').onchange = e => speed = +e.target.value;
+
+function loop(t){
+  const e = ep();
+  if(playing && e && e.frames.length){
+    acc += (t - last) / 1000 * speed;
+    while(acc >= e.dt){ acc -= e.dt; fi = (fi + 1) % e.frames.length; }
+    document.getElementById('scrub').value = fi;
+    draw();
+  }
+  last = t;
+  requestAnimationFrame(loop);
+}
+if(DATA.episodes.length){ setEpisode(0); requestAnimationFrame(loop); }
+else document.getElementById('meta').textContent = 'Chua co du lieu replay.';
+</script>

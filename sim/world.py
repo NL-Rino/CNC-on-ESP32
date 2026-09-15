@@ -342,6 +342,21 @@ class World:
                 best = d
         return best
 
+    def in_bay_corridor(self, x, y, theta, radius):
+        """Xe co dang nam trong LOI VAO cua mot cai hoc khong?
+
+        Phan biet "dang chui vao hoc" voi "dang huc vao suon hoc". Xat vach
+        khi chui vao la chuyen binh thuong va khong bi phat; nhung neu mien
+        phat cho ca viec ti vao suon thi do la mot ke ho - xe hoc duoc rang
+        cu day vao hoc la va cham mien phi, va no nam ly o do 41% so buoc.
+        """
+        for bay in self.bays:
+            u, v, dth = bay.to_local(x, y, theta)
+            if -bay.half_out - radius <= u <= bay.half_in and \
+                    abs(v) <= bay.half_in + 0.02 and abs(dth) < 0.9:
+                return True
+        return False
+
     def wedge(self, x, y, theta, radius):
         """Vach loe day xe ve giua truc - mo phong doan vat goc o mieng hoc.
 

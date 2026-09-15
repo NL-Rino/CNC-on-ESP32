@@ -95,7 +95,8 @@ class Robot:
             self.bumped = True
             # Cham vach hoc thi khac cham vat can: khe chui vao chi ho 5 mm
             # moi ben nen xat nhe hai ben la chuyen binh thuong, dung phat.
-            self.bump_bay = world.bay_clearance(nx, ny) < s.radius
+            self.bump_bay = (world.bay_clearance(nx, ny) < s.radius and
+                             world.in_bay_corridor(nx, ny, ntheta, s.radius))
             # Mat vat cheo o mieng hoc nan xe ve giua truoc da
             wd = world.wedge(nx, ny, ntheta, s.radius) if self.bump_bay else None
             if wd is not None:

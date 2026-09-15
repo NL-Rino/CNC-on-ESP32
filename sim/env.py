@@ -53,10 +53,14 @@ class EnvConfig:
     scan_every = 4
 
     # He so thuong/phat
-    w_fall = -40.0
+    # Roi khoi ban phai dat hon MOI thu kiem duoc trong mot tap cong lai.
+    # Truoc day -40: di 2 m ve phia tram da duoc +28, nen lao ve tram roi roi
+    # xuong dat van gan nhu hoa von - va xe hoc dung cai do (rot ban 65%,
+    # trong do 14/20 lan la dang pin yeu).
+    w_fall = -150.0
     w_flat = -60.0
     w_bump = -1.5
-    w_cliff = -0.8
+    w_cliff = -3.0            # phat lien tuc khi cam bien vuc keu ma van tien
     w_progress = 14.0
     w_arrive = 40.0
     w_dock = 15.0
@@ -343,10 +347,10 @@ class CarEnv:
             rew += cfg.w_bump
             P["bump"] += cfg.w_bump
             self.bumps += 1
-        elif r.bump_bay:
-            # Xat vach hoc khi chui vao la chuyen binh thuong - khe chi ho
-            # 5 mm moi ben. Phat o day thi xe se hoc cach khong bao gio vao sac.
-            self.bumps += 1
+        # Xat vach khi dang chui vao hoc thi khong phat va khong dem: khe chi
+        # ho 5 mm moi ben nen co xat la duong nhien. Phat o day thi xe se hoc
+        # cach khong bao gio vao sac. Nhung "dang chui vao" phai tinh chat che
+        # (xem World.in_bay_corridor), khong thi thanh ke ho.
 
         cf, cr = self.sensors.cliff_front, self.sensors.cliff_rear
         if cf > 0.5 and r.v > 0.02:

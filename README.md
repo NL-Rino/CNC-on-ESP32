@@ -9,7 +9,7 @@ Chạy bằng Python 3 + numpy, không cần GPU, không cần thư viện RL n�
 ```bash
 pip install numpy
 python3 tests/test_sim.py                                  # kiểm tra mô phỏng
-python3 tests/test_firmware.py                             # bản C khớp bản Python
+python3 tests/test_firmware.py                             # bản C khớp bản Python (cần gcc, thiếu thì tự bỏ qua)
 python3 tests/test_link.py                                 # robot <-> wifi <-> bộ não
 python3 tools/compare.py brains/car_bay_v1.npz              # AI vs bộ điều khiển viết tay
 python3 -m train.evaluate --policy brains/car_bay_v1.npz --ascii --seed 7

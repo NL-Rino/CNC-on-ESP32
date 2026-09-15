@@ -27,6 +27,7 @@ from link import protocol as P  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FW = os.path.join(ROOT, "firmware")
+CC = None
 
 MAIN_C = r"""
 #include <stdio.h>
@@ -47,12 +48,20 @@ int main(int argc, char **argv) {
 """
 
 
+def find_cc():
+    """Tim mot trinh dich C bat ky. Windows thuong khong co san cai nao."""
+    for cc in ("gcc", "cc", "clang", "gcc.exe", "clang.exe"):
+        if shutil.which(cc):
+            return cc
+    return None
+
+
 def build(tmp):
     src = os.path.join(tmp, "main.c")
     with open(src, "w") as f:
         f.write(MAIN_C)
     exe = os.path.join(tmp, "dd")
-    r = subprocess.run(["gcc", "-O2", "-o", exe, src,
+    r = subprocess.run([CC, "-O2", "-o", exe, src,
                         os.path.join(FW, "dock_detect.c"), "-I", FW, "-lm"],
                        capture_output=True, text=True)
     if r.returncode != 0:
@@ -107,7 +116,7 @@ def check_link(tmp):
     with open(src, "w") as f:
         f.write(LINK_C)
     exe = os.path.join(tmp, "lk")
-    r = subprocess.run(["gcc", "-O2", "-o", exe, src,
+    r = subprocess.run([CC, "-O2", "-o", exe, src,
                         os.path.join(FW, "link_pack.c"), "-I", FW],
                        capture_output=True, text=True)
     if r.returncode != 0:
@@ -162,9 +171,22 @@ def check_link(tmp):
 
 
 def main():
-    if shutil.which("gcc") is None:
-        print("bo qua: may nay khong co gcc")
+    global CC
+    CC = find_cc()
+    if CC is None:
+        print("bo qua: may nay khong co trinh dich C (gcc/clang/cc).")
+        print()
+        print("  Khong sao - day chi la phep DOI CHIEU giua ban C trong")
+        print("  firmware/ va ban Python trong sim/ + link/. He thong van")
+        print("  chay day du khi thieu no, vi bo nao dang chay tren laptop")
+        print("  bang Python, con khi nap ESP32 thi Arduino IDE tu mang")
+        print("  trinh dich rieng cua no.")
+        print()
+        print("  Muon chay phep doi chieu nay tren Windows: cai w64devkit")
+        print("  (mot file zip, giai nen ra la xong) hoac MSYS2, roi them")
+        print("  thu muc bin vao PATH. Xong thi lenh nay se bao 5/5 dat.")
         return 0
+    print("dung trinh dich: %s" % CC)
     tmp = tempfile.mkdtemp()
     exe = build(tmp)
     bad = 0

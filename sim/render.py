@@ -26,7 +26,11 @@ def ascii_frame(env, cols=62):
 
     if env.world.dock is not None:
         r, c = cell(env.world.dock.x, env.world.dock.y)
-        grid[r][c] = "C" if env.world.dock.active else "c"
+        grid[r][c] = "C"
+        px, py = env.world.dock.pocket
+        r, c = cell(px, py)
+        if grid[r][c] == " ":
+            grid[r][c] = "o"
     if env.call is not None:
         r, c = cell(env.call.x, env.call.y)
         grid[r][c] = "!"
@@ -40,12 +44,16 @@ def ascii_frame(env, cols=62):
     body = "\n".join("|" + "".join(row) + "|" for row in grid)
     s = env.sensors
     bar = int(rb.battery * 10)
-    hud = ("t=%5.1fs  pin[%s%s] %3.0f%%  son=%s  vuc=%d%d  ir_goi=%.2f ir_sac=%.2f%s"
+    sec = env.lidar.sector_ranges(rb.theta)
+    n = len(sec)
+    fwd = min(sec[(n // 2 - 1) % n], sec[n // 2 % n])
+    cand = ", ".join("%.0f do/%.1fm" % (math.degrees(c.bearing), c.dist)
+                     for c in env.cands[:2]) or "khong"
+    hud = ("t=%5.1fs  pin[%s%s] %3.0f%%  truoc=%4.2fm  vuc=%d%d"
+           "  ir_goi=%.2f ir_sac=%.2f%s\nung vien 15cm: %s"
            % (env.steps * env.cfg.dt, "#" * bar, "." * (10 - bar), rb.battery * 100,
-              " ".join("%4.2f" % v for v in s.sonar),
-              int(s.cliff_front), int(s.cliff_rear),
-              s.ir[0], s.ir[1],
-              "  [DANG SAC]" if rb.charging else ""))
+              fwd, int(s.cliff_front), int(s.cliff_rear), s.ir[0], s.ir[1],
+              "  [DANG SAC]" if rb.charging else "", cand))
     return top + "\n" + body + "\n" + top + "\n" + hud
 
 

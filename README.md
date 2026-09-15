@@ -66,7 +66,7 @@ tức 3–5 giờ trên máy 8 nhân — chạy nền được, không phải ng
 |---|---|
 | **LiDAR Camsense X1/X2** | 3000 điểm/giây, quay 5–8 Hz → ~460 điểm mỗi vòng (0.8°/điểm), tầm 0.12–8 m. Mỗi vòng mất ~150 ms nên dữ liệu luôn cũ hơn thực tế 3 chu kỳ điều khiển; có nhiễu, rung góc, 2% điểm mất. Xoay bù theo odometry để vòng quét cũ vẫn chỉ đúng hướng |
 | 2 cặp bánh DC trái/phải | điều khiển vi sai, 2 lệnh PWM trong `[-1,1]`, trễ motor 0.12 s, vùng chết PWM, trượt bánh ngẫu nhiên |
-| Thân xe | **vuông 30 × 30 cm**. Với vật cản thường thì tính va chạm kiểu hình tròn cho nhanh; riêng lúc chui vào hộc sạc thì tính đúng hình vuông **và cả góc quay** — khe chỉ hở 5 mm mỗi bên, lấy hình tròn thay thế là sai hẳn |
+| Thân xe | **tròn, đường kính 30 cm**. Tròn dễ hơn vuông rất nhiều khi chui vào hộc: chỉ cần đúng trục trong phạm vi vài mm, **không có ràng buộc góc quay** — xe vuông cùng cỡ nghiêng 2° đã cần khe 31.0 cm |
 | 2 cảm biến vực | chiếu xuống ở **đầu** và **đuôi** xe (cách tâm 14.5 cm) |
 | 1 mắt thu hồng ngoại | ở đầu xe, góc thu ±46°, **2 kênh tần số**: kênh GỌI và kênh TRẠM SẠC |
 | Odometry | encoder 2 bánh, sai số đường kính 2.5% + trôi góc → trí nhớ vị trí trạm sạc mờ dần |
@@ -101,19 +101,24 @@ vòng gỡ lỗi vì đúng chuyện này.
 
 ### Khe 5 mm và đoạn vát ở miệng — chỗ cần bạn quyết
 
-Xe 30 cm, lòng hộc 31 cm. Mô phỏng cho ra con số dứt khoát: hộc **thẳng tuột**
-đòi xe vào đúng **±5 mm ngang và ±1° góc**. Hình học thuần thôi — xe vuông nghiêng
-2° đã cần khe 31.0 cm. Mà LiDAR ở cự ly cắm chỉ cho trục chính xác ~2°, tức là
-**đo tốt hết mức vẫn không đủ**. Không dẫn động vi sai nào cắm nổi.
+Xe tròn Ø30 cm, lòng hộc 31 cm. Thân tròn bỏ được hẳn ràng buộc góc — quay thế
+nào cũng lọt, miễn đúng trục. Nhưng đúng trục trong **±5 mm** thì vẫn quá chặt:
+LiDAR ở cự ly cắm cho trục chính xác ~2°, mà 2° trên quãng tiếp cận 40 cm đã là
+1.4 cm lệch ngang.
 
 Nên tôi thêm thứ mọi đế sạc thật đều có: **vát hai góc trong ở miệng hộc**. 8 cm
 đầu nong ra 37 cm rồi thu dần về 31 cm — kích thước ngoài vẫn đúng 40 × 40 cm của
-bạn. Cửa sổ bắt rộng ra ±3.5 cm, và mặt vát hoạt động như một cái **cam**: vừa
-đẩy xe sang ngang vừa **xoay** xe về đúng trục.
+bạn. Đo trong mô phỏng, tắt nhiễu trượt bánh để lấy con số sạch:
 
-Nếu bạn muốn xem lại bản thẳng tuột như bản vẽ gốc: đặt `BAY_FLARE = 0.0` trong
-`sim/world.py`. Còn nếu đóng thật, tôi khuyên hoặc giữ đoạn vát này, hoặc nới lòng
-trong lên ~34 cm.
+| miệng hộc | cửa sổ bắt |
+|---|---:|
+| thẳng tuột (`BAY_FLARE = 0`) | **±2 mm** |
+| vát 8 cm | **±38 mm** |
+| vát 12 cm | ±42 mm |
+
+Gấp gần **20 lần**, và 8 cm đã gần kịch trần hình học (lòng miệng 18.5 cm trừ bán
+kính xe 15 cm = 3.5 cm). Nếu đóng thật, tôi khuyên hoặc vát như vậy, hoặc nới lòng
+trong lên ~34 cm. Đặt `BAY_FLARE = 0.0` trong `sim/world.py` để xem lại bản thẳng.
 
 Bộ dò là thuật toán hình học thuần, không phải mạng nơ-ron, nên chuyển sang C chạy
 trên ESP32 được: `firmware/dock_detect.c` cho **kết quả trùng khít** bản Python

@@ -7,12 +7,11 @@ from .geometry import clamp, wrap_angle
 class RobotSpec:
     """Thong so vat ly cua xe - doi o day khi dung khung xe that.
 
-    Than xe VUONG 30 x 30 cm. Voi vat can thuong thi coi la hinh tron ban
-    kinh 15 cm cho nhanh; rieng khi chui vao hoc sac (long trong 31 cm, tuc
-    moi ben du 5 mm) thi phai tinh dung hinh vuong va dung ca goc quay.
+    Than xe TRON duong kinh 30 cm. Tron thi de hon vuong nhieu khi chui vao
+    hoc sac: chi can dung truc trong pham vi 5 mm, KHONG co rang buoc goc
+    quay. Xe vuong cung kich thuoc nghieng 2 do la da can khe 31.0 cm.
     """
-    half = 0.150            # nua canh than xe vuong (m)
-    radius = 0.150          # ban kinh tuong duong dung cho vat can thuong
+    radius = 0.150          # ban kinh than xe (m)
     wheel_base = 0.240      # khoang cach 2 ben banh (m)
     v_max = 0.50            # toc do banh toi da (m/s) o PWM 100%
     motor_tau = 0.12        # hang so thoi gian dap ung motor (s)
@@ -92,17 +91,15 @@ class Robot:
         # Va cham voi vat can: truot doc / chan lai
         self.bumped = False
         self.bump_bay = False
-        if world.blocked(nx, ny, ntheta, s.radius, s.half):
+        if world.min_obstacle_clearance(nx, ny) < s.radius:
             self.bumped = True
-            # Chi vach hoc chan thoi, vat can thuong thi khong -> dang co chui
-            # vao hoc va xat nhe hai ben. Chuyen do binh thuong, dung phat.
-            self.bump_bay = world.min_obstacle_clearance(nx, ny) >= s.radius
+            # Cham vach hoc thi khac cham vat can: khe chui vao chi ho 5 mm
+            # moi ben nen xat nhe hai ben la chuyen binh thuong, dung phat.
+            self.bump_bay = world.bay_clearance(nx, ny) < s.radius
             # Mat vat cheo o mieng hoc nan xe ve giua truoc da
-            wd = world.wedge(nx, ny, ntheta, s.radius, s.half) \
-                if self.bump_bay else None
+            wd = world.wedge(nx, ny, ntheta, s.radius) if self.bump_bay else None
             if wd is not None:
-                nx, ny, ntheta = wd
-                self.x, self.y, self.theta = nx, ny, ntheta
+                self.x, self.y, self.theta = wd[0], wd[1], ntheta
                 self.vl *= 0.85
                 self.vr *= 0.85
                 self._odo(dt)
@@ -111,14 +108,12 @@ class Robot:
                 self._drain(dt)
                 return self.fallen
             # thu truot theo tung truc de xe khong bi dinh cung
-            if not world.blocked(nx, self.y, ntheta, s.radius, s.half):
+            if world.min_obstacle_clearance(nx, self.y) >= s.radius:
                 ny = self.y
-            elif not world.blocked(self.x, ny, ntheta, s.radius, s.half):
+            elif world.min_obstacle_clearance(self.x, ny) >= s.radius:
                 nx = self.x
             else:
                 nx, ny = self.x, self.y
-                ntheta = self.theta if world.blocked(
-                    self.x, self.y, ntheta, s.radius, s.half) else ntheta
             self.vl *= 0.3
             self.vr *= 0.3
 
@@ -186,9 +181,3 @@ class Robot:
                 "batt": self.battery, "charging": self.charging,
                 "bump": self.bumped, "v": self.v, "w": self.omega}
 
-    def footprint(self):
-        """4 goc than xe - dung de ve hinh."""
-        c, s = math.cos(self.theta), math.sin(self.theta)
-        h = self.spec.half
-        return [(self.x + u * c - v * s, self.y + u * s + v * c)
-                for u, v in ((h, h), (h, -h), (-h, -h), (-h, h))]

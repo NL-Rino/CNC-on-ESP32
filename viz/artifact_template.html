@@ -110,8 +110,8 @@ footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
   <p class="sub" style="margin-top:14px;max-width:70ch">Các tab <b>viết tay</b> là bộ điều khiển
   luật cứng — nó làm trọn quy trình: đi long nhong, thấy hộc thì vòng ra đối diện cửa, hỏi hồng
   ngoại, chui vào sạc đầy rồi đi tiếp. Các tab <b>AI</b> là bộ não đang nuôi. Hộc <span
-  class="mono">40×40 cm</span> ngoài, lòng <span class="mono">31×31 cm</span>, xe
-  <span class="mono">30×30 cm</span> — mỗi bên chỉ dư <b>5 mm</b>.</p>
+  class="mono">40×40 cm</span> ngoài, lòng <span class="mono">31×31 cm</span>, xe tròn
+  <span class="mono">Ø30 cm</span> — mỗi bên chỉ dư <b>5 mm</b>.</p>
 
   <div class="deck">
     <div>
@@ -363,14 +363,11 @@ function draw(){
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  // Than xe VUONG 30 x 30 cm - ve dung hinh, vi chinh goc xe la thu quyet
-  // dinh no co lot qua khe 31 cm hay khong.
-  const H = 0.15 * p.s;
-  ctx.save();
-  ctx.translate(X(f.x,p), Y(f.y,p)); ctx.rotate(-f.th);
+  // Than xe TRON duong kinh 30 cm - lot qua khe 31 cm o goc quay nao cung duoc,
+  // mien la dung truc. Do la loi the lon cua hinh tron so voi hinh vuong.
+  const R = 0.15 * p.s;
   ctx.fillStyle = f.charging ? css('--dock') : (f.bump ? danger : trace);
-  ctx.fillRect(-H, -H, 2*H, 2*H);
-  ctx.restore();
+  ctx.beginPath(); ctx.arc(X(f.x,p), Y(f.y,p), R, 0, 7); ctx.fill();
   ctx.strokeStyle = css('--scope'); ctx.lineWidth = 2.5; ctx.beginPath();
   ctx.moveTo(X(f.x,p), Y(f.y,p));
   ctx.lineTo(X(f.x + 0.17*Math.cos(f.th),p), Y(f.y + 0.17*Math.sin(f.th),p)); ctx.stroke();

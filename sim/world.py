@@ -3,7 +3,7 @@
 Tram sac la mot HOC hinh chu U de xe chui han vao trong:
   - kich thuoc ngoai 40 x 40 cm, long trong 31 x 31 cm, vach day 4.5 cm
   - den hong ngoai gan GIUA THANH TRONG (vach day), chieu thang ra cua
-Xe rong 30 cm nen chui vao chi con du moi ben 5 mm - phai canh rat chuan.
+Xe TRON duong kinh 30 cm nen chui vao chi con du moi ben 5 mm.
 
 Vi la chu U nen LiDAR doc duoc ca HUONG cua hoc chu khong chi vi tri: hai
 mep cua tao thanh mot day cung, long hoc lom vao phia sau day cung do. Do la
@@ -109,15 +109,6 @@ class Beacon:
                 "dir": self.dir_ang, "cone": self.cone}
 
 
-def _pt_in_square(px, py, x, y, c, s, half):
-    """Diem co nam trong hinh vuong canh 2*half, tam (x,y), quay goc (c,s)?"""
-    dx = px - x
-    dy = py - y
-    u = dx * c + dy * s
-    v = -dx * s + dy * c
-    return -half <= u <= half and -half <= v <= half
-
-
 class Bay:
     """Hoc chu U de xe chui vao: vach day + hai vach ben.
 
@@ -187,28 +178,14 @@ class Bay:
         return (dx * c + dy * s, -dx * s + dy * c,
                 (theta - self.heading + math.pi) % (2.0 * math.pi) - math.pi)
 
-    def blocks_square(self, x, y, theta, half):
-        """Than xe VUONG canh 2*half co dam vao vach nao khong?
-
-        Xe tron thi chi can lech 5 mm la ket; xe vuong con phai canh dung goc
-        nua (lech 2 do la cham vach). Kiem tra bang cach doi chieu hai chieu:
-        goc xe co nam trong vach khong, va goc vach co nam trong xe khong.
-        """
-        c, s = math.cos(theta), math.sin(theta)
-        pts = []
-        for u in (-half, 0.0, half):
-            for v in (-half, 0.0, half):
-                if u == 0.0 and v == 0.0:
-                    continue
-                pts.append((x + u * c - v * s, y + u * s + v * c))
+    def clearance(self, x, y):
+        """Khoang cach tu tam xe toi vach gan nhat cua hoc nay."""
+        best = 1e9
         for w in self.walls:
-            for px, py in pts:
-                if w.x0 <= px <= w.x1 and w.y0 <= py <= w.y1:
-                    return True
-            for px, py in w.corners():
-                if _pt_in_square(px, py, x, y, c, s, half):
-                    return True
-        return False
+            d = w.dist_to_point(x, y)
+            if d < best:
+                best = d
+        return best
 
     def as_dict(self):
         return {"x": self.x, "y": self.y, "heading": self.heading,
@@ -258,10 +235,9 @@ class World:
         self._arrays_dirty = True
 
     def add_bay(self, bay):
-        """Vach hoc KHONG vao `solid`: va cham voi no tinh theo than xe vuong,
-        vi khe chi rong hon xe 1 cm - lay hinh tron thay the la sai het."""
         self.bays.append(bay)
         self.obstacles.extend(bay.walls)
+        self.solid.extend(bay.walls)
         self._arrays_dirty = True
 
     # ---------------------------------------------------------------- dung mang
@@ -350,7 +326,6 @@ class World:
         return True
 
     def min_obstacle_clearance(self, x, y):
-        """Chi tinh vat can thuong - vach hoc xu ly rieng trong `blocked`."""
         best = 1e9
         for ob in self.solid:
             d = ob.dist_to_point(x, y)
@@ -358,65 +333,54 @@ class World:
                 best = d
         return best
 
-    def blocked(self, x, y, theta, radius, half=None):
-        """Xe o tu the nay co dam vao thu gi khong?
-
-        Vat can thuong: lay than xe la hinh tron ban kinh `radius`.
-        Vach hoc: lay than xe la hinh VUONG canh 2*half va co xet goc quay,
-        vi khe hoc chi rong hon xe 1 cm - sai so hinh tron o day la qua lon.
-        """
-        if self.min_obstacle_clearance(x, y) < radius:
-            return True
-        if half is None:
-            half = radius
-        reach = half * 1.4143 + 0.5 * BAY_OUT
+    def bay_clearance(self, x, y):
+        """Khoang cach toi vach hoc gan nhat (bo qua vat can thuong)."""
+        best = 1e9
         for bay in self.bays:
-            if (x - bay.x) ** 2 + (y - bay.y) ** 2 > reach * reach:
-                continue
-            if bay.blocks_square(x, y, theta, half):
-                return True
-        return False
+            d = bay.clearance(x, y)
+            if d < best:
+                best = d
+        return best
 
-    def wedge(self, x, y, theta, radius, half):
+    def wedge(self, x, y, theta, radius):
         """Vach loe day xe ve giua truc - mo phong doan vat goc o mieng hoc.
 
-        Xe dam vao mat vat cheo thi bi day sang ngang va xoay theo, y nhu mot
-        cai nem. Khong co buoc nay thi doan loe chi de nhin: xe cham vach la
-        dung yen tai cho chu khong duoc nan lai.
+        Than xe TRON nen cai nem chi phai lam mot viec: day xe sang ngang cho
+        dung truc. Khong co buoc nay thi doan loe chi de nhin - xe cham vach
+        la dung yen tai cho chu khong duoc nan lai.
         """
         for bay in self.bays:
             u, v, dth = bay.to_local(x, y, theta)
             # CHI nan khi xe that su dang ti vao mat vat o mieng hoc va dang
-            # huong vao trong. Khong co ba dieu kien nay thi cai nem tro thanh
-            # nam cham: xe huc vao SUON hoc cung bi keo ve truc - tuc la di
-            # xuyen qua vach, va xe lo dam vao hoc moi nhu thi bi hut han vao
-            # trong roi ket cung o do.
-            if u < -bay.half_out - 0.16 or u > bay.half_in:
+            # huong vao trong. Thieu ba dieu kien nay thi cai nem thanh nam
+            # cham: xe huc vao SUON hoc cung bi keo ve truc (tuc la di xuyen
+            # qua vach), va lo dam vao hoc moi nhu thi bi hut han vao trong.
+            # Cai nem CHI ton tai o doan vat. Qua khoi doan do, hai vach song
+            # song voi truc: chung chan duoc xe di ngang chu khong day duoc xe
+            # sang ben. Dat BAY_FLARE = 0 thi khong con cho nao nan xe ca -
+            # va do dung la cai hoc thang tuot doi +-5 mm.
+            if BAY_FLARE <= 0.0:
                 continue
-            if abs(v) > bay.half_in + half - 0.02:
+            if u < -bay.half_out - radius or u > -bay.half_out + BAY_FLARE:
                 continue
-            if abs(dth) > 0.55:
+            # Lech qua ngan nay thi mui xe dam thang vao MAT TRUOC cua vach
+            # chu khong ti vao mat vat - khong co gi nan no ca. Day chinh la
+            # gioi han hinh hoc: o mat cua, long ho `mouth_half`, xe ban kinh
+            # `radius`, nen tam xe phai nam trong khoang do tru di ban kinh.
+            if abs(v) > bay.mouth_half - radius + 0.005 or abs(dth) > 0.55:
                 continue
-            # Mat vat la mot cai CAM: no vua day xe sang ngang vua XOAY xe.
-            # Phan xoay moi la phan quan trong - xe vuong 30 cm nghieng 8 do
-            # can khe 34 cm, rong hon ca mieng hoc da loe. Lech ngang thi de
-            # sua, lech goc ma khong nan duoc thi xe ket cung o mieng.
-            for dt in (0.0, 0.02, 0.05, 0.09, 0.14):
-                nth = theta - math.copysign(min(dt, abs(dth)), dth) \
-                    if dth else theta
-                for dv in (0.0, 0.004, 0.010, 0.018, 0.028, 0.040):
-                    nv = v - math.copysign(min(dv, abs(v)), v) if v else v
-                    nx, ny = bay.local_to_world(u, nv)
-                    if not self.blocked(nx, ny, nth, radius, half):
-                        return nx, ny, nth
+            for dv in (0.004, 0.010, 0.018, 0.028, 0.040):
+                nv = v - math.copysign(min(dv, abs(v)), v) if v else v
+                nx, ny = bay.local_to_world(u, nv)
+                if self.min_obstacle_clearance(nx, ny) >= radius:
+                    return nx, ny
         return None
 
     def free_spot(self, rng, radius, margin=0.12, tries=200):
         for _ in range(tries):
             x = rng.uniform(margin + radius, self.width - margin - radius)
             y = rng.uniform(margin + radius, self.height - margin - radius)
-            if (self.min_obstacle_clearance(x, y) > radius + 0.08 and
-                    not self.blocked(x, y, 0.0, radius + 0.05)):
+            if self.min_obstacle_clearance(x, y) > radius + 0.10:
                 return x, y
         return self.width * 0.5, self.height * 0.5
 

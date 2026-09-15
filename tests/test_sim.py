@@ -142,26 +142,54 @@ def test_bo_do_khong_nham_hop_dac_la_hoc():
             assert abs(c.bearing) > 0.4, "nham hop dac thanh hoc: %r" % (c,)
 
 
-def test_mieng_hoc_loe_bat_duoc_xe_lech():
-    """Doan loe la thu duy nhat lam cho viec cam sac kha thi.
+def _capture_window(flare, steps=3):
+    """Lech ngang toi da o cua ma xe van chui tron vao duoc (m)."""
+    import sim.world as WW
+    old_f, old_s = WW.BAY_FLARE, WW.BAY_FLARE_STEPS
+    WW.BAY_FLARE, WW.BAY_FLARE_STEPS = flare, max(1, steps)
+    try:
+        w, dock = _lone_dock(0.0)
 
-    Hoc thang tap 31 cm voi xe 30 cm doi hoi vao dung +-5 mm; doan vat goc
-    o mieng noi cua so do ra +-3 cm, roi hai vach tu nan xe ve giua.
-    """
+        class NoSlip(RobotSpec):
+            slip_noise = 0.0
+
+        rb = Robot(NoSlip())
+        best = -1.0
+        for i in range(20):
+            lat = 0.0025 * i
+            x, y = dock.local_to_world(-0.40, lat)
+            rb.reset(x, y, dock.heading, 0.5)
+            rng = random.Random(1)
+            for _ in range(140):
+                rb.step(0.30, 0.30, 0.05, w, rng)
+            if rb.try_charge(w, 0.05, True) > 0.0:
+                best = lat
+        return best
+    finally:
+        WW.BAY_FLARE, WW.BAY_FLARE_STEPS = old_f, old_s
+
+
+def test_mieng_hoc_loe_la_thu_lam_cho_viec_cam_sac_kha_thi():
+    """Hoc thang tuot 31 cm voi xe tron 30 cm chi ho 5 mm moi ben - khong
+    cach nao lai vao chuan den the. Vat hai goc trong o mieng noi cua so bat
+    ra gap muoi lan. Test nay giu cho con so do khong am tham tut di."""
+    thang = _capture_window(0.0, 0)
+    loe = _capture_window(0.08, 3)
+    assert thang <= 0.006, "hoc thang tuot ma bat duoc +-%.0f mm?" % (1000 * thang)
+    assert loe >= 0.030, "co doan loe ma chi bat duoc +-%.0f mm" % (1000 * loe)
+    assert loe > 4.0 * max(thang, 0.0025)
+
+
+def test_than_xe_tron_khong_co_rang_buoc_goc_khi_chui_vao():
+    """Xe TRON nen quay the nao cung lot qua khe, mien la dung truc. Xe vuong
+    cung kich thuoc nghieng 2 do la da can khe 31.0 cm - het cua."""
     w, dock = _lone_dock(0.0)
     rb = Robot()
-    got = []
-    for lat in (0.0, 0.02, 0.04, -0.03):
-        x, y = dock.local_to_world(-0.75, lat)
-        rb.reset(x, y, dock.heading, 0.5)
-        rng = random.Random(4)
-        for _ in range(180):
-            rb.step(0.32, 0.32, 0.05, w, rng)
-        u, v, _ = dock.to_local(rb.x, rb.y, rb.theta)
-        got.append((lat, u, v))
-        assert u > -0.05, "lech %.2f m: chi vao toi u=%.3f" % (lat, u)
-        assert abs(v) < 0.01, "lech %.2f m: vao lech %.3f m" % (lat, v)
-    assert rb.try_charge(w, 0.05, True) > 0.0, "vao tan noi ma khong sac"
+    for deg in (0, 5, 15, 30):
+        x, y = dock.local_to_world(-0.05)
+        rb.reset(x, y, dock.heading + math.radians(deg), 0.5)
+        assert w.min_obstacle_clearance(rb.x, rb.y) >= rb.spec.radius, \
+            "xe tron o giua hoc ma bao ket khi quay %d do" % deg
 
 
 def test_bo_do_bo_qua_tuong_dai():

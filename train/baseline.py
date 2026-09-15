@@ -168,7 +168,7 @@ class ReactiveController:
                 return (sp - turn, sp + turn)
 
             # da doi dien cua hoc: canh truc cho thang
-            if abs(yaw) > 0.05:
+            if abs(yaw) > 0.06:
                 sp = max(-0.42, min(0.42, 1.6 * yaw))
                 return (-sp, sp)
 

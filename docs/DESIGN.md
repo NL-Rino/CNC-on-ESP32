@@ -199,19 +199,24 @@ Sửa: tập dài 65 giây, tăng tốc độ hao pin, một nửa số tập b�
 3.154 tham số, ES học chậm hẳn. Nén còn 12 quạt + 2 ứng viên = 40 đầu vào →
 1.934 tham số. Bài học: với ES, mỗi đầu vào thừa đều phải trả giá bằng thế hệ.
 
-**(f) Khe 31 cm cho xe 30 cm là bất khả thi nếu không vát mép.** Mô phỏng cho ra
-con số dứt khoát: hộc thẳng tuột đòi xe vào đúng **±5 mm ngang và ±1° góc**. Hình
-học thuần: xe vuông cạnh 30 cm nghiêng góc φ cần khe `30·(cos φ + sin φ)`, nghiêng
-2° đã là 31.0 cm. Mà LiDAR ở cự ly cắm chỉ cho trục chính xác ~2°. Tức là **đo tốt
-hết mức vẫn không đủ**.
+**(f) Khe 31 cm cho xe Ø30 cm là bất khả thi nếu không vát mép.** Thân tròn bỏ
+được ràng buộc góc (xe vuông cùng cỡ nghiêng 2° đã cần khe 31.0 cm), nhưng vẫn
+phải đúng trục trong **±5 mm**. Mà LiDAR ở cự ly cắm cho trục chính xác ~2°, và
+2° trên quãng tiếp cận 40 cm là 1.4 cm lệch ngang — **đo tốt hết mức vẫn không đủ**.
 
-Cách sửa là cách mọi đế sạc thật đều dùng: **vát hai góc trong ở miệng**. 8 cm
-đầu nong ra 37 cm rồi thu dần về 31 cm. Cửa sổ bắt rộng ±3.5 cm, và quan trọng
-hơn: mặt vát là một cái **cam** — nó vừa đẩy xe sang ngang vừa **xoay** xe về
-đúng trục. Phần xoay mới là phần quyết định; bản mô phỏng đầu tôi chỉ cho nó đẩy
-ngang, và xe lệch 7.8° kẹt cứng ở miệng dù lệch ngang chỉ 1 mm.
+Cách sửa là cách mọi đế sạc thật đều dùng: **vát hai góc trong ở miệng**. Đo với
+nhiễu trượt bánh tắt: thẳng tuột **±2 mm**, vát 8 cm **±38 mm**, vát 12 cm ±42 mm.
+8 cm đã gần kịch trần hình học (lòng miệng 18.5 − bán kính xe 15 = 3.5 cm).
 
-Đặt `BAY_FLARE = 0.0` trong `sim/world.py` để quay lại hộc thẳng tuột mà xem.
+Một cái bẫy trong chính mô hình này: lần đầu tôi cho cái "nêm" nắn xe ở **mọi**
+chỗ chạm vách hộc. Kết quả là hộc thẳng tuột cũng bắt được xe lệch 6 cm — vô lý,
+vì vách song song với trục thì chặn được xe đi ngang chứ không đẩy được xe sang
+bên. Nêm chỉ tồn tại ở đoạn vát. Nó còn biến thành nam châm: xe húc vào **sườn**
+hộc cũng bị kéo về trục, tức là đi xuyên qua vách, và lỡ đâm vào hộc mồi nhử thì
+bị hút hẳn vào trong rồi kẹt cứng — đó là lý do stage 2 từng rơi bàn 88%.
+
+Bài học: một "mô hình tuân thủ" viết ẩu sẽ âm thầm làm bài toán dễ đi, và bạn chỉ
+phát hiện khi ra phần cứng thật. Đặt `BAY_FLARE = 0.0` để xem lại hộc thẳng tuột.
 
 Bài học chung: khi agent **không** học được một kỹ năng, đừng tăng số thế hệ. Hãy
 đo xem nó thật sự đi tới đâu và dừng lại ở đâu — gần như lần nào nguyên nhân cũng
@@ -222,6 +227,8 @@ là hai khoản thưởng đang kéo ngược nhau.
 1. `v_max`, `motor_tau`, `deadband` — đo bằng cách cho xe chạy 1 m và quay video.
    **Quãng đường phanh phải nhỏ hơn khoảng cách từ tâm xe tới cảm biến vực**
    (mô phỏng: ~5.5 cm phanh so với 14.5 cm cảm biến).
+5. **Cửa sổ bắt ở miệng hộc**: đẩy xe vào từ nhiều độ lệch ngang khác nhau, đo
+   xem lệch tới đâu thì vẫn vào lọt. Mô phỏng nói ±38 mm với đoạn vát 8 cm.
 2. Chu kỳ gom một vòng LiDAR thật (phụ thuộc tốc độ quay thật, 5–8 Hz).
 3. Ngưỡng cảm biến vực thực tế và độ trễ của nó.
 4. Đặc tuyến cường độ IR thật: bịt đèn lại, đo giá trị theo góc và khoảng cách.

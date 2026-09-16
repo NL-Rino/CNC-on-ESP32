@@ -88,7 +88,8 @@ def main():
     ap.add_argument("--lr", type=float, default=0.035)
     ap.add_argument("--hidden", type=int, default=16)
     ap.add_argument("--max-steps", type=int, default=1600)
-    ap.add_argument("--stage", type=int, default=3)
+    ap.add_argument("--stage", type=int, default=-1,
+                    help="-1 = tu quyet (nap lai thi theo file, moi thi 3)")
     ap.add_argument("--curriculum", action="store_true",
                     help="bat dau tu stage 0 va tu dong len cap")
     ap.add_argument("--min-gens-per-stage", type=int, default=15)
@@ -103,23 +104,56 @@ def main():
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
-    stage = 0 if args.curriculum else args.stage
+    stop_path = os.path.join(args.out, "STOP")
+    if os.path.exists(stop_path):
+        os.remove(stop_path)       # don file dung cu, khong thi vua chay da dung
     hidden = args.hidden
 
     pol = GRUPolicy(OBS_DIM, ACT_DIM, hidden, seed=args.seed)
     start_gen = 0
-    if args.resume:
-        pol, meta = GRUPolicy.load(args.resume)
+    saved_stage = None
+    saved_state = None
+    resume_path = args.resume
+    if resume_path and os.path.isdir(resume_path):
+        cand = os.path.join(resume_path, "state.npz")
+        resume_path = cand if os.path.exists(cand) else \
+            os.path.join(resume_path, "last.npz")
+    if resume_path:
+        pol, meta = GRUPolicy.load(resume_path)
         hidden = pol.hidden
-        # Cap hoc luon lay tu dong lenh (--curriculum -> cap 0, khong thi
-        # --stage), khong lay tu file: nap lai mot bo nao cu de cho no hoc bai
-        # KHAC la chuyen binh thuong.
         if "gen" in meta:
             start_gen = int(meta["gen"])
-        print("resume tu %s (gen=%d, stage=%d)" % (args.resume, start_gen, stage))
+        if "es_theta" in meta:
+            saved_state = meta
+            saved_stage = int(meta["stage"]) if "stage" in meta else None
+
+    # Cap hoc: --stage N ep cung; khong thi nap lai diem cu dang do (theo
+    # file), con moi tinh thi --curriculum -> 0, mac dinh -> 3.
+    if args.stage >= 0:
+        stage = args.stage
+    elif saved_stage is not None:
+        stage = saved_stage
+    elif args.curriculum:
+        stage = 0
+    else:
+        stage = 3
 
     es = ES(pol.get_params(), popsize=args.pop, sigma=args.sigma, lr=args.lr,
             seed=args.seed + 1)
+    stage_gen0 = start_gen
+    best_score = -1e18
+    if saved_state is not None:
+        es.load_state(saved_state)
+        stage_gen0 = int(saved_state.get("stage_gen0", start_gen))
+        best_score = float(saved_state.get("best_score", -1e18))
+        print("chay tiep tu %s: gen %d, stage %d, sigma %.4f"
+              % (resume_path, start_gen, stage, es.sigma))
+    elif resume_path:
+        print("nap TRONG SO tu %s (gen %d) nhung file nay khong co trang thai"
+              % (resume_path, start_gen))
+        print("   tien hoa -> bat dau lai sigma=%.3f. Muon chay tiep dung cho"
+              " vua dung thi tro --resume vao THU MUC run (vd runs/bay11)."
+              % args.sigma)
     print("tham so bo nao: %d | pop=%d | episodes=%d | jobs=%d"
           % (pol.n_params, args.pop, args.episodes, args.jobs))
 
@@ -132,8 +166,6 @@ def main():
                       "eval_return", "arrivals", "charged", "full_charges",
                       "cells", "bumps", "fell", "flat", "secs"])
 
-    best_score = -1e18
-    stage_gen0 = 0
     rng = np.random.default_rng(args.seed + 7)
     t_start = time.time()
 
@@ -142,6 +174,25 @@ def main():
     if pool is None:
         _init_worker(hidden, args.max_steps)
 
+    def save_state(g, st):
+        """Anh chup DAY DU: nap lai la chay tiep dung cho vua dung.
+
+        Khong dung best.npz de chay tiep duoc: no chi duoc ghi khi diem danh
+        gia PHA KY LUC, nen den the he 6000 ma ky luc lap tu 1744 thi no van
+        ghi gen=1744 - nap lai la tut ve day. Day la loi that, da mat gio cua
+        nguoi dung. state.npz thi ghi moi the he, khong dieu kien gi.
+        """
+        pol.set_params(es.theta.astype(np.float32))
+        extra = es.state_dict()
+        extra["stage"] = np.int64(st)
+        extra["stage_gen0"] = np.int64(stage_gen0)
+        extra["best_score"] = np.float64(best_score)
+        tmp = os.path.join(args.out, "state.tmp.npz")
+        pol.save(tmp, gen=g + 1, **extra)
+        os.replace(tmp, os.path.join(args.out, "state.npz"))
+
+    stopped = ""
+    g = start_gen - 1
     try:
         for g in range(start_gen, start_gen + args.gens):
             t0 = time.time()
@@ -192,7 +243,12 @@ def main():
             log_f.flush()
 
             pol.set_params(es.theta.astype(np.float32))
-            pol.save(os.path.join(args.out, "last.npz"), gen=g, stage=stage)
+            pol.save(os.path.join(args.out, "last.npz"), gen=g + 1, stage=stage)
+            save_state(g, stage)
+
+            if os.path.exists(stop_path):
+                stopped = "co nguoi bam nut dung"
+                break
 
             # len cap
             if args.curriculum and ev is not None and stage < 3 and \
@@ -204,18 +260,24 @@ def main():
                 print(">>> len cap: stage %d (xe da qua bai truoc)" % stage, flush=True)
 
             if args.time_budget > 0 and (time.time() - t_start) / 60.0 > args.time_budget:
-                print("het thoi gian cho phep, dung lai.", flush=True)
+                stopped = "het thoi gian cho phep"
                 break
+    except KeyboardInterrupt:
+        stopped = "Ctrl+C"
     finally:
+        save_state(g, stage)
         if pool is not None:
             pool.close()
             pool.join()
         log_f.close()
 
-    pol.set_params(es.theta.astype(np.float32))
-    pol.save(os.path.join(args.out, "last.npz"), gen=start_gen + args.gens,
-             stage=stage)
-    print("xong. bo nao tot nhat: %s/best.npz" % args.out)
+    if os.path.exists(stop_path):
+        os.remove(stop_path)
+    print("\n%s o the he %d (stage %d)."
+          % (stopped or "chay xong", g + 1, stage), flush=True)
+    print("  bo nao diem cao nhat : %s" % os.path.join(args.out, "best.npz"))
+    print("  chay tiep dung cho nay: python -m train.train --resume %s ..."
+          % args.out)
 
 
 if __name__ == "__main__":

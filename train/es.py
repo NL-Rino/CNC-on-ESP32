@@ -5,6 +5,8 @@ vao bo gen hien tai (lay mau doi xung +/- de giam phuong sai), cham diem tung
 ca the trong mo phong, roi dich bo gen theo huong cac ca the diem cao.
 Rat hop voi bai toan nay vi phan thuong thua va policy co trang thai an.
 """
+import json
+
 import numpy as np
 
 
@@ -60,6 +62,47 @@ class ES:
         pop[0::2] = self.theta + self.sigma * self.eps
         pop[1::2] = self.theta - self.sigma * self.eps
         return pop.astype(np.float32)
+
+    # ------------------------------------------------------------ luu / nap
+    def state_dict(self):
+        """Toan bo thu can de chay tiep y het cho vua dung.
+
+        Khong chi theta: sigma da giam den dau, Adam da tich luy bao nhieu
+        dong luong, bo sinh so ngau nhien dang o dau. Nap lai ma thieu may
+        thu nay thi tien hoa bi giat lui - khong mat het, nhung mat cong.
+        """
+        return {
+            "es_theta": self.theta,
+            "es_sigma": np.float64(self.sigma),
+            "es_gen": np.int64(self.gen),
+            "es_popsize": np.int64(self.popsize),
+            "opt_m": self.opt.m,
+            "opt_v": self.opt.v,
+            "opt_t": np.int64(self.opt.t),
+            "opt_lr": np.float64(self.opt.lr),
+            "rng_state": np.str_(json.dumps(
+                self.rng.bit_generator.state, default=str)),
+        }
+
+    def load_state(self, d):
+        self.theta = np.asarray(d["es_theta"], dtype=np.float64).copy()
+        self.n = self.theta.size
+        self.sigma = float(d["es_sigma"])
+        self.gen = int(d["es_gen"])
+        self.opt.m = np.asarray(d["opt_m"], dtype=np.float64).copy()
+        self.opt.v = np.asarray(d["opt_v"], dtype=np.float64).copy()
+        self.opt.t = int(d["opt_t"])
+        self.opt.lr = float(d["opt_lr"])
+        try:
+            st = json.loads(str(d["rng_state"]))
+            st["bit_generator"] = str(st["bit_generator"])
+            if isinstance(st.get("state"), dict):
+                for k in ("state", "inc"):
+                    if k in st["state"]:
+                        st["state"][k] = int(st["state"][k])
+            self.rng.bit_generator.state = st
+        except Exception:      # noqa: BLE001 - thieu no chi kem ngau nhien
+            pass
 
     def tell(self, fitness):
         f = np.asarray(fitness, dtype=np.float64)

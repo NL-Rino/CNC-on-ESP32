@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Xưởng làm việc — xe tự hành</title>
+<style>
+:root{
+  --bg:#f6f7f8; --panel:#fff; --sunk:#eceef0; --line:#d8dde1;
+  --ink:#11181c; --ink-2:#4a5560; --ink-3:#8d99a5;
+  --trace:#0f7d52; --call:#b4620a; --dock:#0b6d94; --danger:#b3241f;
+  --scope:#11181c;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --bg:#0b1116; --panel:#111a21; --sunk:#0a1015; --line:#1e2c36;
+  --ink:#e6edf3; --ink-2:#9fb0be; --ink-3:#61727f;
+  --trace:#3ddc97; --call:#f2a33c; --dock:#4cc4ef; --danger:#ff6b63;
+  --scope:#e6edf3;
+}}
+:root[data-theme=dark]{
+  --bg:#0b1116; --panel:#111a21; --sunk:#0a1015; --line:#1e2c36;
+  --ink:#e6edf3; --ink-2:#9fb0be; --ink-3:#61727f;
+  --trace:#3ddc97; --call:#f2a33c; --dock:#4cc4ef; --danger:#ff6b63;
+  --scope:#e6edf3;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.55 "Segoe UI",system-ui,-apple-system,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:18px 16px 40px}
+h1{font-size:19px;margin:0;letter-spacing:-.01em}
+.sub{color:var(--ink-2);font-size:13px;margin:2px 0 0}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.tabs{display:flex;gap:4px;background:var(--sunk);padding:3px;border-radius:9px}
+.tabs button{border:0;background:none;color:var(--ink-2);padding:7px 15px;border-radius:7px;
+  font:inherit;font-size:14px;cursor:pointer}
+.tabs button[aria-selected=true]{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px #0002}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+label{display:block;font-size:12px;color:var(--ink-2);margin-bottom:3px}
+select,input[type=number],input[type=text]{background:var(--sunk);color:var(--ink);
+  border:1px solid var(--line);border-radius:7px;padding:6px 9px;font:inherit;font-size:14px}
+input[type=number]{width:88px}
+button.act{background:var(--ink);color:var(--bg);border:0;border-radius:8px;padding:8px 16px;
+  font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+button.act:disabled{opacity:.45;cursor:default}
+button.ghost{background:none;border:1px solid var(--line);color:var(--ink);border-radius:8px;
+  padding:7px 13px;font:inherit;font-size:14px;cursor:pointer}
+button.stop{background:var(--danger);color:#fff;border:0;border-radius:8px;padding:9px 18px;
+  font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.scope{background:var(--sunk);border:1px solid var(--line);border-radius:10px;overflow:hidden;
+  margin:12px 0}
+canvas{display:block;width:100%;height:auto;touch-action:none}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px;margin-top:10px}
+.stat{background:var(--sunk);border-radius:9px;padding:8px 10px}
+.stat b{display:block;font-size:17px;font-variant-numeric:tabular-nums}
+.stat span{font-size:11px;color:var(--ink-3)}
+.tools{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.tools button{border:1px solid var(--line);background:var(--panel);color:var(--ink-2);
+  border-radius:8px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer}
+.tools button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.note{font-size:12.5px;color:var(--ink-2);margin:8px 0 0}
+.bar{display:flex;gap:10px;align-items:center;margin-top:8px}
+input[type=range]{flex:1;accent-color:var(--trace)}
+.train{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;
+  background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--trace);
+  border-radius:10px;padding:11px 14px;margin-bottom:14px}
+.train .n{font-variant-numeric:tabular-nums;font-weight:600}
+.msg{font-size:13px;padding:8px 11px;border-radius:8px;margin-top:9px;display:none}
+.msg.ok{background:#0f7d5218;color:var(--trace);display:block}
+.msg.err{background:#b3241f18;color:var(--danger);display:block}
+.hide{display:none!important}
+.mono{font-family:"Cascadia Mono",Consolas,monospace}
+</style></head><body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>Xưởng làm việc</h1>
+    <p class="sub">Xem xe chạy · vẽ nhà của bạn · dừng huấn luyện cho an toàn</p>
+  </div>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="t-xem" aria-selected="true">Xem xe chạy</button>
+    <button role="tab" id="t-ve" aria-selected="false">Vẽ nhà</button>
+  </div>
+</header>
+
+<div id="train-strip"></div>
+
+<!-- ------------------------------------------------------------ XEM -->
+<section id="p-xem">
+  <div class="card">
+    <div class="row">
+      <div><label for="brain">Bộ não</label><select id="brain"></select></div>
+      <div><label for="layout">Mặt bằng</label><select id="layout"></select></div>
+      <div><label for="seed">Hạt giống</label><input type="number" id="seed" value="1" min="0"></div>
+      <div><label for="steps">Số bước</label><input type="number" id="steps" value="900" min="100" step="100"></div>
+      <button class="act" id="run">Chạy thử</button>
+      <button class="ghost" id="again">Cảnh khác</button>
+    </div>
+    <div class="msg" id="xem-msg"></div>
+  </div>
+
+  <div class="scope"><canvas id="cv" width="1120" height="700"></canvas></div>
+
+  <div class="bar">
+    <button class="ghost" id="play">Tạm dừng</button>
+    <input type="range" id="scrub" min="0" max="0" value="0">
+    <span class="mono" id="tlabel" style="min-width:86px;text-align:right">0.0s</span>
+    <select id="speed"><option value="0.5">0,5×</option><option value="1" selected>1×</option>
+      <option value="2">2×</option><option value="4">4×</option></select>
+  </div>
+  <div class="stats" id="stats"></div>
+  <p class="note">Chấm xám là điểm LiDAR, chấm đỏ là vật trong 45 cm. Vòng cam +
+     mũi tên là cái hộc mà bộ dò tìm ra và trục của nó. Hình tròn nhạt là
+     <b>người đang đi</b> — chúng di chuyển, nên chỗ trống lúc này một giây nữa
+     có thể không còn trống.</p>
+</section>
+
+<!-- ------------------------------------------------------------- VE -->
+<section id="p-ve" class="hide">
+  <div class="card">
+    <div class="tools" id="tools">
+      <button data-tool="wall" aria-pressed="true">Tường / tủ</button>
+      <button data-tool="circle" aria-pressed="false">Vật tròn</button>
+      <button data-tool="dock" aria-pressed="false">Trạm sạc</button>
+      <button data-tool="decoy" aria-pressed="false">Hộc mồi nhử</button>
+      <button data-tool="mover" aria-pressed="false">Người đi lại</button>
+      <button data-tool="erase" aria-pressed="false">Xoá</button>
+    </div>
+    <div class="row">
+      <div><label for="rw">Rộng (m)</label><input type="number" id="rw" value="5" min="1" max="30" step="0.1"></div>
+      <div><label for="rh">Dài (m)</label><input type="number" id="rh" value="4" min="1" max="30" step="0.1"></div>
+      <div><label for="bnd">Viền</label><select id="bnd">
+        <option value="wall">Tường (trong nhà)</option>
+        <option value="cliff">Mép vực (mặt bàn)</option></select></div>
+      <div><label for="hd">Hướng cửa hộc</label><select id="hd">
+        <option value="0">quay sang trái ←</option><option value="1.5708">quay xuống ↓</option>
+        <option value="3.14159">quay sang phải →</option><option value="-1.5708">quay lên ↑</option>
+      </select></div>
+      <div><label for="lname">Tên</label><input type="text" id="lname" value="nha-cua-toi" size="14"></div>
+      <button class="act" id="save">Lưu</button>
+      <button class="ghost" id="tryit">Xem thử</button>
+      <button class="ghost" id="clear">Xoá hết</button>
+    </div>
+    <div class="msg" id="ve-msg"></div>
+  </div>
+  <div class="scope"><canvas id="ed" width="1120" height="700"></canvas></div>
+  <p class="note">Kéo chuột để tạo tường. Bấm một phát để đặt vật tròn, trạm sạc,
+     hộc mồi hay người. Trạm sạc là hộc 40×40 cm, <b>hướng cửa</b> chọn ở trên —
+     xe chỉ chui vào được từ phía đó. Đặt thêm vài <b>hộc mồi nhử</b> để xe buộc
+     phải hỏi hồng ngoại chứ không chỉ nhìn hình.</p>
+</section>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const api=(p,o)=>fetch(p,o).then(r=>r.json());
+function msg(el,t,ok){el.textContent=t;el.className='msg '+(ok?'ok':'err');
+  if(!t)el.className='msg';}
+
+/* ------------------------------------------------ chuyen doi toa do */
+function proj(cv,w,h,pad=26){
+  const s=Math.min((cv.width-2*pad)/w,(cv.height-2*pad)/h);
+  return {s,ox:(cv.width-w*s)/2,oy:(cv.height-h*s)/2,H:h};
+}
+const X=(x,p)=>p.ox+x*p.s, Y=(y,p)=>p.oy+(p.H-y)*p.s;
+const invX=(px,p)=>(px-p.ox)/p.s, invY=(py,p)=>p.H-(py-p.oy)/p.s;
+
+/* --------------------------------------------------- ve the gioi */
+function drawWorld(ctx,cv,w,p,opt={}){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.fillStyle=css('--panel');
+  ctx.fillRect(p.ox,p.oy,w.width*p.s,w.height*p.s);
+  // luoi 0.5 m
+  ctx.strokeStyle=css('--line'); ctx.lineWidth=1; ctx.globalAlpha=.55;
+  ctx.beginPath();
+  for(let x=0;x<=w.width+1e-6;x+=0.5){ctx.moveTo(X(x,p),Y(0,p));ctx.lineTo(X(x,p),Y(w.height,p));}
+  for(let y=0;y<=w.height+1e-6;y+=0.5){ctx.moveTo(X(0,p),Y(y,p));ctx.lineTo(X(w.width,p),Y(y,p));}
+  ctx.stroke(); ctx.globalAlpha=1;
+  // vien
+  const wall=(w.boundary||'wall')==='wall';
+  ctx.lineWidth=wall?3:2;
+  ctx.strokeStyle=wall?css('--ink-2'):css('--danger');
+  if(!wall)ctx.setLineDash([9,6]);
+  ctx.strokeRect(p.ox,p.oy,w.width*p.s,w.height*p.s);
+  ctx.setLineDash([]);
+  ctx.fillStyle=wall?css('--ink-3'):css('--danger');
+  ctx.font='500 11px "Cascadia Mono",monospace';
+  ctx.fillText(wall?'tường':'mép vực — rơi là hỏng',p.ox+4,p.oy-7);
+
+  const bayWalls=new Set();
+  ctx.fillStyle=css('--sunk'); ctx.strokeStyle=css('--line');
+  for(const o of (w.obstacles||[])){
+    // tuong bien da duoc ve bang duong vien roi, khoi ve lai thanh khoi
+    if(o.tag==='dock'||o.tag==='decoy'||o.tag==='mover'||o.tag==='wall')continue;
+    ctx.beginPath();
+    if(o.kind==='circle')ctx.arc(X(o.x,p),Y(o.y,p),o.r*p.s,0,7);
+    else ctx.rect(X(o.x0,p),Y(o.y1,p),(o.x1-o.x0)*p.s,(o.y1-o.y0)*p.s);
+    ctx.fill(); ctx.stroke();
+  }
+  for(const b of (w.bays||[])){
+    const on=b.tag==='dock', col=on?css('--dock'):css('--ink-3');
+    const hu=(b.out||0.4)/2, hi=(b.inner||0.31)/2, S=p.s;
+    ctx.save(); ctx.translate(X(b.x,p),Y(b.y,p)); ctx.rotate(-b.heading);
+    ctx.fillStyle=col; ctx.globalAlpha=on?.95:.5;
+    ctx.fillRect(hi*S,-hu*S,(hu-hi)*S,2*hu*S);
+    ctx.fillRect(-hu*S,-hu*S,2*hu*S,(hu-hi)*S);
+    ctx.fillRect(-hu*S, hi*S,2*hu*S,(hu-hi)*S);
+    if(on){ctx.globalAlpha=.12;ctx.beginPath();ctx.moveTo(hi*S,0);
+      ctx.lineTo(-1.3*S,-0.58*S);ctx.lineTo(-1.3*S,0.58*S);ctx.closePath();ctx.fill();}
+    ctx.restore(); ctx.globalAlpha=1;
+    ctx.fillStyle=col; ctx.font='500 11px "Cascadia Mono",monospace';
+    ctx.fillText(on?'trạm sạc':'mồi nhử',X(b.x,p)-22,Y(b.y,p)-hu*p.s-6);
+  }
+  for(const m of (opt.movers||[])){
+    ctx.fillStyle=css('--call'); ctx.globalAlpha=.30;
+    ctx.beginPath(); ctx.arc(X(m[0],p),Y(m[1],p),(m[2]||0.2)*p.s,0,7); ctx.fill();
+    ctx.globalAlpha=.9; ctx.lineWidth=1.5; ctx.strokeStyle=css('--call');
+    ctx.beginPath(); ctx.arc(X(m[0],p),Y(m[1],p),(m[2]||0.2)*p.s,0,7); ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+}
+
+/* ============================================================ XEM */
+let ep=null, fi=0, playing=true, timer=null;
+const cv=$('cv'), ctx=cv.getContext('2d');
+
+function drawFrame(){
+  if(!ep){ctx.clearRect(0,0,cv.width,cv.height);return;}
+  const w=ep.world, p=proj(cv,w.width,w.height), f=ep.frames[fi];
+  const mvR=(w.movers||[]).map(m=>m.r);
+  drawWorld(ctx,cv,w,p,{movers:(f.mv||[]).map((m,i)=>[m[0],m[1],mvR[i]||0.2])});
+  ctx.save(); ctx.beginPath();
+  ctx.rect(p.ox,p.oy,w.width*p.s,w.height*p.s); ctx.clip();
+
+  ctx.strokeStyle=css('--trace'); ctx.globalAlpha=.4; ctx.lineWidth=2;
+  ctx.beginPath();
+  for(let i=0;i<=fi;i++){const g=ep.frames[i];
+    i?ctx.lineTo(X(g.x,p),Y(g.y,p)):ctx.moveTo(X(g.x,p),Y(g.y,p));}
+  ctx.stroke(); ctx.globalAlpha=1;
+
+  if(w.dock){ctx.strokeStyle=css('--dock');ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.arc(X(w.dock.pocket[0],p),Y(w.dock.pocket[1],p),0.10*p.s,0,7);
+    ctx.stroke();ctx.setLineDash([]);}
+  if(f.call){const t=fi*0.35;
+    ctx.strokeStyle=css('--call');ctx.fillStyle=css('--call');ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(X(f.call[0],p),Y(f.call[1],p),9+5*Math.abs(Math.sin(t)),0,7);ctx.stroke();
+    ctx.beginPath();ctx.arc(X(f.call[0],p),Y(f.call[1],p),4.5,0,7);ctx.fill();}
+
+  let sf=f; for(let k=fi;k>=0&&!sf.scan;k--)sf=ep.frames[k];
+  if(sf&&sf.scan){
+    const n=sf.scan.length, off=(sf.scan_off||0)+(sf.th-f.th);
+    for(let i=0;i<n;i++){const d=sf.scan[i]; if(d<=0)continue;
+      const a=f.th+off-Math.PI+2*Math.PI*i/n, near=d<0.45;
+      ctx.globalAlpha=near?.95:.5;
+      ctx.fillStyle=near?css('--danger'):css('--ink-3');
+      ctx.fillRect(X(f.x+d*Math.cos(a),p)-1.3,Y(f.y+d*Math.sin(a),p)-1.3,2.6,2.6);}
+    ctx.globalAlpha=1;
+  }
+  for(const c of (f.cand||[])){
+    const a=f.th+c[0], cx=X(f.x+c[1]*Math.cos(a),p), cy=Y(f.y+c[1]*Math.sin(a),p);
+    ctx.strokeStyle=css('--call'); ctx.fillStyle=css('--call'); ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(cx,cy,11,0,7); ctx.stroke();
+    if(c.length>2){const ya=f.th+c[2], L=0.26*p.s;
+      const ex=cx+L*Math.cos(ya), ey=cy-L*Math.sin(ya);
+      ctx.beginPath();ctx.moveTo(cx+11*Math.cos(ya),cy-11*Math.sin(ya));ctx.lineTo(ex,ey);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(ex,ey);
+      ctx.lineTo(ex-6*Math.cos(ya-0.5),ey+6*Math.sin(ya-0.5));
+      ctx.lineTo(ex-6*Math.cos(ya+0.5),ey+6*Math.sin(ya+0.5));ctx.closePath();ctx.fill();}
+  }
+  ctx.restore();
+
+  const R=0.15*p.s;
+  ctx.fillStyle=f.charging?css('--dock'):(f.bump?css('--danger'):css('--trace'));
+  ctx.beginPath(); ctx.arc(X(f.x,p),Y(f.y,p),R,0,7); ctx.fill();
+  ctx.strokeStyle=css('--scope'); ctx.lineWidth=2.5;
+  ctx.beginPath(); ctx.moveTo(X(f.x,p),Y(f.y,p));
+  ctx.lineTo(X(f.x+0.17*Math.cos(f.th),p),Y(f.y+0.17*Math.sin(f.th),p)); ctx.stroke();
+  for(let k=0;k<2;k++){const o=k?-0.145:0.145;
+    ctx.fillStyle=f.cliff[k]>.5?css('--danger'):css('--ink-3');
+    ctx.beginPath();ctx.arc(X(f.x+o*Math.cos(f.th),p),Y(f.y+o*Math.sin(f.th),p),3.4,0,7);ctx.fill();}
+
+  $('tlabel').textContent=(fi*ep.dt).toFixed(1)+'s';
+  $('scrub').value=fi;
+}
+
+function statBox(v,l){return '<div class="stat"><b>'+v+'</b><span>'+l+'</span></div>';}
+function showStats(){
+  const s=ep.stats, f=ep.frames[fi];
+  $('stats').innerHTML=
+    statBox(Math.round(f.batt*100)+'%','pin còn')+
+    statBox(s.distance+' m','quãng đường')+
+    statBox(s.full,'lần sạc đầy')+
+    statBox(s.arrivals,'lần tới đèn gọi')+
+    statBox(s.bumps,'bước va chạm')+
+    statBox(s.fell?'RƠI':(s.flat?'HẾT PIN':'ổn'),'kết cục');
+}
+
+function tick(){
+  if(!ep)return;
+  if(playing){fi++; if(fi>=ep.frames.length){fi=ep.frames.length-1;playing=false;$('play').textContent='Chạy lại';}}
+  drawFrame(); showStats();
+}
+function setTimer(){clearInterval(timer);
+  timer=setInterval(tick, Math.max(12,(ep?ep.dt:0.05)*1000/parseFloat($('speed').value)));}
+
+async function runEpisode(){
+  $('run').disabled=true; msg($('xem-msg'),'đang chạy…',true);
+  const q=new URLSearchParams({brain:$('brain').value,layout:$('layout').value,
+    seed:$('seed').value,steps:$('steps').value});
+  try{
+    const d=await api('/api/episode?'+q);
+    if(d.error){msg($('xem-msg'),'Lỗi: '+d.error,false);return;}
+    ep=d; fi=0; playing=true; $('play').textContent='Tạm dừng';
+    $('scrub').max=ep.frames.length-1;
+    msg($('xem-msg'),'');
+    setTimer(); drawFrame(); showStats();
+  }finally{$('run').disabled=false;}
+}
+$('run').onclick=runEpisode;
+$('again').onclick=()=>{$('seed').value=Math.floor(Math.random()*9999);runEpisode();};
+$('play').onclick=()=>{if(fi>=ep.frames.length-1)fi=0;
+  playing=!playing;$('play').textContent=playing?'Tạm dừng':'Chạy tiếp';};
+$('scrub').oninput=e=>{fi=+e.target.value;playing=false;$('play').textContent='Chạy tiếp';drawFrame();showStats();};
+$('speed').onchange=setTimer;
+
+/* ============================================================ VE */
+const ed=$('ed'), ectx=ed.getContext('2d');
+let lay={width:5,height:4,boundary:'wall',obstacles:[],bays:[],movers:[]};
+let tool='wall', drag=null;
+const snap=v=>Math.round(v/0.05)*0.05;
+const clampTo=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+function edProj(){return proj(ed,lay.width,lay.height);}
+function drawEditor(){
+  const p=edProj();
+  drawWorld(ectx,ed,lay,p,{movers:lay.movers.map(m=>[m.x,m.y,m.r||0.2])});
+  if(drag&&drag.kind==='box'){
+    ectx.strokeStyle=css('--trace'); ectx.setLineDash([5,4]); ectx.lineWidth=2;
+    const x0=Math.min(drag.x0,drag.x1),x1=Math.max(drag.x0,drag.x1);
+    const y0=Math.min(drag.y0,drag.y1),y1=Math.max(drag.y0,drag.y1);
+    ectx.strokeRect(X(x0,p),Y(y1,p),(x1-x0)*p.s,(y1-y0)*p.s);
+    ectx.setLineDash([]);
+  }
+}
+function evPos(e){
+  const r=ed.getBoundingClientRect(), p=edProj();
+  const px=(e.clientX-r.left)*ed.width/r.width, py=(e.clientY-r.top)*ed.height/r.height;
+  return {x:Math.max(0,Math.min(lay.width,snap(invX(px,p)))),
+          y:Math.max(0,Math.min(lay.height,snap(invY(py,p))))};
+}
+function eraseAt(x,y){
+  for(let i=lay.movers.length-1;i>=0;i--){const m=lay.movers[i];
+    if(Math.hypot(m.x-x,m.y-y)<(m.r||0.2)+0.05){lay.movers.splice(i,1);return;}}
+  for(let i=lay.bays.length-1;i>=0;i--){const b=lay.bays[i];
+    if(Math.abs(b.x-x)<0.25&&Math.abs(b.y-y)<0.25){lay.bays.splice(i,1);return;}}
+  for(let i=lay.obstacles.length-1;i>=0;i--){const o=lay.obstacles[i];
+    const hit=o.kind==='circle'?Math.hypot(o.x-x,o.y-y)<o.r+0.05
+      :(x>=o.x0-0.03&&x<=o.x1+0.03&&y>=o.y0-0.03&&y<=o.y1+0.03);
+    if(hit){lay.obstacles.splice(i,1);return;}}
+}
+ed.addEventListener('pointerdown',e=>{
+  ed.setPointerCapture(e.pointerId);
+  const q=evPos(e);
+  if(tool==='wall'){drag={kind:'box',x0:q.x,y0:q.y,x1:q.x,y1:q.y};}
+  else if(tool==='circle'){lay.obstacles.push({kind:'circle',x:q.x,y:q.y,r:0.25});}
+  else if(tool==='dock'||tool==='decoy'){
+    if(tool==='dock')lay.bays=lay.bays.filter(b=>b.tag!=='dock');
+    // Hoc rong 40 cm nen tam no phai cach tuong it nhat 21 cm, khong thi
+    // mot phan vach nam ngoai phong. Keo ve cho hop le thay vi de nguoi
+    // dung ve xong moi bao loi luc bam Luu.
+    lay.bays.push({x:clampTo(q.x,0.21,lay.width-0.21),
+                   y:clampTo(q.y,0.21,lay.height-0.21),
+                   heading:parseFloat($('hd').value),tag:tool,out:0.4,inner:0.31});}
+  else if(tool==='mover'){lay.movers.push({
+    x:clampTo(q.x,0.2,lay.width-0.2), y:clampTo(q.y,0.2,lay.height-0.2),
+    r:0.2,speed:0.85,heading:Math.random()*6.28});}
+  else if(tool==='erase'){eraseAt(q.x,q.y);}
+  drawEditor();
+});
+ed.addEventListener('pointermove',e=>{if(!drag)return;
+  const q=evPos(e); drag.x1=q.x; drag.y1=q.y; drawEditor();});
+ed.addEventListener('pointerup',()=>{
+  if(drag){const x0=Math.min(drag.x0,drag.x1),x1=Math.max(drag.x0,drag.x1);
+    const y0=Math.min(drag.y0,drag.y1),y1=Math.max(drag.y0,drag.y1);
+    if(x1-x0>0.08&&y1-y0>0.08)lay.obstacles.push({kind:'box',x0,y0,x1,y1});
+    drag=null; drawEditor();}});
+$('tools').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  tool=b.dataset.tool;
+  [...$('tools').children].forEach(x=>x.setAttribute('aria-pressed',x===b));
+});
+$('rw').oninput=e=>{lay.width=Math.max(1,+e.target.value||5);drawEditor();};
+$('rh').oninput=e=>{lay.height=Math.max(1,+e.target.value||4);drawEditor();};
+$('bnd').onchange=e=>{lay.boundary=e.target.value;drawEditor();};
+$('clear').onclick=()=>{lay.obstacles=[];lay.bays=[];lay.movers=[];drawEditor();};
+$('save').onclick=async()=>{
+  const name=$('lname').value.trim()||'nha-cua-toi';
+  const d=await api('/api/layout',{method:'POST',
+    body:JSON.stringify({name,layout:{...lay,name}})});
+  if(d.error){msg($('ve-msg'),'Lỗi: '+d.error,false);return;}
+  msg($('ve-msg'),'Đã lưu "'+d.name+'". Chọn nó ở tab Xem xe chạy.',true);
+  refresh();
+};
+$('tryit').onclick=async()=>{await $('save').onclick();
+  const name=$('lname').value.trim()||'nha-cua-toi';
+  await refresh(); $('layout').value=name; showTab('xem'); runEpisode();};
+
+/* ====================================================== khung chung */
+function showTab(which){
+  $('p-xem').classList.toggle('hide',which!=='xem');
+  $('p-ve').classList.toggle('hide',which!=='ve');
+  $('t-xem').setAttribute('aria-selected',which==='xem');
+  $('t-ve').setAttribute('aria-selected',which==='ve');
+  if(which==='ve')drawEditor(); else drawFrame();
+}
+$('t-xem').onclick=()=>showTab('xem');
+$('t-ve').onclick=()=>showTab('ve');
+
+async function stopRun(name,btn){
+  if(!confirm('Dừng phiên "'+name+'"?\n\nNó sẽ lưu xong rồi mới thoát, '
+    +'và lần sau chạy tiếp đúng chỗ này.'))return;
+  btn.disabled=true;
+  const d=await api('/api/stop',{method:'POST',body:JSON.stringify({run:name})});
+  btn.textContent=d.error?('Lỗi: '+d.error):'Đã đặt lệnh dừng…';
+  setTimeout(refresh,1500);
+}
+function drawStrip(runs){
+  const el=$('train-strip');
+  if(!runs.length){el.innerHTML='';return;}
+  const fresh=runs.filter(r=>Date.now()/1000-r.mtime<90);
+  el.innerHTML=(fresh.length?fresh:runs.slice(-1)).map(r=>{
+    const live=Date.now()/1000-r.mtime<90;
+    return '<div class="train"><div>'+
+      (live?'Đang huấn luyện ':'Phiên gần nhất ')+
+      '<b class="mono">'+r.name+'</b> — thế hệ <span class="n">'+r.gen+
+      '</span>, bậc <span class="n">'+r.stage+'</span>'+
+      (r.best!=null?', điểm tốt nhất <span class="n">'+r.best+'</span>':'')+
+      '</div>'+(live&&!r.stopping
+        ?'<button class="stop" data-run="'+r.name+'">Dừng an toàn</button>'
+        :'<span style="color:var(--ink-3);font-size:13px">'+
+          (r.stopping?'đang dừng…':'không chạy')+'</span>')+'</div>';
+  }).join('');
+  el.querySelectorAll('button.stop').forEach(b=>
+    b.onclick=()=>stopRun(b.dataset.run,b));
+}
+function fill(sel,items,extra){
+  const cur=sel.value;
+  sel.innerHTML=(extra||[]).concat(items).map(v=>
+    '<option value="'+v[0]+'">'+v[1]+'</option>').join('');
+  if([...sel.options].some(o=>o.value===cur))sel.value=cur;
+}
+async function refresh(){
+  const d=await api('/api/status');
+  drawStrip(d.runs||[]);
+  fill($('brain'),(d.brains||[]).map(b=>[b,b]),[['viet-tay','bộ luật viết tay']]);
+  fill($('layout'),(d.layouts||[]).map(l=>[l,l]),[['','cảnh ngẫu nhiên']]);
+}
+refresh(); setInterval(refresh,8000);
+drawEditor();
+</script></body></html>

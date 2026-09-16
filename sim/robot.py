@@ -91,12 +91,21 @@ class Robot:
         # Va cham voi vat can: truot doc / chan lai
         self.bumped = False
         self.bump_bay = False
+        if world.boundary == "wall" and not world.inside(nx, ny, s.radius):
+            # Phong kin: bien la TUONG, dam vao thi dung chu khong roi
+            self.bumped = True
+            nx = min(max(nx, s.radius), world.width - s.radius)
+            ny = min(max(ny, s.radius), world.height - s.radius)
+            self.vl *= 0.3
+            self.vr *= 0.3
         if world.min_obstacle_clearance(nx, ny) < s.radius:
             self.bumped = True
             # Cham vach hoc thi khac cham vat can: khe chui vao chi ho 5 mm
             # moi ben nen xat nhe hai ben la chuyen binh thuong, dung phat.
-            self.bump_bay = (world.bay_clearance(nx, ny) < s.radius and
-                             world.in_bay_corridor(nx, ny, ntheta, s.radius))
+            # Thu phep re nhat truoc: in_bay_corridor chi la vai phep nhan,
+            # con bay_clearance phai duyet 9 vach x moi cai hoc.
+            self.bump_bay = (world.in_bay_corridor(nx, ny, ntheta, s.radius)
+                             and world.bay_clearance(nx, ny) < s.radius)
             # Mat vat cheo o mieng hoc nan xe ve giua truoc da
             wd = world.wedge(nx, ny, ntheta, s.radius) if self.bump_bay else None
             if wd is not None:

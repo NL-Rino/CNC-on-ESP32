@@ -10,6 +10,7 @@ import random
 
 import numpy as np
 
+from . import layout as layout_mod
 from .geometry import clamp, wrap_angle
 from .lidar import Lidar
 from .perception import (MEM_CLIP, OBS_DIM, OBS_NAMES,  # noqa: F401
@@ -32,9 +33,12 @@ class EnvConfig:
     call_timeout = (200, 500)
     ir_handshake = 30         # so buoc con nho tin hieu IR de duoc phep sac
     dock_approach = 0.40      # diem doi truoc CUA hoc sac (m)
+    layout = None             # mat bang tu ve (dict hoac duong dan .json);
+                              # None = sinh canh ngau nhien nhu khi huan luyen
     record = False
     record_every = 2
     scan_every = 4
+    scan_points = 90          # so diem LiDAR ghi vao khung hinh (0 = du ca vong)
 
     # He so thuong/phat
     # Roi khoi ban phai dat hon MOI thu kiem duoc trong mot tap cong lai.
@@ -91,7 +95,13 @@ class CarEnv:
             self.nprng = np.random.default_rng(seed)
         rng = self.rng
         cfg = self.cfg
-        self.world = make_world(rng, cfg.stage)
+        if cfg.layout is None:
+            self.world = make_world(rng, cfg.stage)
+        else:
+            lay = cfg.layout
+            if isinstance(lay, str):
+                lay = layout_mod.load(lay)
+            self.world = layout_mod.build_world(lay, rng)
 
         x, y = self.world.free_spot(rng, self.spec.radius)
         th = rng.uniform(-math.pi, math.pi)
@@ -225,6 +235,7 @@ class CarEnv:
         if goal_before is not None:
             d_before = math.hypot(r.x - goal_before[0], r.y - goal_before[1])
 
+        self.world.step_movers(cfg.dt, rng)
         fallen = r.step(ul, ur, cfg.dt, self.world, rng)
         gained = r.try_charge(self.world, cfg.dt, self.per.ir_ok)
 
@@ -372,10 +383,16 @@ class CarEnv:
              "call": [round(self.call.x, 3), round(self.call.y, 3)] if self.call else None,
              "cand": [[round(c.bearing, 3), round(c.dist, 3), round(c.yaw, 3)]
                       for c in self.cands]}
+        if self.world.movers:
+            # Vat di chuyen phai ghi TUNG KHUNG, khong the lay tu world mot
+            # lan dau tap nhu vat can tinh.
+            f["mv"] = [[round(m.ob.x, 3), round(m.ob.y, 3)]
+                       for m in self.world.movers]
         n = len(self.frames)
         if n % self.cfg.scan_every == 0:
             a, rr = self.lidar.base, self.lidar.r
-            k = max(1, self.lidar.n // 90)
+            k = 1 if not self.cfg.scan_points else \
+                max(1, self.lidar.n // self.cfg.scan_points)
             off = self.lidar.scan_theta - r.oth
             f["scan"] = [round(float(v), 2) for v in rr[::k]]
             f["scan_off"] = round(off, 3)

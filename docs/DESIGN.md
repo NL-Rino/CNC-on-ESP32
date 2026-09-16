@@ -250,9 +250,36 @@ Cách đo đáng nhớ hơn cả kết luận: muốn biết A hay B gây ra l�
 đi rồi đo lại**, đừng ngồi suy luận. Tôi đã đoán sai thủ phạm hai lần liền trước
 khi làm phép thử ghim-pin-đầy này.
 
+**(k) `best.npz` không dùng để chạy tiếp được.** Nó chỉ được ghi khi điểm đánh
+giá phá kỷ lục, nên đến thế hệ 6000 mà kỷ lục lập từ 1744 thì nó vẫn ghi
+`gen=1744`. Người dùng `--resume` từ đó và mất sạch phần giữa. Giờ có `state.npz`
+ghi **mọi thế hệ, không điều kiện**, chứa cả sigma, động lượng Adam và bộ sinh
+số ngẫu nhiên — nạp lại thì thế hệ tiếp theo sinh ra trùng khít.
+
+Bài học: một file tên là "tốt nhất" không phải là "mới nhất", và trộn hai khái
+niệm đó vào một file là cách chắc chắn để mất việc của người khác.
+
 Bài học chung: khi agent **không** học được một kỹ năng, đừng tăng số thế hệ. Hãy
 đo xem nó thật sự đi tới đâu và dừng lại ở đâu — gần như lần nào nguyên nhân cũng
 là hai khoản thưởng đang kéo ngược nhau.
+
+## 10b. Tốc độ mô phỏng: chỗ nghẽn không nằm ở chỗ tôi tưởng
+
+Mô phỏng từng chạy **628 µs/bước**. Tôi đoán chỗ nghẽn là phép bắn tia LiDAR
+nên định chuyển nó sang numpy/GPU. Đo ra thì thủ phạm là `dist_to_point`:
+**342 nghìn lần gọi cho 6.400 bước** — vòng lặp Python qua ~30 vật cản, gọi
+2,4 lần mỗi bước từ hàm tính va chạm.
+
+Thử numpy hoá hàm đó: **chậm hơn gấp đôi** (12,2 µs so với 6,7 µs). Với vài
+chục vật cản thì chi phí gọi numpy lớn hơn chính phép tính. Cái ăn tiền lại là
+thứ tầm thường hơn nhiều: duyệt trên tuple đã rút sẵn thay vì thuộc tính đối
+tượng, và bỏ `builtin max()` (620 nghìn lần gọi) đổi thành lệnh rẽ nhánh.
+
+Kết quả **628 → 150 µs/bước, nhanh gấp 4,2 lần**, đối chiếu 5000 điểm với bản
+cũ lệch tối đa 2e-16. Một thế hệ huấn luyện từ 8–10 giây xuống 4,5 giây.
+
+Bài học: đo trước khi tối ưu, và đo lại sau khi tối ưu — cả hai lần tôi đều
+đoán sai.
 
 ## 11. Từ mô phỏng ra đời thật
 

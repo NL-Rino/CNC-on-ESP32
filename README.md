@@ -11,6 +11,7 @@ pip install numpy
 python3 tests/test_sim.py                                  # kiểm tra mô phỏng
 python3 tests/test_firmware.py                             # bản C khớp bản Python (cần gcc, thiếu thì tự bỏ qua)
 python3 tests/test_link.py                                 # robot <-> wifi <-> bộ não
+python3 tests/test_studio.py                               # giao diện (cần playwright)
 python3 tools/compare.py brains/car_bay_v1.npz              # AI vs bộ điều khiển viết tay
 python3 -m train.evaluate --policy brains/car_bay_v1.npz --ascii --seed 7
 ```
@@ -70,6 +71,56 @@ python3 -m train.train --curriculum --resume brains/car_bay_v1.npz \
 4. **Miễn phạt va chạm với vách hộc quá rộng.** Định miễn cho việc xát vách lúc
    chui vào (khe hở 5 mm, xát là đương nhiên), nhưng lỡ miễn cả lúc xe tì vào
    *sườn* hộc. Xe nằm lì vào vách **41% số bước**.
+
+## Xưởng làm việc: xem xe chạy, vẽ nhà, dừng huấn luyện an toàn
+
+```
+python -m tools.studio
+```
+
+Mở một trang chạy ngay trên máy bạn (không gửi gì ra ngoài). Ba việc:
+
+**Xem xe chạy** — chọn bộ não và mặt bằng, chạy một tập, tua tới tua lui từng
+khung hình. Thấy đám mây điểm LiDAR, vòng cam + mũi tên là cái hộc bộ dò tìm
+được và trục của nó, hình tròn cam nhạt là **người đang đi**.
+
+**Vẽ nhà** — kéo chuột tạo tường và tủ, bấm để đặt vật tròn, trạm sạc, hộc mồi
+nhử, người đi lại. Lưu vào `layouts/` rồi chọn ở tab Xem. Mặt bằng cũng dùng
+được cho huấn luyện.
+
+**Dừng an toàn** — khi có phiên huấn luyện đang chạy, trang hiện một thanh với
+thế hệ hiện tại và nút **Dừng an toàn**. Bấm nút: phiên lưu xong rồi mới thoát.
+
+### Vì sao cần cái nút đó — một lỗi thật đã làm mất hàng giờ
+
+`best.npz` **chỉ được ghi khi điểm đánh giá phá kỷ lục**. Nếu kỷ lục lập ở thế
+hệ 1744 rồi không phá được nữa thì đến thế hệ 6000 nó **vẫn ghi `gen=1744`** —
+`--resume` từ đó là tụt về đúng chỗ ấy, mất sạch phần giữa.
+
+Giờ mỗi thế hệ đều ghi `state.npz`, không điều kiện gì, và nó chứa **toàn bộ
+trạng thái tiến hoá**: trọng số, sigma đã giảm tới đâu, Adam đã tích luỹ bao
+nhiêu động lượng, bộ sinh số ngẫu nhiên đang ở đâu, đang ở bậc mấy. Trỏ
+`--resume` vào **thư mục** thì nó tự lấy file này:
+
+```
+python -m train.train --curriculum --resume runs/bay11 --jobs 4 --pop 48 --gens 6000 --min-gens-per-stage 150 --eval-episodes 20 --out runs/bay11
+```
+
+Kiểm chứng: dừng ở thế hệ 6, nạp lại, thế hệ tiếp theo sinh ra **trùng khít**
+với khi không dừng. Ctrl+C giờ cũng lưu xong mới thoát, nhưng nút vẫn êm hơn —
+nó dừng đúng ranh giới một thế hệ.
+
+## Người đi ngang qua
+
+Từ bậc 3 trở đi trên bàn có **1–2 người đi lại** (`sim/world.py`, lớp `Mover`),
+và trong nhà tự vẽ thì bạn đặt bao nhiêu tuỳ ý. Đây là khác biệt lớn nhất giữa
+mô phỏng cũ và nhà thật: LiDAR thấy một khối ở phía trước **không** có nghĩa là
+một giây nữa nó vẫn còn ở đó. Xe phải học cách không lao vào chỗ vừa trống, và
+không hoảng khi có vật lướt qua.
+
+Họ đi theo đoạn thẳng, gặp tường hay đồ đạc thì đổi hướng, thỉnh thoảng dừng
+lại một lát — đủ để tạo tình huống "có người cắt mặt" mà không phải mô phỏng
+dáng đi.
 
 ## Bộ não chạy trên laptop, robot nối qua wifi
 

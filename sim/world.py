@@ -88,6 +88,67 @@ class Obstacle:
                 "y1": self.y1, "tag": self.tag}
 
 
+class Mover:
+    """Vat can BIET DI - nguoi di ngang qua, cho, chan ban bi keo ra.
+
+    Day la khac biet lon nhat giua mo phong cu va nha that: LiDAR thay mot
+    khoi o phia truoc khong co nghia la mot giay nua no van con o do. Xe phai
+    hoc cach khong lao vao cho vua trong, va khong hoang khi co vat luot qua.
+
+    Di theo doan thang, gap tuong hay vat can thi doi huong - du de tao ra
+    tinh huong "co nguoi cat mat" ma khong can mo phong dang di.
+    """
+
+    __slots__ = ("ob", "vx", "vy", "speed", "turn_t", "pause_t")
+
+    def __init__(self, x, y, r, speed, heading, rng=None):
+        self.ob = Obstacle("circle", tag="mover", x=x, y=y, r=r)
+        self.speed = speed
+        self.vx = speed * math.cos(heading)
+        self.vy = speed * math.sin(heading)
+        self.turn_t = 0.0
+        self.pause_t = 0.0
+
+    def step(self, world, dt, rng):
+        o = self.ob
+        if self.pause_t > 0.0:                 # nguoi dung lai mot lat
+            self.pause_t -= dt
+            return
+        nx = o.x + self.vx * dt
+        ny = o.y + self.vy * dt
+        hit = not world.inside(nx, ny, o.r + 0.02)
+        if not hit:
+            for other in world.solid:
+                if other is o or other.tag == "mover":
+                    continue
+                if other.dist_to_point(nx, ny) < o.r:
+                    hit = True
+                    break
+        if hit:
+            a = rng.uniform(0.0, 2.0 * math.pi)
+            self.vx = self.speed * math.cos(a)
+            self.vy = self.speed * math.sin(a)
+            return
+        o.x, o.y = nx, ny
+        o.x0, o.y0 = nx - o.r, ny - o.r
+        o.x1, o.y1 = nx + o.r, ny + o.r
+        self.turn_t -= dt
+        if self.turn_t <= 0.0:
+            self.turn_t = rng.uniform(1.0, 4.0)
+            if rng.random() < 0.25:
+                self.pause_t = rng.uniform(0.5, 2.0)
+            else:
+                a = math.atan2(self.vy, self.vx) + rng.gauss(0.0, 0.6)
+                self.vx = self.speed * math.cos(a)
+                self.vy = self.speed * math.sin(a)
+
+    def as_dict(self):
+        d = self.ob.as_dict()
+        d["mover"] = True
+        d["speed"] = self.speed
+        return d
+
+
 class Beacon:
     """Den hong ngoai. dir_ang=None nghia la phat deu moi huong."""
 
@@ -219,12 +280,17 @@ class Dock(Bay):
 class World:
     """Mat ban hinh chu nhat [0,W] x [0,H]. Ra khoi bien = roi khoi ban."""
 
-    def __init__(self, width=3.2, height=2.4):
+    def __init__(self, width=3.2, height=2.4, boundary="cliff"):
         self.width = width
         self.height = height
+        # "cliff" = mat ban, ra khoi bien la ROI. "wall" = phong kin, ra khoi
+        # bien la dam tuong. Nha nguoi ta thi la "wall"; giu ca hai vi cam
+        # bien vuc van con dung cho cau thang.
+        self.boundary = boundary
         self.obstacles = []     # tat ca (dung cho LiDAR / duong ngam)
-        self.solid = []         # vat can tinh va cham kieu hinh tron
-        self.bays = []          # hoc chu U - va cham tinh kieu hinh vuong
+        self.solid = []         # vat can va cham
+        self.bays = []          # hoc chu U
+        self.movers = []        # vat can biet di
         self.beacons = []
         self.dock = None
         self._arrays_dirty = True
@@ -233,6 +299,45 @@ class World:
         self.obstacles.append(ob)
         self.solid.append(ob)
         self._arrays_dirty = True
+
+    def add_boundary_walls(self, thick=0.12):
+        """Dung 4 buc tuong that quanh phong.
+
+        Khong co buoc nay thi bien chi ton tai trong ham va cham: xe dam vao
+        thi dung, nhung LIDAR KHONG THAY GI - tuong hien ra nhu khong gian
+        trong. Bo nao se doc canh nha nhu mot bai bat kha thi.
+        """
+        w, h, t = self.width, self.height, thick
+        for x0, y0, x1, y1 in ((-t, -t, w + t, 0.0), (-t, h, w + t, h + t),
+                               (-t, 0.0, 0.0, h), (w, 0.0, w + t, h)):
+            self.add_obstacle(Obstacle("box", tag="wall", x0=x0, y0=y0,
+                                       x1=x1, y1=y1))
+
+    def add_mover(self, mv):
+        self.movers.append(mv)
+        self.obstacles.append(mv.ob)
+        self.solid.append(mv.ob)
+        self._arrays_dirty = True
+
+    def step_movers(self, dt, rng):
+        """Cho vat di chuyen roi cap nhat THANG vao mang da nuong.
+
+        Nuong lai ca the gioi moi buoc thi qua ton; vat di chuyen deu la hinh
+        tron va duoc xep dau danh sach, nen chi can ghi de vai o toa do.
+        """
+        if not self.movers:
+            return
+        for mv in self.movers:
+            mv.step(self, dt, rng)
+        if not self._arrays_dirty:
+            for i, mv in enumerate(self.movers):
+                self._cxy[0, i] = mv.ob.x
+                self._cxy[1, i] = mv.ob.y
+                self._fast_cir[i] = (mv.ob.x, mv.ob.y, mv.ob.r)
+
+    def inside(self, x, y, margin=0.0):
+        return (margin <= x <= self.width - margin and
+                margin <= y <= self.height - margin)
 
     def add_bay(self, bay):
         self.bays.append(bay)
@@ -243,13 +348,26 @@ class World:
     # ---------------------------------------------------------------- dung mang
     def bake(self):
         """Gom vat can thanh mang numpy de ban ca vong LiDAR trong mot luot."""
-        cir = [o for o in self.obstacles if o.kind == "circle"]
+        # Vat di chuyen phai dung DAU danh sach tron: step_movers ghi de
+        # truc tiep vao _cxy[:, :len(movers)] theo dung thu tu nay.
+        movers = [mv.ob for mv in self.movers]
+        cir = movers + [o for o in self.obstacles
+                        if o.kind == "circle" and o.tag != "mover"]
         box = [o for o in self.obstacles if o.kind == "box"]
         f32 = np.float32
         self._cxy = np.array([[o.x for o in cir], [o.y for o in cir]], dtype=f32)
         self._cr2 = np.array([o.r * o.r for o in cir], dtype=f32)
         self._b0 = np.array([[o.x0 for o in box], [o.y0 for o in box]], dtype=f32)
         self._b1 = np.array([[o.x1 for o in box], [o.y1 for o in box]], dtype=f32)
+
+        # Rieng cho va cham: chi vat can RAN, va de dang mang phang de tinh
+        # mot phat. Vong lap Python qua 30 vat can, ba lan moi buoc, tung
+        # chiem 1/3 toan bo thoi gian mo phong.
+        scir = [mv.ob for mv in self.movers]
+        scir += [o for o in self.solid if o.kind == "circle" and o.tag != "mover"]
+        self._fast_cir = [(o.x, o.y, o.r) for o in scir]
+        self._fast_box = [(o.x0, o.y0, o.x1, o.y1)
+                          for o in self.solid if o.kind == "box"]
         self._arrays_dirty = False
 
     def raycast_batch(self, ox, oy, angles, max_range):
@@ -295,8 +413,10 @@ class World:
 
     # ---------------------------------------------------------------- truy van
     def on_table(self, x, y, margin=0.0):
-        return (margin <= x <= self.width - margin and
-                margin <= y <= self.height - margin)
+        """True = van con cho dung. Phong kin thi luc nao cung con."""
+        if self.boundary == "wall":
+            return True
+        return self.inside(x, y, margin)
 
     def edge_distance(self, x, y):
         return min(x, y, self.width - x, self.height - y)
@@ -326,9 +446,42 @@ class World:
         return True
 
     def min_obstacle_clearance(self, x, y):
+        """Khoang cach tu tam xe toi be mat vat can gan nhat (am = dang chong).
+
+        Goi ~2.4 lan moi buoc, moi lan duyet het vat can - tung chiem 1/3
+        thoi gian mo phong. Da thu chuyen sang numpy: CHAM HON gap doi, vi
+        voi vai chuc vat can thi chi phi goi numpy lon hon chinh phep tinh.
+        Nen giu vong lap Python nhung duyet tren TUPLE da rut san, va bo
+        builtin max() (no ton hon mot lenh re nhanh).
+        """
+        if self._arrays_dirty:
+            self.bake()
         best = 1e9
-        for ob in self.solid:
-            d = ob.dist_to_point(x, y)
+        for cx, cy, r in self._fast_cir:
+            dx = x - cx
+            dy = y - cy
+            d = (dx * dx + dy * dy) ** 0.5 - r
+            if d < best:
+                best = d
+        for x0, y0, x1, y1 in self._fast_box:
+            dx = x0 - x
+            if dx < 0.0:
+                dx = x - x1
+                if dx < 0.0:
+                    dx = 0.0
+            dy = y0 - y
+            if dy < 0.0:
+                dy = y - y1
+                if dy < 0.0:
+                    dy = 0.0
+            if dx == 0.0 and dy == 0.0:
+                d = -min(x - x0, x1 - x, y - y0, y1 - y)
+            elif dy == 0.0:
+                d = dx
+            elif dx == 0.0:
+                d = dy
+            else:
+                d = (dx * dx + dy * dy) ** 0.5
             if d < best:
                 best = d
         return best
@@ -403,6 +556,8 @@ class World:
         return {
             "width": self.width,
             "height": self.height,
+            "boundary": self.boundary,
+            "movers": [m.as_dict() for m in self.movers],
             "obstacles": [o.as_dict() for o in self.obstacles],
             "bays": [b.as_dict() for b in self.bays],
             "beacons": [b.as_dict() for b in self.beacons],
@@ -464,6 +619,21 @@ def make_world(rng: random.Random, stage: int = 3) -> World:
         world.dock = dock
         world.add_bay(dock)
         world.beacons.append(dock.beacon)
+
+        # Nguoi di ngang qua. Chi co tu stage 3: xe phai biet ne vat TINH da
+        # roi moi hoc duoc rang cho trong luc nay mot giay nua co the khong
+        # con trong. Dua vao som qua thi hai bai lan vao nhau.
+        if stage >= 3:
+            for _ in range(rng.randint(1, 2)):
+                for _ in range(20):
+                    mx = rng.uniform(0.5, w - 0.5)
+                    my = rng.uniform(0.5, h - 0.5)
+                    if (math.hypot(mx - dx, my - dy) > 0.9 and
+                            world.min_obstacle_clearance(mx, my) > 0.35):
+                        world.add_mover(Mover(mx, my, rng.uniform(0.12, 0.22),
+                                              rng.uniform(0.35, 0.9),
+                                              rng.uniform(-math.pi, math.pi)))
+                        break
 
         # Hoc moi nhu: tren LiDAR giong het tram sac nhung khong phat hong ngoai.
         # Khong co no thi xe chi can thay hinh la lao vao, khoi hoi hong ngoai.

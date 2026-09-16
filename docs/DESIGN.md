@@ -259,6 +259,29 @@ số ngẫu nhiên — nạp lại thì thế hệ tiếp theo sinh ra trùng kh
 Bài học: một file tên là "tốt nhất" không phải là "mới nhất", và trộn hai khái
 niệm đó vào một file là cách chắc chắn để mất việc của người khác.
 
+**(l) Một phiên 5.900 thế hệ tự huỷ, vì hai lỗi trong chính bộ tiến hoá.** Chạy
+tới thế hệ 7578 rồi mở ra xem: bộ não trả về **đúng `(+1.0, +1.0)` với mọi đầu
+vào, độ lệch 0.0000** — tanh bão hoà hoàn toàn. `|theta|` trung bình phình từ
+1,5 lên 2,2, đỉnh 10,1. Dấu hiệu trong log lẽ ra phải thấy từ sớm:
+`fit -149.0 (max -149.0)` — cả 48 cá thể **điểm giống hệt nhau**, vì khi tanh
+đã dính trần thì đổi trọng số không đổi hành vi.
+
+Hai nguyên nhân, cả hai đều là lỗi của tôi:
+
+1. **Weight decay cộng thẳng vào gradient.** Adam chuẩn hoá gradient nên nó
+   chuẩn hoá luôn cả số hạng ghìm — đúng lúc cần ghìm nhất thì ghìm không nổi.
+   Đây chính là lý do AdamW tồn tại. Đã tách rời: `theta *= 1 - lr*wd` sau
+   bước Adam. Thử: dưới sức ép giảm, `|theta|` 3,0 → 0,08.
+2. **Điểm bằng nhau vẫn sinh ra gradient.** `argsort` của một dãy bằng nhau
+   trả về đúng thứ tự chỉ số, nên cá thể chỉ số chẵn luôn "thắng" cá thể lẻ —
+   ES nhận một gradient **có hệ thống từ hư không** và đi lang thang. Giờ dải
+   điểm ~0 thì trả về vector 0.
+
+Điều đẹp là hai bản sửa ghép lại thành cơ chế tự thoát: bão hoà → điểm bằng
+nhau → gradient 0 → weight decay kéo trọng số xuống → hết bão hoà → điểm lại
+phân hoá. Kèm theo đó là dòng cảnh báo trong log, để lần sau không ai đốt
+hàng nghìn thế hệ mà không biết gì.
+
 Bài học chung: khi agent **không** học được một kỹ năng, đừng tăng số thế hệ. Hãy
 đo xem nó thật sự đi tới đâu và dừng lại ở đâu — gần như lần nào nguyên nhân cũng
 là hai khoản thưởng đang kéo ngược nhau.

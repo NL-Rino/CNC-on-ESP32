@@ -445,13 +445,19 @@ function drawStrip(runs){
 function fill(sel,items,extra){
   const cur=sel.value;
   sel.innerHTML=(extra||[]).concat(items).map(v=>
-    '<option value="'+v[0]+'">'+v[1]+'</option>').join('');
-  if([...sel.options].some(o=>o.value===cur))sel.value=cur;
+    '<option value="'+v[0]+'"'+(v[2]?' disabled':'')+'>'+v[1]+'</option>').join('');
+  if([...sel.options].some(o=>o.value===cur&&!o.disabled))sel.value=cur;
+  else{const f=[...sel.options].find(o=>!o.disabled); if(f)sel.value=f.value;}
 }
 async function refresh(){
   const d=await api('/api/status');
   drawStrip(d.runs||[]);
-  fill($('brain'),(d.brains||[]).map(b=>[b,b]),[['viet-tay','bộ luật viết tay']]);
+  // Bo nao doi cu (40/48 dau vao) van hien ra nhung bi khoa: giau han di
+  // thi nguoi dung tuong file bi mat, con de chon duoc thi an loi matmul.
+  fill($('brain'),(d.brains||[]).map(b=>[b.path,
+      b.path+' — '+b.obs+' đầu vào'+(b.gen!=null?', thế hệ '+b.gen:'')
+      +(b.ok?'':' (đời cũ, không chạy được)'), !b.ok]),
+    [['viet-tay','bộ luật viết tay',false]]);
   fill($('layout'),(d.layouts||[]).map(l=>[l,l]),[['','cảnh ngẫu nhiên']]);
 }
 refresh(); setInterval(refresh,8000);

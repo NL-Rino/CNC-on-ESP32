@@ -192,6 +192,7 @@ def main():
         os.replace(tmp, os.path.join(args.out, "state.npz"))
 
     stopped = ""
+    flat_gens = 0
     g = start_gen - 1
     try:
         for g in range(start_gen, start_gen + args.gens):
@@ -210,6 +211,21 @@ def main():
 
             line = ("gen %4d | stage %d | fit %8.1f (max %8.1f) | sigma %.3f | %4.1fs"
                     % (g, stage, mean_fit, max_fit, info["sigma"], dt))
+
+            # Ca quan the cham diem giong het nhau = bo nao da bao hoa: tanh
+            # dinh +-1 nen doi trong so khong con doi hanh vi. Khong bao thi
+            # nguoi dung dot hang nghin the he ma khong biet gi.
+            if info.get("spread", 1.0) < 1e-6:
+                flat_gens += 1
+                if flat_gens in (10, 50, 200):
+                    print("  !! %d the he lien ca quan the diem GIONG HET nhau."
+                          " Bo nao co the da bao hoa (|theta| tb %.2f)."
+                          " Weight decay dang keo trong so xuong; neu sau vai"
+                          " tram the he van thay dong nay thi nen chay lai tu"
+                          " mot diem luu cu hon." % (flat_gens, info["theta_abs"]),
+                          flush=True)
+            else:
+                flat_gens = 0
 
             ev = None
             if (g + 1) % args.eval_every == 0 or g == start_gen:

@@ -28,6 +28,7 @@ import numpy as np  # noqa: E402
 
 from sim import layout as layout_mod  # noqa: E402
 from sim.env import CarEnv, EnvConfig  # noqa: E402
+from sim.perception import OBS_DIM  # noqa: E402
 from train.baseline import ReactiveController  # noqa: E402
 from train.policy import GRUPolicy  # noqa: E402
 
@@ -67,15 +68,32 @@ def list_runs():
 
 
 def list_brains():
+    """Liet ke bo nao, KEM so dau vao cua tung cai.
+
+    Kho nay con giu bo nao tu cac doi cam bien truoc (40 hay 48 dau vao).
+    Chung khong chay duoc voi mo phong hien tai, nhung neu chi liet ke ten
+    thi nguoi dung chon nham roi an mot dong loi matmul vo nghia. Ghi ro so
+    dau vao ngay tren danh sach va khoa chung lai.
+    """
     out = []
     for folder in (BRAINS, RUNS):
         if not os.path.isdir(folder):
             continue
         for dirpath, _, files in os.walk(folder):
             for f in sorted(files):
-                if f.endswith(".npz") and not f.startswith("state"):
-                    p = os.path.join(dirpath, f)
-                    out.append(os.path.relpath(p, ROOT).replace("\\", "/"))
+                if not f.endswith(".npz") or f.startswith("state"):
+                    continue
+                p = os.path.join(dirpath, f)
+                rel = os.path.relpath(p, ROOT).replace("\\", "/")
+                try:
+                    d = np.load(p, allow_pickle=True)
+                    n = int(d["obs_dim"])
+                    g = int(d["gen"]) if "gen" in d.files else None
+                except Exception:      # noqa: BLE001 - file dang duoc ghi do
+                    continue
+                out.append({"path": rel, "obs": n, "gen": g,
+                            "ok": n == OBS_DIM})
+    out.sort(key=lambda b: (not b["ok"], b["path"]))
     return out
 
 
@@ -115,6 +133,14 @@ def run_episode(brain=None, layout=None, seed=0, steps=900, stage=3):
     obs = env.reset(seed)
     if brain and brain != "viet-tay":
         pol, _ = GRUPolicy.load(os.path.join(ROOT, brain))
+        if pol.obs_dim != OBS_DIM:
+            raise ValueError(
+                "bo nao %s duoc nuoi voi %d dau vao, mo phong bay gio dung "
+                "%d. No thuoc doi cam bien cu (truoc khi co truc hoc va "
+                "huong tram trong tri nho) nen khong chay duoc. Chon mot bo "
+                "nao ghi '%d dau vao' trong danh sach, vi du brains/"
+                "car_bay_v1.npz, hoac chon 'bo luat viet tay'."
+                % (brain, pol.obs_dim, OBS_DIM, OBS_DIM))
         pol.reset()
         act = pol.act
     else:
@@ -180,6 +206,10 @@ class Handler(BaseHTTPRequestHandler):
                                   steps=int(q.get("steps", 900)),
                                   stage=int(q.get("stage", 3)))
                 return self._json(rec)
+        except ValueError as e:
+            # ValueError la loi TA tu nem ra, cau chu da viet cho nguoi doc -
+            # dung dan them ten kieu ngoai le vao truoc.
+            return self._json({"error": str(e)}, 400)
         except Exception as e:          # noqa: BLE001 - tra loi thay vi chet
             return self._json({"error": "%s: %s" % (type(e).__name__, e)}, 500)
         self._json({"error": "khong co duong dan nay"}, 404)

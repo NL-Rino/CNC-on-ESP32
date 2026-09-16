@@ -11,9 +11,20 @@ import numpy as np
 
 
 def rank_transform(fitness):
-    """Chuan hoa theo thu hang -> ES khong bi mot ca the diem khung lam lech."""
-    n = len(fitness)
-    order = np.argsort(np.argsort(np.asarray(fitness, dtype=np.float64)))
+    """Chuan hoa theo thu hang -> ES khong bi mot ca the diem khung lam lech.
+
+    Ca quan the diem BANG NHAU thi phai tra ve 0 het. Truoc day khong:
+    argsort cua mot day bang nhau tra ve dung thu tu chi so, nen ca the chi
+    so chan luon "thang" ca the chi so le - ES nhan mot gradient co he thong
+    tu hu khong va di lang thang. Day chinh la thu da pha hong mot phien
+    chay 5.900 the he.
+    """
+    f = np.asarray(fitness, dtype=np.float64)
+    n = f.size
+    spread = float(f.max() - f.min())
+    if spread <= 1e-9 * max(1.0, abs(float(f.mean()))):
+        return np.zeros(n)
+    order = np.argsort(np.argsort(f))
     ranks = order / max(n - 1, 1) - 0.5
     std = ranks.std()
     return ranks / (std + 1e-8)
@@ -43,6 +54,12 @@ class ES:
 
     def __init__(self, theta, popsize=64, sigma=0.08, lr=0.03,
                  weight_decay=0.005, sigma_decay=0.999, sigma_min=0.02, seed=0):
+        # weight_decay o day la kieu TACH ROI (AdamW). Cong thang vao gradient
+        # thi Adam chuan hoa luon ca no, nen luc can ghim nhat lai khong ghim
+        # duoc - trong so cu the phinh dan cho toi khi tanh bao hoa va bo nao
+        # tra ve (+1,+1) voi MOI dau vao. Da thay chuyen do that: mot phien
+        # chay den the he 7578 thi |theta| trung binh len 2.2, dinh 10.1, va
+        # ca 48 ca the cham diem giong het nhau.
         assert popsize % 2 == 0, "popsize phai chan"
         self.theta = np.asarray(theta, dtype=np.float64).copy()
         self.n = self.theta.size
@@ -110,9 +127,13 @@ class ES:
         plus = shaped[0::2]
         minus = shaped[1::2]
         grad = (plus - minus) @ self.eps / (self.popsize * self.sigma)
-        grad -= self.weight_decay * self.theta
         self.theta += self.opt.step(grad)
+        if self.weight_decay:
+            self.theta *= 1.0 - self.opt.lr * self.weight_decay
+        self.spread = float(np.max(f) - np.min(f))
+        self.sat = float(np.abs(self.theta).mean())
         self.sigma = max(self.sigma_min, self.sigma * self.sigma_decay)
         self.gen += 1
         return {"gen": self.gen, "sigma": self.sigma,
+                "spread": self.spread, "theta_abs": self.sat,
                 "grad_norm": float(np.linalg.norm(grad))}

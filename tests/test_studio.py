@@ -144,6 +144,7 @@ def kiem_tra(pg, url, loi):
 def main():
     port = free_port()
     url = "http://127.0.0.1:%d/" % port
+    rac = os.path.join(ROOT, "layouts", "nha-thu-ui.json")
     srv = subprocess.Popen(
         [sys.executable, "-m", "tools.studio", "--no-browser",
          "--port", str(port)],
@@ -172,6 +173,9 @@ def main():
             srv.wait(timeout=5)
         except Exception:                      # noqa: BLE001
             srv.kill()
+        # don mat bang do chinh test nay tao ra, khong de ban kho ma nguon
+        if os.path.exists(rac):
+            os.remove(rac)
 
     if loi:
         print("\nLOI:")

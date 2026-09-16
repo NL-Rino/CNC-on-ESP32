@@ -61,6 +61,8 @@ class Robot:
         self.battery = battery
         self.bumped = False
         self.bump_bay = False      # cham vach hoc (co xat khi chui vao la thuong)
+        self.on_dock = False       # tiep diem sac dang cham (co dien hay khong
+                                   # la chuyen khac - do la viec cua bat tay IR)
         self.fallen = False
         self.charging = False
 
@@ -154,6 +156,21 @@ class Robot:
             self.battery = 0.0
 
     # ------------------------------------------------------------------- tram sac
+    def docked(self, world):
+        """Tiep diem sac co dang cham khong.
+
+        Day la tin hieu PHAN CUNG THAT (dien ap tren tiep diem), khong phai
+        suy luan. Nho vay xe vua bat nguon trong hoc la biet ngay tram cua no
+        o dau, khong can nhin thay gi. Khac voi try_charge: tiep diem cham
+        khong co nghia la co dien - con phai bat tay hong ngoai da.
+        """
+        d = world.dock
+        if d is None:
+            return False
+        px, py = d.pocket
+        return (math.hypot(self.x - px, self.y - py) < 0.10 and
+                abs(wrap_angle(self.theta - d.heading)) < 0.30)
+
     def try_charge(self, world, dt, ir_ok=True):
         """Sac neu dang dung dung o cam, dung huong, va da bat tay hong ngoai.
 
@@ -162,6 +179,7 @@ class Robot:
         """
         self.charging = False
         dock = world.dock
+        self.on_dock = self.docked(world)
         if dock is None or not ir_ok:
             return 0.0
         px, py = dock.pocket

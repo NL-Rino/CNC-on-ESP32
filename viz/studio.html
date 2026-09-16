@@ -91,6 +91,10 @@ input[type=range]{flex:1;accent-color:var(--trace)}
       <div><label for="layout">Mặt bằng</label><select id="layout"></select></div>
       <div><label for="seed">Hạt giống</label><input type="number" id="seed" value="1" min="0"></div>
       <div><label for="steps">Số bước</label><input type="number" id="steps" value="900" min="100" step="100"></div>
+      <div><label for="fs">Cưỡng ép về sạc</label><select id="fs">
+        <option value="0.15" selected>bật — 15% hoặc hết biên</option>
+        <option value="0.25">bật — 25% hoặc hết biên</option>
+        <option value="0">tắt — để bộ não tự lo</option></select></div>
       <button class="act" id="run">Chạy thử</button>
       <button class="ghost" id="again">Cảnh khác</button>
     </div>
@@ -110,7 +114,12 @@ input[type=range]{flex:1;accent-color:var(--trace)}
   <p class="note">Chấm xám là điểm LiDAR, chấm đỏ là vật trong 45 cm. Vòng cam +
      mũi tên là cái hộc mà bộ dò tìm ra và trục của nó. Hình tròn nhạt là
      <b>người đang đi</b> — chúng di chuyển, nên chỗ trống lúc này một giây nữa
-     có thể không còn trống.</p>
+     có thể không còn trống. Xe chuyển <b>màu cam có viền đứt</b> khi máy tính
+     đã cắt quyền bộ não và tự lái về trạm — xe vẫn nhận đủ LiDAR và cảm biến
+     trong suốt đường về, chỉ là người cầm lái đổi. Nó cắt khi pin chạm ngưỡng
+     <b>hoặc</b> khi biên an toàn về 0 (pin không còn đủ để về, theo mức hao
+     mỗi mét xe tự đo). Vế sau mới là vế quan trọng: 15% pin chỉ còn đi được
+     <b>2,2 m</b>, mà phòng rộng 3–3,8 m.</p>
 </section>
 
 <!-- ------------------------------------------------------------- VE -->
@@ -268,9 +277,13 @@ function drawFrame(){
   }
   ctx.restore();
 
+  // Xe doi mau khi may tinh cat quyen bo nao va tu lai ve tram
   const R=0.15*p.s;
-  ctx.fillStyle=f.charging?css('--dock'):(f.bump?css('--danger'):css('--trace'));
+  ctx.fillStyle=f.charging?css('--dock'):(f.bump?css('--danger'):
+    (f.fs?css('--call'):css('--trace')));
   ctx.beginPath(); ctx.arc(X(f.x,p),Y(f.y,p),R,0,7); ctx.fill();
+  if(f.fs){ctx.strokeStyle=css('--call');ctx.lineWidth=2;ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.arc(X(f.x,p),Y(f.y,p),R+6,0,7);ctx.stroke();ctx.setLineDash([]);}
   ctx.strokeStyle=css('--scope'); ctx.lineWidth=2.5;
   ctx.beginPath(); ctx.moveTo(X(f.x,p),Y(f.y,p));
   ctx.lineTo(X(f.x+0.17*Math.cos(f.th),p),Y(f.y+0.17*Math.sin(f.th),p)); ctx.stroke();
@@ -285,12 +298,14 @@ function drawFrame(){
 function statBox(v,l){return '<div class="stat"><b>'+v+'</b><span>'+l+'</span></div>';}
 function showStats(){
   const s=ep.stats, f=ep.frames[fi];
+  const nfs=ep.frames.reduce((a,g)=>a+(g.fs?1:0),0);
   $('stats').innerHTML=
     statBox(Math.round(f.batt*100)+'%','pin còn')+
     statBox(s.distance+' m','quãng đường')+
     statBox(s.full,'lần sạc đầy')+
     statBox(s.arrivals,'lần tới đèn gọi')+
     statBox(s.bumps,'bước va chạm')+
+    statBox(nfs,'bước bị cưỡng ép')+
     statBox(s.fell?'RƠI':(s.flat?'HẾT PIN':'ổn'),'kết cục');
 }
 
@@ -305,7 +320,7 @@ function setTimer(){clearInterval(timer);
 async function runEpisode(){
   $('run').disabled=true; msg($('xem-msg'),'đang chạy…',true);
   const q=new URLSearchParams({brain:$('brain').value,layout:$('layout').value,
-    seed:$('seed').value,steps:$('steps').value});
+    seed:$('seed').value,steps:$('steps').value,failsafe:$('fs').value});
   try{
     const d=await api('/api/episode?'+q);
     if(d.error){msg($('xem-msg'),'Lỗi: '+d.error,false);return;}

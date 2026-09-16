@@ -8,6 +8,7 @@ do gan nhu khong the tim ra tren phan cung.
 
 Dau vao chi gom nhung thu phan cung that co:
   - mot vong quet LiDAR (mang khoang cach, 0 = khong co tia ve) + goc xe luc quet
+  - 1 bit tiep diem sac (dang nam trong hoc hay khong)
   - 2 bit cam bien vuc
   - 2 kenh cuong do hong ngoai
   - muc pin
@@ -138,7 +139,7 @@ class Perception:
 
     # -------------------------------------------------------------------- buoc
     def update(self, ranges, scan_theta, scans_new, odo, cliff, ir,
-               battery, v, omega, bumped, charging):
+               battery, v, omega, bumped, charging, on_dock=False):
         """Tra ve list OBS_DIM so. Goi dung mot lan moi buoc dieu khien."""
         ox, oy, oth = odo
         self._prepare(len(ranges))
@@ -159,7 +160,9 @@ class Perception:
         if seen_dock > 0.5:
             self.ir_hand = self.steps
             self._remember_dock(odo)
-        if charging:
+        if charging or on_dock:
+            # Tiep diem cham = dang nam trong hoc = biet chac tram o day.
+            # Xe bat nguon trong hoc la co tri nho ngay tu buoc 0.
             self.mem = (ox, oy, oth)
             self.mem_age = 0
 

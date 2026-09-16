@@ -20,7 +20,8 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from link import protocol as P            # noqa: E402
-from sim.perception import Perception     # noqa: E402
+from sim.failsafe import NGUONG, mac_dinh  # noqa: E402
+from sim.perception import Perception  # noqa: E402
 from sim.robot import RobotSpec           # noqa: E402
 from train.policy import GRUPolicy        # noqa: E402
 
@@ -32,11 +33,14 @@ class Brain:
     """Bo nao + trang thai suy dien. Tach rieng de test goi thang duoc."""
 
     def __init__(self, policy_path, spec=None, battery_low=0.40,
-                 ir_handshake=30):
+                 ir_handshake=30, failsafe=NGUONG):
         self.pol, self.meta = GRUPolicy.load(policy_path)
         spec = spec or RobotSpec()
         self.per = Perception(battery_low, ir_handshake,
                               spec.v_max, spec.wheel_base)
+        # Pin xuong duoi nguong ma chua cam sac -> cat quyen bo nao, tu lai
+        # ve tram. Xe van nhan du LiDAR va cam bien suot duong ve.
+        self.fs = mac_dinh(failsafe) if failsafe > 0 else None
         self.reset()
 
     def reset(self, battery=1.0):
@@ -46,7 +50,10 @@ class Brain:
         self.scan_t = 0.0
         self.scan_fresh = False
         self.last_obs = None
+        self.forced = False
         self.n_steps = 0
+        if self.fs is not None:
+            self.fs.reset()
 
     def on_scan(self, pkt, now):
         self.scan = (np.array(pkt["mm"], dtype=np.float32) * 0.001,
@@ -69,11 +76,15 @@ class Brain:
             ranges=ranges, scan_theta=scan_theta, scans_new=self.scan_fresh,
             odo=st["odo"], cliff=st["cliff"], ir=st["ir"],
             battery=st["battery"], v=st["v"], omega=st["omega"],
-            bumped=st["bumped"], charging=st["charging"])
+            bumped=st["bumped"], charging=st["charging"],
+            on_dock=st.get("on_dock", False))
         self.scan_fresh = False
 
         self.last_obs = obs
-        ul, ur = self.pol.act(obs)
+        if self.fs is not None:
+            (ul, ur), self.forced = self.fs.act(obs, self.pol.act)
+        else:
+            ul, ur = self.pol.act(obs)
         if not (np.isfinite(ul) and np.isfinite(ur)):
             return 0.0, 0.0, "bo nao tra ve NaN"
         ul = max(-1.0, min(1.0, float(ul)))
@@ -83,9 +94,9 @@ class Brain:
 
 
 def serve(policy_path=None, host="0.0.0.0", port=P.PORT, verbose=True,
-          brain=None, stop=None):
+          brain=None, stop=None, failsafe=NGUONG):
     """`brain` va `stop` de test goi vao duoc; chay that thi khong can."""
-    brain = brain or Brain(policy_path)
+    brain = brain or Brain(policy_path, failsafe=failsafe)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind((host, port))
@@ -138,6 +149,9 @@ def serve(policy_path=None, host="0.0.0.0", port=P.PORT, verbose=True,
         ul, ur, why = brain.act(st, now)
         if why and verbose and n_state % 20 == 1:
             print("  dung yen:", why)
+        if brain.forced and verbose and brain.fs.steps_taken % 40 == 1:
+            print("  !! pin %.0f%% - da cat quyen bo nao, dang tu lai ve tram"
+                  % (100 * st["battery"]))
         seq += 1
         sock.sendto(P.pack_cmd(seq, int(now * 1000) & 0xFFFFFFFF,
                                ul, ur, rseq), addr)
@@ -160,9 +174,11 @@ def main():
     ap.add_argument("--policy", default="brains/car_bay_v1.npz")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=P.PORT)
+    ap.add_argument("--failsafe", type=float, default=NGUONG,
+                    help="pin duoi muc nay thi cuong ep ve sac (0 = tat)")
     a = ap.parse_args()
     try:
-        serve(a.policy, a.host, a.port)
+        serve(a.policy, a.host, a.port, failsafe=a.failsafe)
     except KeyboardInterrupt:
         print("\ndung.")
 

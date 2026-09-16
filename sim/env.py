@@ -33,6 +33,7 @@ class EnvConfig:
     call_timeout = (200, 500)
     ir_handshake = 30         # so buoc con nho tin hieu IR de duoc phep sac
     dock_approach = 0.40      # diem doi truoc CUA hoc sac (m)
+    spawn_at_dock = True      # xe luon bat dau TU TRAM SAC, khong tha lung tung
     layout = None             # mat bang tu ve (dict hoac duong dan .json);
                               # None = sinh canh ngau nhien nhu khi huan luyen
     record = False
@@ -103,13 +104,24 @@ class CarEnv:
                 lay = layout_mod.load(lay)
             self.world = layout_mod.build_world(lay, rng)
 
-        x, y = self.world.free_spot(rng, self.spec.radius)
-        th = rng.uniform(-math.pi, math.pi)
-        # Stage 2 con dang hoc cam sac nen cho pin rong rai hon; stage 3 moi
-        # that su bop. Bat dau voi 0.30 tu stage 2 thi phan lon tap ket thuc
-        # vi het pin truoc khi xe kip hoc bat cu dieu gi ve cai hoc.
-        batt = rng.uniform(0.50, 1.0) if cfg.stage == 2 else (
-            rng.uniform(0.30, 1.0) if cfg.stage >= 3 else 1.0)
+        # Xe SONG O TRAM SAC: moi chuyen di deu bat dau tu trong hoc, dau
+        # huong vao trong (no cam dau vao de sac), muon di thi phai lui ra -
+        # dung nhu ngoai doi. Tha lung tung giua phong la canh khong bao gio
+        # xay ra, ma lai lam xe khong bao gio biet tram cua no o dau.
+        dock = self.world.dock
+        if cfg.spawn_at_dock and dock is not None:
+            x, y = dock.pocket
+            th = dock.heading
+            # Thuong la vua sac day. Doi khi bi nhac ra giua chung (mat dien,
+            # nguoi cam len dat lai) nen con lung chung - giu cho xe van phai
+            # tap ve sac chu khong chi tap di long nhong.
+            batt = 1.0 if (cfg.stage < 2 or rng.random() < 0.55) \
+                else rng.uniform(0.30, 0.85)
+        else:
+            x, y = self.world.free_spot(rng, self.spec.radius)
+            th = rng.uniform(-math.pi, math.pi)
+            batt = rng.uniform(0.50, 1.0) if cfg.stage == 2 else (
+                rng.uniform(0.30, 1.0) if cfg.stage >= 3 else 1.0)
         self.robot.reset(x, y, th, batt, rng)
         self.sensors.reset()
         self.lidar.reset(self.nprng)
@@ -190,7 +202,7 @@ class CarEnv:
             scans_new=self.lidar.scans_new, odo=(r.ox, r.oy, r.oth),
             cliff=(s.cliff_front, s.cliff_rear), ir=s.ir,
             battery=r.battery, v=r.v, omega=r.omega,
-            bumped=r.bumped, charging=r.charging)
+            bumped=r.bumped, charging=r.charging, on_dock=r.docked(self.world))
 
     def _memory_polar(self):
         r = self.robot

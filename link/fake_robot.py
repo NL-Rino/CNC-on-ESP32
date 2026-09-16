@@ -76,6 +76,8 @@ class FakeRobot:
             flags |= P.F_BUMP
         if r.charging:
             flags |= P.F_CHARGING
+        if r.docked(e.world):
+            flags |= P.F_ON_DOCK
         flags |= getattr(self, "last_flags", 0)
         self.last_flags = 0
         self.sock.sendto(P.pack_state(self.seq, self._ms(),

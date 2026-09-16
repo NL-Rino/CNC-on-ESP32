@@ -28,7 +28,12 @@ import numpy as np  # noqa: E402
 
 from sim import layout as layout_mod  # noqa: E402
 from sim.env import CarEnv, EnvConfig  # noqa: E402
+from sim.failsafe import NGUONG, mac_dinh  # noqa: E402
 from sim.perception import OBS_DIM  # noqa: E402
+
+
+def rec_frames(env):
+    return env.frames
 from train.baseline import ReactiveController  # noqa: E402
 from train.policy import GRUPolicy  # noqa: E402
 
@@ -122,7 +127,8 @@ def curve(run, max_points=400):
 
 
 # ------------------------------------------------------------------ chay tap
-def run_episode(brain=None, layout=None, seed=0, steps=900, stage=3):
+def run_episode(brain=None, layout=None, seed=0, steps=900, stage=3,
+                failsafe=NGUONG):
     lay = None
     if layout:
         lay = layout_mod.load(os.path.join(LAYOUTS, layout + ".json"))
@@ -147,10 +153,20 @@ def run_episode(brain=None, layout=None, seed=0, steps=900, stage=3):
         ctrl = ReactiveController(seed)
         ctrl.reset()
         act = ctrl.act
+    fs = mac_dinh(failsafe) if failsafe > 0 else None
     done = False
     info = {}
+    forced = []
     while not done:
-        obs, _, done, info = env.step(act(obs))
+        if fs is not None:
+            a, f = fs.act(obs, act)
+        else:
+            a, f = act(obs), False
+        forced.append(f)
+        obs, _, done, info = env.step(a)
+    for fr, f in zip(rec_frames(env), forced):
+        if f:
+            fr["fs"] = 1
     rec = env.episode_record()
     rec["stats"] = {
         "steps": env.steps, "distance": round(env.distance, 2),
@@ -204,7 +220,8 @@ class Handler(BaseHTTPRequestHandler):
                                   layout=q.get("layout") or None,
                                   seed=int(q.get("seed", 0)),
                                   steps=int(q.get("steps", 900)),
-                                  stage=int(q.get("stage", 3)))
+                                  stage=int(q.get("stage", 3)),
+                                  failsafe=float(q.get("failsafe", NGUONG)))
                 return self._json(rec)
         except ValueError as e:
             # ValueError la loi TA tu nem ra, cau chu da viet cho nguoi doc -

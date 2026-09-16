@@ -33,6 +33,9 @@ bool  read_cliff(int idx);                   // 0 = truoc, 1 = sau
 float read_ir(int channel);                  // 0 = goi, 1 = tram sac
 float read_battery(void);                    // 0..1
 bool  read_bump(void);
+// Dien ap tren tiep diem sac. Chi can biet CO CHAM hay khong, khong can biet
+// co dong dien - dong dien la chuyen cua bat tay hong ngoai.
+bool  read_dock_contact(void);
 void  read_odometry(float *x, float *y, float *th, float *v, float *w);
 // Tra ve true khi vua gom du MOT VONG quet. scan[i] la khoang cach (m) o goc
 // -pi + 2*pi*i/LIDAR_N; 0 = khong co tia ve. *theta la goc ODOMETRY cua xe
@@ -64,6 +67,7 @@ static void send_state(void)
     if (read_cliff(0)) st.flags |= LINK_F_CLIFF_F;
     if (read_cliff(1)) st.flags |= LINK_F_CLIFF_R;
     if (read_bump())   st.flags |= LINK_F_BUMP;
+    if (read_dock_contact()) st.flags |= LINK_F_ON_DOCK;
     sticky_flags = 0;
 
     int n = link_pack_state(txbuf, ++seq, millis(), &st);

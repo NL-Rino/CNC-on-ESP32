@@ -16,6 +16,10 @@ python3 tools/compare.py brains/car_bay_v1.npz              # AI vs bộ điều
 python3 -m train.evaluate --policy brains/car_bay_v1.npz --ascii --seed 7
 ```
 
+> **Bàn giao sang phiên khác?** Đọc [`docs/BAN_GIAO.md`](docs/BAN_GIAO.md) —
+> một trang gói đủ mục tiêu, phần cứng, trạng thái thật, cách chạy, các quyết
+> định quan trọng và nhật ký lỗi.
+
 ## Trạng thái hiện tại (đọc cái này trước)
 
 Phần **mô phỏng + nhận thức đã xong và đã kiểm chứng**: LiDAR, bộ dò hộc chữ U

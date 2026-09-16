@@ -78,6 +78,11 @@ class Lidar:
         r = world.raycast_batch(robot.x, robot.y, ang, RMAX)
         sigma = RANGE_NOISE + RANGE_NOISE_REL * r
         r = r + (g.normal(0.0, 1.0, self.n).astype(np.float32) * sigma)
+        # Camsense tra ve so nguyen MILIMET qua UART, khong phai so thuc.
+        # Lam tron o day chu khong de den luc dong goi: nho vay mo phong va
+        # bo nao chay tren laptop nhin thay DUNG MOT day so nhu nhau, va
+        # phep doi chieu quan sat moi co y nghia.
+        r = np.round(r * 1000.0) * 0.001
         bad = (r >= RMAX - 0.02) | (r < RMIN) | (g.random(self.n) < DROP_RATE)
         self.r = np.where(bad, 0.0, r)
         self.r_filled = np.where(bad, RMAX, r)

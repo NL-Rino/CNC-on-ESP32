@@ -55,6 +55,19 @@ class Link:
         self.th.join(timeout=2.0)
 
 
+def test_bao_duoc_tiep_diem_sac_qua_duong_truyen():
+    """Xe vua bat nguon trong hoc phai bao duoc dieu do len, khong thi bo nao
+    tren laptop mat luon manh moi de nhat ve cho tram sac."""
+    st = P.pack_state(1, 1, (0.0, 0.0, 0.0), 0, 0, 1.0, (0, 0),
+                      P.F_ON_DOCK | P.F_CHARGING)
+    d = P.unpack_state(P.parse(st)[3])
+    assert d["on_dock"] and d["charging"]
+    st = P.pack_state(1, 1, (0.0, 0.0, 0.0), 0, 0, 1.0, (0, 0), P.F_ON_DOCK)
+    d = P.unpack_state(P.parse(st)[3])
+    assert d["on_dock"] and not d["charging"], \
+        "cham tiep diem ma chua co dien van phai bao duoc"
+
+
 def test_goi_tin_dong_goi_va_mo_ra_khop_nhau():
     st = P.pack_state(5, 99, (1.5, -2.5, 0.75), 0.31, -0.12, 0.66,
                       (0.1, 0.9), P.F_CLIFF_R | P.F_CHARGING)
@@ -95,8 +108,9 @@ def test_quan_sat_tren_laptop_khop_voi_mo_phong():
                 worst, worst_name = float(d[i]), OBS_NAMES[i]
             n += 1
         assert n > 150, "chi doi chieu duoc %d buoc" % n
-        # Lech duy nhat duoc phep den tu viec nen khoang cach ve milimet.
-        assert worst < 5e-3, "lech %.4f o truong %s" % (worst, worst_name)
+        # Mo phong cung lam tron ve milimet nhu Camsense that, nen hai ben
+        # phai khop gan nhu tuyet doi - chi con sai so lam tron float32.
+        assert worst < 1e-4, "lech %.5f o truong %s" % (worst, worst_name)
         print("     doi chieu %d buoc, lech lon nhat %.2e (%s)"
               % (n, worst, worst_name or "-"))
     finally:
@@ -108,8 +122,11 @@ def test_robot_chay_that_va_do_tre_duong_truyen():
     try:
         for _ in range(240):
             lk.rb.step()
-        assert lk.rb.env.distance > 0.5, "xe khong nhuc nhich (%.2f m)" % lk.rb.env.distance
+        # Xe bay gio xuat phat TU TRONG HOC sac, va bo nao dang nuoi do con
+        # chua biet lui ra - nen do quang duong la do bo nao, khong phai do
+        # duong truyen. Cai can kiem o day la lenh co ve day du khong.
         assert lk.rb.n_timeout <= 3, "mat lenh %d lan" % lk.rb.n_timeout
+        assert lk.rb.env.distance > 0.05, "xe hoan toan bat dong (%.2f m)" % lk.rb.env.distance
         ms = 1000.0 * sum(lk.rb.rtt) / max(1, len(lk.rb.rtt))
         assert ms < 20.0, "khu hoi %.1f ms" % ms
         print("     di %.1f m, khu hoi %.2f ms qua loopback" % (lk.rb.env.distance, ms))

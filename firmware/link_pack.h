@@ -21,6 +21,10 @@ extern "C" {
 #define LINK_F_BUMP     (1u<<2)
 #define LINK_F_CHARGING (1u<<3)
 #define LINK_F_REFLEX   (1u<<4)
+// Tiep diem sac dang cham. Khac LINK_F_CHARGING: cham tiep diem chua chac
+// co dien (con phai bat tay hong ngoai). Nho bit nay ma xe vua bat nguon
+// trong hoc la biet ngay tram cua no o dau, khong can nhin thay gi.
+#define LINK_F_ON_DOCK  (1u<<5)
 
 #define LINK_HDR_SIZE   12
 #define LINK_STATE_SIZE (LINK_HDR_SIZE + 44)

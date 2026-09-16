@@ -56,9 +56,12 @@ class ReactiveController:
     thang vao vat can.
     """
 
-    def __init__(self, seed=0, deterministic=False):
+    def __init__(self, seed=0, deterministic=False, force_low=False):
         self.rng = random.Random(seed)
         self.det = deterministic
+        # force_low: luon coi nhu dang yeu pin, tuc la chi lo ve tram sac
+        # chu khong di long nhong. Lop cuong ep ve sac dung o che do nay.
+        self.force_low = force_low
         self.reset()
 
     def _coin(self, obs=None):
@@ -129,7 +132,8 @@ class ReactiveController:
         # "Kinh nghiem": bien an toan am nghia la pin con lai khong du cho
         # quang duong ve tram nua - do chinh xe tu do hao pin moi met ma tinh.
         # Ve som mot chut bao gio cung re hon chet pin giua ban.
-        low = obs[I_BATT_LOW] > 0.5 or obs[I_MARGIN] < 0.08
+        low = (self.force_low or obs[I_BATT_LOW] > 0.5
+               or obs[I_MARGIN] < 0.08)
 
         if self.skip > 0:
             self.skip -= 1

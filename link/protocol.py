@@ -38,6 +38,10 @@ F_CLIFF_R = 1 << 1
 F_BUMP = 1 << 2
 F_CHARGING = 1 << 3
 F_REFLEX = 1 << 4      # robot dang tu xu ly phan xa an toan, bo qua lenh
+F_ON_DOCK = 1 << 5     # tiep diem sac dang cham (dang nam trong hoc).
+                       # Khac F_CHARGING: cham tiep diem chua chac co dien,
+                       # con phai bat tay hong ngoai da. Nho bit nay ma xe
+                       # vua bat nguon trong hoc la biet tram o dau ngay.
 F_CMD_CHARGE_OK = 1 << 0
 
 
@@ -70,6 +74,7 @@ def unpack_state(body):
                       1.0 if flags & F_CLIFF_R else 0.0),
             "bumped": bool(flags & F_BUMP),
             "charging": bool(flags & F_CHARGING),
+            "on_dock": bool(flags & F_ON_DOCK),
             "reflex": bool(flags & F_REFLEX)}
 
 

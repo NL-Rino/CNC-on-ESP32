@@ -24,7 +24,7 @@
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
   font:15px/1.55 "Segoe UI",system-ui,-apple-system,sans-serif}
-.wrap{max-width:1180px;margin:0 auto;padding:18px 16px 40px}
+.wrap{max-width:1560px;margin:0 auto;padding:18px 16px 40px}
 h1{font-size:19px;margin:0;letter-spacing:-.01em}
 .sub{color:var(--ink-2);font-size:13px;margin:2px 0 0}
 header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
@@ -48,6 +48,10 @@ button.stop{background:var(--danger);color:#fff;border:0;border-radius:8px;paddi
 .scope{background:var(--sunk);border:1px solid var(--line);border-radius:10px;overflow:hidden;
   margin:12px 0}
 canvas{display:block;width:100%;height:auto;touch-action:none}
+#cv{cursor:grab}
+#cv.drag{cursor:grabbing}
+.hint{font-size:12px;color:var(--ink-3)}
+#viewbar button.ghost[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px;margin-top:10px}
 .stat{background:var(--sunk);border-radius:9px;padding:8px 10px}
 .stat b{display:block;font-size:17px;font-variant-numeric:tabular-nums}
@@ -101,7 +105,16 @@ input[type=range]{flex:1;accent-color:var(--trace)}
     <div class="msg" id="xem-msg"></div>
   </div>
 
-  <div class="scope"><canvas id="cv" width="1120" height="700"></canvas></div>
+  <div class="scope"><canvas id="cv" width="1600" height="1000"></canvas></div>
+
+  <div class="bar" id="viewbar">
+    <button class="ghost" id="zout" title="thu nho">−</button>
+    <button class="ghost" id="zin" title="phong to">+</button>
+    <span class="mono" id="zlabel" style="min-width:52px;text-align:center">1,0×</span>
+    <button class="ghost" id="fit">Vừa khung</button>
+    <button class="ghost" id="follow" aria-pressed="false">Bám theo xe</button>
+    <span class="hint">lăn chuột để phóng, kéo để dời khung, bấm đúp vào xe để bám theo</span>
+  </div>
 
   <div class="bar">
     <button class="ghost" id="play">Tạm dừng</button>
@@ -111,6 +124,9 @@ input[type=range]{flex:1;accent-color:var(--trace)}
       <option value="2">2×</option><option value="4">4×</option></select>
   </div>
   <div class="stats" id="stats"></div>
+  <p class="note"><b>Khung nhìn:</b> lăn chuột (hoặc chụm hai ngón) để phóng to,
+     kéo để dời khung, <b>Bám theo xe</b> thì khung luôn lấy xe làm tâm — bấm đúp
+     vào xe cũng bật/tắt được. <b>Vừa khung</b> đưa về tỉ lệ nhìn cả căn nhà.</p>
   <p class="note">Chấm xám là điểm LiDAR, chấm đỏ là vật trong 45 cm. Vòng cam +
      mũi tên là cái hộc mà bộ dò tìm ra và trục của nó. Hình tròn nhạt là
      <b>bàn chân người</b>: LiDAR quét ngang ở ~20 cm trên sàn nên nó không thấy
@@ -247,9 +263,46 @@ function drawWorld(ctx,cv,w,p,opt={}){
 let ep=null, fi=0, playing=true, timer=null;
 const cv=$('cv'), ctx=cv.getContext('2d');
 
+/* ---- khung nhin: phong to, doi khung, bam theo xe -------------------
+   `proj` cu bop ca can nha vua khung hinh. Nha to 12x9 m ma khung chi
+   rong 1600 diem anh thi 1 m con ~130 diem - cai xe 30 cm thanh mot cham
+   40 diem, nhin khong ra gi. Nen tach lam hai: ti le VUA KHUNG (s0) roi
+   nhan them `zoom`, va tam khung dat o `cx,cy` (met) - bam theo xe thi
+   tam khung chinh la xe. */
+const view={zoom:1, cx:null, cy:null, follow:false};
+
+function viewProj(w,f){
+  const pad=26;
+  const s0=Math.min((cv.width-2*pad)/w.width,(cv.height-2*pad)/w.height);
+  const s=s0*view.zoom;
+  if(view.follow&&f){view.cx=f.x; view.cy=f.y;}
+  if(view.cx===null){view.cx=w.width/2; view.cy=w.height/2;}
+  // khong cho di lac han ra ngoai nha
+  const mx=w.width*0.55, my=w.height*0.55;
+  view.cx=Math.max(-mx+w.width/2,Math.min(w.width/2+mx,view.cx));
+  view.cy=Math.max(-my+w.height/2,Math.min(w.height/2+my,view.cy));
+  return {s, ox:cv.width/2-view.cx*s, oy:cv.height/2-(w.height-view.cy)*s, H:w.height};
+}
+function setZoom(z,ax,ay){
+  // ax,ay = diem (met) phai NAM YEN duoi con tro khi phong to
+  const nz=Math.max(1,Math.min(14,z));
+  if(ax!==undefined&&!view.follow){
+    const k=1-view.zoom/nz;
+    view.cx+= (ax-view.cx)*k; view.cy+= (ay-view.cy)*k;
+  }
+  view.zoom=nz;
+  $('zlabel').textContent=nz.toFixed(1).replace('.',',')+'\u00d7';
+  drawFrame();
+}
+function setFollow(on){
+  view.follow=on;
+  $('follow').setAttribute('aria-pressed',on?'true':'false');
+  if(on&&view.zoom<2.5)setZoom(3.2); else drawFrame();
+}
+
 function drawFrame(){
   if(!ep){ctx.clearRect(0,0,cv.width,cv.height);return;}
-  const w=ep.world, p=proj(cv,w.width,w.height), f=ep.frames[fi];
+  const w=ep.world, f=ep.frames[fi], p=viewProj(w,f);
   drawWorld(ctx,cv,w,p,{movers:f.legs||[]});
   ctx.save(); ctx.beginPath();
   ctx.rect(p.ox,p.oy,w.width*p.s,w.height*p.s); ctx.clip();
@@ -341,6 +394,7 @@ async function runEpisode(){
     const d=await api('/api/episode?'+q);
     if(d.error){msg($('xem-msg'),'Lỗi: '+d.error,false);return;}
     ep=d; fi=0; playing=true; $('play').textContent='Tạm dừng';
+    view.cx=null; view.cy=null;      // canh moi, dat lai tam khung
     $('scrub').max=ep.frames.length-1;
     msg($('xem-msg'),'');
     setTimer(); drawFrame(); showStats();
@@ -352,6 +406,62 @@ $('play').onclick=()=>{if(fi>=ep.frames.length-1)fi=0;
   playing=!playing;$('play').textContent=playing?'Tạm dừng':'Chạy tiếp';};
 $('scrub').oninput=e=>{fi=+e.target.value;playing=false;$('play').textContent='Chạy tiếp';drawFrame();showStats();};
 $('speed').onchange=setTimer;
+
+/* ---------------------------------------- phong to / keo / bam theo */
+function wpt(e){                      // diem tren canvas -> toa do met
+  const r=cv.getBoundingClientRect(), w=ep?ep.world:null;
+  if(!w)return null;
+  const px=(e.clientX-r.left)*cv.width/r.width, py=(e.clientY-r.top)*cv.height/r.height;
+  const p=viewProj(w,ep.frames[fi]);
+  return {x:invX(px,p), y:invY(py,p), s:p.s};
+}
+$('zin').onclick=()=>setZoom(view.zoom*1.4);
+$('zout').onclick=()=>setZoom(view.zoom/1.4);
+$('fit').onclick=()=>{view.follow=false;$('follow').setAttribute('aria-pressed','false');
+  view.cx=null;view.cy=null;setZoom(1);};
+$('follow').onclick=()=>setFollow(!view.follow);
+
+cv.addEventListener('wheel',e=>{
+  if(!ep)return; e.preventDefault();
+  const q=wpt(e); setZoom(view.zoom*(e.deltaY<0?1.18:1/1.18), q&&q.x, q&&q.y);
+},{passive:false});
+
+let pans=new Map(), pinch=null, moved=0;
+cv.addEventListener('pointerdown',e=>{
+  if(!ep)return;
+  cv.setPointerCapture(e.pointerId);
+  pans.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  moved=0;
+  if(pans.size===2){const [a,b]=[...pans.values()];
+    pinch=Math.hypot(a.x-b.x,a.y-b.y)||1;}
+  cv.classList.add('drag');
+});
+cv.addEventListener('pointermove',e=>{
+  const prev=pans.get(e.pointerId); if(!prev||!ep)return;
+  const dx=e.clientX-prev.x, dy=e.clientY-prev.y;
+  pans.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  moved+=Math.abs(dx)+Math.abs(dy);
+  if(pans.size===2){          // chum hai ngon = phong to
+    const [a,b]=[...pans.values()], d=Math.hypot(a.x-b.x,a.y-b.y)||1;
+    if(pinch)setZoom(view.zoom*d/pinch);
+    pinch=d; return;
+  }
+  if(view.follow)return;      // dang bam theo xe thi khong keo khung
+  const r=cv.getBoundingClientRect(), p=viewProj(ep.world,ep.frames[fi]);
+  const k=cv.width/r.width;
+  view.cx-=dx*k/p.s; view.cy+=dy*k/p.s;
+  drawFrame();
+});
+function endPan(e){pans.delete(e.pointerId); if(pans.size<2)pinch=null;
+  if(!pans.size)cv.classList.remove('drag');}
+cv.addEventListener('pointerup',endPan);
+cv.addEventListener('pointercancel',endPan);
+
+cv.addEventListener('dblclick',e=>{     // bam dup gan xe = bam theo xe
+  if(!ep)return; const q=wpt(e), f=ep.frames[fi];
+  if(q&&Math.hypot(q.x-f.x,q.y-f.y)<0.45)setFollow(!view.follow);
+  else setZoom(view.zoom*1.6,q&&q.x,q&&q.y);
+});
 
 /* ============================================================ VE */
 const ed=$('ed'), ectx=ed.getContext('2d');

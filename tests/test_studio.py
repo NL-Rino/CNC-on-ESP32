@@ -79,6 +79,41 @@ def kiem_tra(pg, url, loi):
         loi.append("tua khung khong an")
     print("  ok   tua toi giua tap: %s" % pg.inner_text("#tlabel"))
 
+    # --- phong to, keo khung, bam theo xe ---
+    pg.click("#zin"); pg.click("#zin")
+    z = pg.evaluate("() => view.zoom")
+    if z < 1.5:
+        loi.append("nut phong to khong an (zoom=%.2f)" % z)
+    box = pg.locator("#cv").bounding_box()
+    c0 = pg.evaluate("() => [view.cx, view.cy]")
+    pg.mouse.move(box["x"] + box["width"] * 0.5, box["y"] + box["height"] * 0.5)
+    pg.mouse.down()
+    pg.mouse.move(box["x"] + box["width"] * 0.5 - 120,
+                  box["y"] + box["height"] * 0.5 - 60, steps=8)
+    pg.mouse.up()
+    c1 = pg.evaluate("() => [view.cx, view.cy]")
+    if abs(c1[0] - c0[0]) < 0.05 and abs(c1[1] - c0[1]) < 0.05:
+        loi.append("keo khung khong an")
+    print("  ok   phong to %.1fx, keo khung %.2f m" % (z, abs(c1[0] - c0[0])))
+
+    # bam theo xe: tam khung phai LUON la xe, qua nhieu khung khac nhau
+    pg.click("#follow")
+    xa = 0.0
+    for k in (3, 8, 12):
+        pg.fill("#scrub", str(n * k // 16))
+        pg.dispatch_event("#scrub", "input")
+        d = pg.evaluate("""() => {const f=ep.frames[fi];
+            const p=viewProj(ep.world,f), c=document.getElementById('cv');
+            return Math.hypot(X(f.x,p)-c.width/2, Y(f.y,p)-c.height/2);}""")
+        xa = max(xa, d)
+    if xa > 2.0:
+        loi.append("bam theo xe lech %.1f diem anh" % xa)
+    print("  ok   bam theo xe: xe lech tam khung toi da %.2f diem anh" % xa)
+    pg.click("#fit")
+    if pg.evaluate("() => view.zoom") != 1 or pg.evaluate("() => view.follow"):
+        loi.append("nut vua khung khong tra ve trang thai ban dau")
+    print("  ok   nut vua khung tra ve ti le 1x")
+
     # --- ve nha ---
     pg.click("#t-ve")
     box = pg.locator("#ed").bounding_box()

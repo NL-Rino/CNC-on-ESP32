@@ -87,6 +87,12 @@ Mở một trang chạy ngay trên máy bạn (không gửi gì ra ngoài). Ba v
 khung hình. Thấy đám mây điểm LiDAR, vòng cam + mũi tên là cái hộc bộ dò tìm
 được và trục của nó, hình tròn cam nhạt là **người đang đi**.
 
+Căn nhà huấn luyện rộng 8–12 m mà khung hình chỉ có bấy nhiêu, nên khung nhìn
+bóp cả nhà vừa màn hình thì cái xe 30 cm chỉ còn là một chấm. Vì vậy khung xem
+có **phóng to, dời khung và bám theo xe**: lăn chuột (hoặc chụm hai ngón) để
+phóng 1×–14×, kéo để dời, nút **Bám theo xe** giữ xe luôn ở giữa khung (bấm đúp
+vào xe cũng được), nút **Vừa khung** trả về tỉ lệ nhìn cả nhà.
+
 **Vẽ nhà** — kéo chuột tạo tường và tủ, bấm để đặt vật tròn, trạm sạc, hộc mồi
 nhử, người đi lại. Lưu vào `layouts/` rồi chọn ở tab Xem. Mặt bằng cũng dùng
 được cho huấn luyện.

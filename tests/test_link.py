@@ -22,7 +22,7 @@ from link.brain_server import Brain, serve  # noqa: E402
 from link.fake_robot import FakeRobot, safety_reflex  # noqa: E402
 from sim.perception import OBS_NAMES      # noqa: E402
 
-BRAIN = "brains/car_bay_v1.npz"
+BRAIN = "brains/nha_v0.npz"
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -58,11 +58,12 @@ class Link:
 def test_bao_duoc_tiep_diem_sac_qua_duong_truyen():
     """Xe vua bat nguon trong hoc phai bao duoc dieu do len, khong thi bo nao
     tren laptop mat luon manh moi de nhat ve cho tram sac."""
-    st = P.pack_state(1, 1, (0.0, 0.0, 0.0), 0, 0, 1.0, (0, 0),
+    ir0 = [[0, 0, 0], [0, 0, 0]]
+    st = P.pack_state(1, 1, (0.0, 0.0, 0.0), 0, 0, 1.0, ir0,
                       P.F_ON_DOCK | P.F_CHARGING)
     d = P.unpack_state(P.parse(st)[3])
     assert d["on_dock"] and d["charging"]
-    st = P.pack_state(1, 1, (0.0, 0.0, 0.0), 0, 0, 1.0, (0, 0), P.F_ON_DOCK)
+    st = P.pack_state(1, 1, (0.0, 0.0, 0.0), 0, 0, 1.0, ir0, P.F_ON_DOCK)
     d = P.unpack_state(P.parse(st)[3])
     assert d["on_dock"] and not d["charging"], \
         "cham tiep diem ma chua co dien van phai bao duoc"
@@ -70,7 +71,8 @@ def test_bao_duoc_tiep_diem_sac_qua_duong_truyen():
 
 def test_goi_tin_dong_goi_va_mo_ra_khop_nhau():
     st = P.pack_state(5, 99, (1.5, -2.5, 0.75), 0.31, -0.12, 0.66,
-                      (0.1, 0.9), P.F_CLIFF_R | P.F_CHARGING)
+                      [[0.1, 0.2, 0.3], [0.9, 0.8, 0.7]],
+                      P.F_CLIFF_R | P.F_CHARGING)
     kind, seq, t, body = P.parse(st)
     d = P.unpack_state(body)
     assert kind == P.T_STATE and seq == 5 and t == 99
@@ -102,6 +104,12 @@ def test_quan_sat_tren_laptop_khop_voi_mo_phong():
             tren_nao = lk.brain.last_obs
             if tren_nao is None:
                 continue
+            if n < 3:
+                # Ba buoc dau bo qua: mo phong da chay mot lan update luc
+                # reset, con bo nao tren laptop thi chua - hai ben lech pha
+                # dung o cho tinh do THAY DOI cuong do hong ngoai.
+                n += 1
+                continue
             d = np.abs(np.array(truoc) - np.array(tren_nao))
             i = int(d.argmax())
             if d[i] > worst:
@@ -122,11 +130,14 @@ def test_robot_chay_that_va_do_tre_duong_truyen():
     try:
         for _ in range(240):
             lk.rb.step()
-        # Xe bay gio xuat phat TU TRONG HOC sac, va bo nao dang nuoi do con
-        # chua biet lui ra - nen do quang duong la do bo nao, khong phai do
-        # duong truyen. Cai can kiem o day la lenh co ve day du khong.
+        # Do DUONG TRUYEN, khong do chat luong bo nao: xe xuat phat tu trong
+        # hoc sac va bo nao dang nuoi do con chua biet lui ra, nen quang
+        # duong di duoc khong noi len dieu gi ve duong truyen ca.
         assert lk.rb.n_timeout <= 3, "mat lenh %d lan" % lk.rb.n_timeout
-        assert lk.rb.env.distance > 0.05, "xe hoan toan bat dong (%.2f m)" % lk.rb.env.distance
+        assert lk.brain.n_steps > 150, \
+            "bo nao chi xu ly duoc %d buoc" % lk.brain.n_steps
+        assert lk.brain.last_obs is not None and \
+            len(lk.brain.last_obs) == len(OBS_NAMES), "quan sat khong toi noi"
         ms = 1000.0 * sum(lk.rb.rtt) / max(1, len(lk.rb.rtt))
         assert ms < 20.0, "khu hoi %.1f ms" % ms
         print("     di %.1f m, khu hoi %.2f ms qua loopback" % (lk.rb.env.distance, ms))

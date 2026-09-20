@@ -228,7 +228,7 @@ def test_hong_ngoai_tram_sac_chi_thay_tu_phia_truoc():
     mx, my = dock.mouth
     rb.reset(mx + 0.6, my, math.pi)       # doi dien cua hoc, nhin vao
     v, seen = s.read_ir(rb, w, rng)
-    assert seen[IR_DOCK] > 0.5 and v[IR_DOCK] > 0.1
+    assert seen[IR_DOCK] > 0.5 and max(v[IR_DOCK]) > 0.1
     rb.reset(2.2, 3.0, 0.0)               # sau lung hoc, nhin vao
     v, seen = s.read_ir(rb, w, rng)
     assert seen[IR_DOCK] < 0.5, "khong duoc thay den tu phia sau tram"

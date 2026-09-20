@@ -23,7 +23,12 @@ class RobotSpec:
 
     # Odometry (dung de nho vi tri tram sac giua cac chuyen di)
     odo_scale_err = 0.025   # sai so ti le duong kinh banh moi ben
-    odo_gyro_bias = 0.010   # troi goc (rad/s)
+    # 0.0015 rad/s = 0.086 do/s: con quay MPU6050/ICM ĐÃ HIỆU CHUẨN (do do
+    # lech luc dung yen roi tru di). Chua hieu chuan thi khoang 0.57 do/s,
+    # tuc sau 150 giay lech 86 do - do duoc trong mo phong: tri nho vi tri
+    # tram sai toi 2,7 m, xe khong con tim duoc duong ve. Voi nha to va
+    # chuyen di 5 phut thi hieu chuan con quay la BAT BUOC, khong phai tuy chon.
+    odo_gyro_bias = 0.0015  # troi goc (rad/s)
 
     # Pin
     batt_capacity = 1.0

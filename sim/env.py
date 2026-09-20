@@ -17,7 +17,7 @@ from .perception import (MEM_CLIP, OBS_DIM, OBS_NAMES,  # noqa: F401
                          SEC_CLIP, Perception)
 from .robot import Robot, RobotSpec
 from .sensors import SensorSuite
-from .world import IR_CALL, IR_DOCK, Beacon, make_world
+from .world import IR_CALL, IR_DOCK, Beacon, make_house, make_world
 
 ACT_DIM = 2
 
@@ -29,11 +29,21 @@ class EnvConfig:
     stage = 3
     battery_low = 0.40        # nguong coi la "sap het pin"
     battery_full = 0.97
-    call_radius = 0.25
-    call_timeout = (200, 500)
+    call_radius = 0.35
+    call_timeout = (900, 2000)   # nha to thi nguoi goi phai doi lau hon
     ir_handshake = 30         # so buoc con nho tin hieu IR de duoc phep sac
     dock_approach = 0.40      # diem doi truoc CUA hoc sac (m)
+    world = "house"           # "house" = can nha to co ban ghe; "table" = mat ban
     spawn_at_dock = True      # xe luon bat dau TU TRAM SAC, khong tha lung tung
+
+    # --- Dinh nghia HOAN THANH mot tap ---
+    need_calls = 5            # phai toi duoc 5 cai den goi
+    need_charges = 3          # va sac day du 3 lan
+    charge_below = 0.20       # phai DA TUNG tut xuong duoi muc nay trong chuyen
+                              # di thi lan sac sau do moi duoc tinh. Ghe vao
+                              # nap them luc con 80% thi khong tinh la mot lan.
+    charge_full = 0.999       # ... VA sac len toi day. Bo di giua chung = khong tinh.
+    cover_cell = 0.35         # o luoi do dien tich LiDAR da quet qua (m)
     layout = None             # mat bang tu ve (dict hoac duong dan .json);
                               # None = sinh canh ngau nhien nhu khi huan luyen
     record = False
@@ -60,7 +70,9 @@ class EnvConfig:
     w_full = 25.0
     w_align = 0.35
     w_speed = 0.6
-    w_novel = 6.0
+    w_cover = 1.2             # moi o luoi LiDAR vua nhin thay lan dau
+    w_task = 400.0            # thuong khi HOAN THANH ca nhiem vu
+    w_task_speed = 300.0      # ... cong them neu xong som
     w_spin = 0.25
     w_energy = 0.008
     w_smooth = 0.04
@@ -97,7 +109,8 @@ class CarEnv:
         rng = self.rng
         cfg = self.cfg
         if cfg.layout is None:
-            self.world = make_world(rng, cfg.stage)
+            self.world = (make_house(rng, cfg.stage) if cfg.world == "house"
+                          else make_world(rng, cfg.stage))
         else:
             lay = cfg.layout
             if isinstance(lay, str):
@@ -132,6 +145,12 @@ class CarEnv:
         self.per.reset(batt)
         self.steps = 0
         self.visited = set()
+        self._cover_init()
+        self.ran_low = False      # da tung tut duoi 20% ke tu lan sac day truoc
+        self.sess_ok = False      # lan sac dang do co du tu cach duoc tinh khong
+        self.was_charging = False
+        self.charge_tries = 0
+        self.task_done = False
         self.call = None
         self.call_expire = 0
         self.call_timer = self._draw_call_delay()
@@ -153,13 +172,49 @@ class CarEnv:
         self.sensors.read_all(self.robot, self.world, rng)
         return self._obs()
 
+    # ------------------------------------------------------------- do dien tich
+    def _cover_init(self):
+        c = self.cfg.cover_cell
+        self._cgw = int(self.world.width / c) + 2
+        self._cgh = int(self.world.height / c) + 2
+        self.cover = np.zeros(self._cgw * self._cgh, dtype=bool)
+        self.cover_n = 0
+
+    def _cover_update(self):
+        """Danh dau nhung o luoi ma vong quet LiDAR vua NHIN THAY.
+
+        Khac han voi "o xe da di qua": xe dung giua phong lon quet mot vong
+        la biet ca can phong, con bo vao mot goc kin thi di bao nhieu cung
+        khong them duoc gi. Thuong theo cai NHIN THAY moi la thuong dung cho
+        viec di kham pha.
+        """
+        ld = self.lidar
+        r = self.robot
+        rr = ld.r
+        a = ld.base + r.oth
+        ca = np.cos(a)
+        sa = np.sin(a)
+        # Lay may diem doc theo tia chu khong chi lay diem cuoi: khoang khong
+        # giua xe va vat can cung la da nhin thay.
+        fr = np.array([0.35, 0.65, 0.92], dtype=np.float32)
+        xs = r.x + np.outer(fr, rr * ca)
+        ys = r.y + np.outer(fr, rr * sa)
+        c = self.cfg.cover_cell
+        ix = np.clip((xs / c).astype(np.int32) + 1, 0, self._cgw - 1)
+        iy = np.clip((ys / c).astype(np.int32) + 1, 0, self._cgh - 1)
+        self.cover[(iy * self._cgw + ix).ravel()] = True
+        n = int(self.cover.sum())
+        moi = n - self.cover_n
+        self.cover_n = n
+        return moi
+
     def _draw_call_delay(self):
         # Den goi chi xuat hien tu stage 3. Stage 2 danh rieng cho viec song
         # chung voi may cai hoc va tu di sac - dua ca hai thu vao cung mot
         # buoc thi xe hoc duoc ca hai deu do.
         if self.cfg.stage < 3:
             return 10 ** 9
-        return self.rng.randint(40, 400)
+        return self.rng.randint(40, 250)
 
     def _spawn_call(self):
         for _ in range(30):
@@ -329,6 +384,16 @@ class CarEnv:
                 rew += bonus
                 P["align"] += bonus
 
+        # --- mot lan sac chi duoc TINH khi DA TUNG duoi 20% VA len toi 100% ---
+        if r.battery < cfg.charge_below:
+            self.ran_low = True
+        if r.charging and not self.was_charging:
+            self.sess_ok = self.ran_low     # chot tu cach ngay luc cam vao
+            self.charge_tries += 1
+        elif not r.charging and self.was_charging:
+            self.sess_ok = False            # roi hoc giua chung: mat luot
+        self.was_charging = r.charging
+
         if gained > 0.0:
             g = cfg.w_charge * gained
             rew += g
@@ -338,22 +403,28 @@ class CarEnv:
                 rew += cfg.w_dock
                 P["charge"] += cfg.w_dock
                 self._docked_once = True
-            if b0 < cfg.battery_full <= r.battery:
-                rew += cfg.w_full
-                P["full"] += cfg.w_full
-                self.full_charges += 1
-                self.visited.clear()      # sac day xong -> vong tuan tra moi
-                info["full_charge"] = True
+
+        if self.sess_ok and r.charging and r.battery >= cfg.charge_full:
+            self.full_charges += 1
+            rew += cfg.w_full
+            P["full"] += cfg.w_full
+            info["full_charge"] = True
+            self.sess_ok = False
+            self.ran_low = False
+            self._cover_init()            # sac day xong -> vong tuan tra moi
+
+        if self.lidar.scans_new:
+            moi = self._cover_update()
+            if moi and goal_after is None and not r.charging:
+                nv = cfg.w_cover * moi
+                rew += nv
+                P["novel"] += nv
+                self.visited.add(moi)
 
         if goal_after is None and not r.charging:
             sp = cfg.w_speed * max(0.0, r.v)
             rew += sp
             P["speed"] += sp
-            cell = (int(r.x / 0.30), int(r.y / 0.30))
-            if cell not in self.visited:
-                self.visited.add(cell)
-                rew += cfg.w_novel
-                P["novel"] += cfg.w_novel
 
         # Phat quay tai cho ap dung LUC NAO CUNG THE. Truoc day no tat di khi
         # dang co muc tieu, ma pin yeu thi luc nao cung co muc tieu (ve tram)
@@ -369,6 +440,16 @@ class CarEnv:
         rew -= cost
         P["cost"] -= cost
 
+        if (not self.task_done and self.arrivals >= cfg.need_calls
+                and self.full_charges >= cfg.need_charges):
+            self.task_done = True
+            con_lai = 1.0 - self.steps / float(cfg.max_steps)
+            bonus = cfg.w_task + cfg.w_task_speed * max(0.0, con_lai)
+            rew += bonus
+            P["task"] += bonus
+            info["task_done"] = True
+            done = True               # xong viec thi ve, khong can chay het gio
+
         self.per.note_action(ul, ur)
         self.steps += 1
         if self.steps >= cfg.max_steps:
@@ -380,7 +461,9 @@ class CarEnv:
 
         obs = self._obs()
         info["arrivals"] = self.arrivals
+        info["full_charges"] = self.full_charges
         info["charged"] = self.charged
+        info["cover"] = self.cover_n
         info["distance"] = self.distance
         return obs, rew, done, info
 
@@ -390,16 +473,17 @@ class CarEnv:
         f = {"x": round(r.x, 4), "y": round(r.y, 4), "th": round(r.theta, 4),
              "batt": round(r.battery, 4), "charging": r.charging, "bump": r.bumped,
              "cliff": [self.sensors.cliff_front, self.sensors.cliff_rear],
-             "ir": [round(v, 3) for v in self.sensors.ir],
+             "ir": [[round(v, 3) for v in ch] for ch in self.sensors.ir],
              "u": [round(self.per.prev_u[0], 3), round(self.per.prev_u[1], 3)],
              "call": [round(self.call.x, 3), round(self.call.y, 3)] if self.call else None,
              "cand": [[round(c.bearing, 3), round(c.dist, 3), round(c.yaw, 3)]
                       for c in self.cands]}
         if self.world.movers:
-            # Vat di chuyen phai ghi TUNG KHUNG, khong the lay tu world mot
-            # lan dau tap nhu vat can tinh.
-            f["mv"] = [[round(m.ob.x, 3), round(m.ob.y, 3)]
-                       for m in self.world.movers]
+            # Nguoi phai ghi TUNG KHUNG, va ghi theo CHAN: chan dang nhac len
+            # thi LiDAR khong thay, nen man hinh cung khong duoc ve.
+            f["legs"] = [[round(l.x, 3), round(l.y, 3), round(l.r, 3)]
+                         for m in self.world.movers for l in m.legs
+                         if l.x > -900.0]
         n = len(self.frames)
         if n % self.cfg.scan_every == 0:
             a, rr = self.lidar.base, self.lidar.r

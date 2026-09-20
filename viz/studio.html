@@ -90,7 +90,7 @@ input[type=range]{flex:1;accent-color:var(--trace)}
       <div><label for="brain">Bộ não</label><select id="brain"></select></div>
       <div><label for="layout">Mặt bằng</label><select id="layout"></select></div>
       <div><label for="seed">Hạt giống</label><input type="number" id="seed" value="1" min="0"></div>
-      <div><label for="steps">Số bước</label><input type="number" id="steps" value="900" min="100" step="100"></div>
+      <div><label for="steps">Số bước</label><input type="number" id="steps" value="2500" min="100" step="100"></div>
       <div><label for="fs">Cưỡng ép về sạc</label><select id="fs">
         <option value="0.15" selected>bật — 15% hoặc hết biên</option>
         <option value="0.25">bật — 25% hoặc hết biên</option>
@@ -113,8 +113,11 @@ input[type=range]{flex:1;accent-color:var(--trace)}
   <div class="stats" id="stats"></div>
   <p class="note">Chấm xám là điểm LiDAR, chấm đỏ là vật trong 45 cm. Vòng cam +
      mũi tên là cái hộc mà bộ dò tìm ra và trục của nó. Hình tròn nhạt là
-     <b>người đang đi</b> — chúng di chuyển, nên chỗ trống lúc này một giây nữa
-     có thể không còn trống. Xe chuyển <b>màu cam có viền đứt</b> khi máy tính
+     <b>bàn chân người</b>: LiDAR quét ngang ở ~20 cm trên sàn nên nó không thấy
+     cả người, nó thấy hai cái cẳng chân. Chân đang chạm đất thì <b>nằm yên</b>
+     trong khi thân người đi qua; chân đang nhấc lên thì <b>biến mất</b> khỏi tầm
+     quét rồi hiện ra ở chỗ khác. Vùng gạch đỏ là <b>cầu thang</b> — LiDAR cũng
+     không thấy, chỉ hai mắt chiếu xuống cứu được xe. Xe chuyển <b>màu cam có viền đứt</b> khi máy tính
      đã cắt quyền bộ não và tự lái về trạm — xe vẫn nhận đủ LiDAR và cảm biến
      trong suốt đường về, chỉ là người cầm lái đổi. Nó cắt khi pin chạm ngưỡng
      <b>hoặc</b> khi biên an toàn về 0 (pin không còn đủ để về, theo mức hao
@@ -219,12 +222,24 @@ function drawWorld(ctx,cv,w,p,opt={}){
     ctx.fillStyle=col; ctx.font='500 11px "Cascadia Mono",monospace';
     ctx.fillText(on?'trạm sạc':'mồi nhử',X(b.x,p)-22,Y(b.y,p)-hu*p.s-6);
   }
+  // Cau thang / khoang thong tang: LiDAR KHONG thay duoc, chi cam bien vuc
+  for(const hl of (w.holes||[])){
+    ctx.save();
+    ctx.fillStyle=css('--danger'); ctx.globalAlpha=.16;
+    ctx.fillRect(X(hl[0],p),Y(hl[3],p),(hl[2]-hl[0])*p.s,(hl[3]-hl[1])*p.s);
+    ctx.globalAlpha=.85; ctx.strokeStyle=css('--danger');
+    ctx.lineWidth=2; ctx.setLineDash([7,5]);
+    ctx.strokeRect(X(hl[0],p),Y(hl[3],p),(hl[2]-hl[0])*p.s,(hl[3]-hl[1])*p.s);
+    ctx.restore();
+    ctx.fillStyle=css('--danger'); ctx.font='500 11px "Cascadia Mono",monospace';
+    ctx.fillText('cầu thang',X(hl[0],p)+4,Y(hl[3],p)-6);
+  }
+  // Nguoi: LiDAR chi thay HAI CAI CHAN, va chan dang nhac len thi bien mat.
+  // Ve dung nhu vay chu khong ve mot khoi truot muot.
   for(const m of (opt.movers||[])){
-    ctx.fillStyle=css('--call'); ctx.globalAlpha=.30;
-    ctx.beginPath(); ctx.arc(X(m[0],p),Y(m[1],p),(m[2]||0.2)*p.s,0,7); ctx.fill();
-    ctx.globalAlpha=.9; ctx.lineWidth=1.5; ctx.strokeStyle=css('--call');
-    ctx.beginPath(); ctx.arc(X(m[0],p),Y(m[1],p),(m[2]||0.2)*p.s,0,7); ctx.stroke();
-    ctx.globalAlpha=1;
+    ctx.fillStyle=css('--call'); ctx.globalAlpha=.85;
+    ctx.beginPath(); ctx.arc(X(m[0],p),Y(m[1],p),Math.max(3,(m[2]||0.045)*p.s),0,7);
+    ctx.fill(); ctx.globalAlpha=1;
   }
 }
 
@@ -235,8 +250,7 @@ const cv=$('cv'), ctx=cv.getContext('2d');
 function drawFrame(){
   if(!ep){ctx.clearRect(0,0,cv.width,cv.height);return;}
   const w=ep.world, p=proj(cv,w.width,w.height), f=ep.frames[fi];
-  const mvR=(w.movers||[]).map(m=>m.r);
-  drawWorld(ctx,cv,w,p,{movers:(f.mv||[]).map((m,i)=>[m[0],m[1],mvR[i]||0.2])});
+  drawWorld(ctx,cv,w,p,{movers:f.legs||[]});
   ctx.save(); ctx.beginPath();
   ctx.rect(p.ox,p.oy,w.width*p.s,w.height*p.s); ctx.clip();
 
@@ -306,6 +320,8 @@ function showStats(){
     statBox(s.arrivals,'lần tới đèn gọi')+
     statBox(s.bumps,'bước va chạm')+
     statBox(nfs,'bước bị cưỡng ép')+
+    statBox((s.arrivals||0)+'/5','đèn gọi đã tới')+
+    statBox((s.full||0)+'/3','lần sạc hợp lệ')+
     statBox(s.fell?'RƠI':(s.flat?'HẾT PIN':'ổn'),'kết cục');
 }
 

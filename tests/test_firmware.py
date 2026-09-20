@@ -78,7 +78,8 @@ int main(void) {
     link_state_t st;
     st.x = 1.25f; st.y = -2.5f; st.th = 0.75f;
     st.v = 0.3125f; st.w = -0.125f; st.battery = 0.625f;
-    st.ir_call = 0.25f; st.ir_dock = 0.875f;
+    st.ir_call[0] = 0.25f; st.ir_call[1] = 0.5f;   st.ir_call[2] = 0.125f;
+    st.ir_dock[0] = 0.875f; st.ir_dock[1] = 0.75f; st.ir_dock[2] = 0.0625f;
     st.u_applied_l = -0.5f; st.u_applied_r = 0.75f;
     st.flags = LINK_F_CLIFF_R | LINK_F_REFLEX;
     int n = link_pack_state(buf, 1234u, 5678u, &st);
@@ -134,7 +135,7 @@ def check_link(tmp):
     n, _, hx = lines["STATE"].partition(" ")
     c_state = bytes.fromhex(hx)
     py_state = P.pack_state(1234, 5678, (1.25, -2.5, 0.75), 0.3125, -0.125,
-                            0.625, (0.25, 0.875),
+                            0.625, [[0.25, 0.5, 0.125], [0.875, 0.75, 0.0625]],
                             P.F_CLIFF_R | P.F_REFLEX, (-0.5, 0.75))
     if c_state != py_state:
         bad += 1

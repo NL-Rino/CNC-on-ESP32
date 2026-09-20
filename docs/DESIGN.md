@@ -282,6 +282,33 @@ nhau → gradient 0 → weight decay kéo trọng số xuống → hết bão ho
 phân hoá. Kèm theo đó là dòng cảnh báo trong log, để lần sau không ai đốt
 hàng nghìn thế hệ mà không biết gì.
 
+**(m) Ba lỗi cảm biến chỉ lộ ra khi đổi sang căn nhà lớn.** Mặt bàn 3 m che
+được chúng; căn nhà 10 m thì không.
+
+1. **Ba mắt hồng ngoại lắp ngược.** `IR_MAT[0] = -1.15` là mắt bên *phải*
+   nhưng tôi đặt tên nó là `L`, nên công thức `(L-R)` đảo dấu và xe **lái ra
+   xa đèn**. Đo được: xe săn đèn 400 bước liền mà chưa bao giờ tới gần hơn
+   1,8 m. Một dấu trừ.
+2. **Mô hình suy giảm hồng ngoại quá gắt.** `1/(1+(d/0.9)²)` cho cường độ
+   0,048 ở 4 m — dưới cả ngưỡng "có thấy" 0,05. Khai báo tầm 6 m nhưng thực
+   tế 3,5 m; xe đi ngang cách đèn 3 m vẫn không thấy gì. Đổi mẫu số sang 2,5:
+   tỉ lệ nhìn thấy 0,3% → 10% số bước.
+3. **Con quay chưa hiệu chuẩn.** 0,010 rad/s = 0,57°/s, nghe nhỏ, nhưng
+   chuyến đi 150 giây thì lệch **86°** — trí nhớ vị trí trạm sai tới 2,7 m và
+   xe không còn tìm được đường về. Đổi sang 0,0015 rad/s (0,086°/s), là mức
+   của MPU6050 **đã hiệu chuẩn**. Với nhà to và chuyến đi 5 phút thì hiệu
+   chuẩn con quay là bắt buộc, không phải tuỳ chọn.
+
+Điểm chung của cả ba: chúng đều "chạy được" trên mặt bàn nhỏ. Sai số tuyến
+tính theo thời gian và khoảng cách thì chỉ lộ ra khi cho nó thời gian và
+khoảng cách.
+
+**(n) Một mắt hồng ngoại không cho biết hướng.** Đây không phải lỗi mà là
+giới hạn vật lý tôi đã bỏ qua: với một mắt, xe chỉ biết "có thấy đèn", nên
+cách duy nhất là đi thẳng rồi hy vọng. Đo: tới được 0,2/5 đèn. Ba mắt đặt ở
+−66°, 0°, +66° thì tỉ lệ cường độ giữa chúng cho ra góc — đúng cách robot hút
+bụi thật dò hướng về trạm. Cái giá là vector quan sát 46 → 50 số.
+
 Bài học chung: khi agent **không** học được một kỹ năng, đừng tăng số thế hệ. Hãy
 đo xem nó thật sự đi tới đâu và dừng lại ở đâu — gần như lần nào nguyên nhân cũng
 là hai khoản thưởng đang kéo ngược nhau.

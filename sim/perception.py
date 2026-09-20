@@ -10,7 +10,7 @@ Dau vao chi gom nhung thu phan cung that co:
   - mot vong quet LiDAR (mang khoang cach, 0 = khong co tia ve) + goc xe luc quet
   - 1 bit tiep diem sac (dang nam trong hoc hay khong)
   - 2 bit cam bien vuc
-  - 2 kenh cuong do hong ngoai
+  - 3 mat thu hong ngoai x 2 kenh (so cuong do giua chung ra huong den)
   - muc pin
   - odometry cua chinh xe (x, y, goc) - co troi, va DUNG cai troi do
   - van toc, toc do quay, co va cham
@@ -28,7 +28,8 @@ SEC_CLIP = 3.0          # tam nhin dua vao mang no-ron (m) - xa hon coi la "tron
 MEM_CLIP = 3.0
 E_PER_M_0 = 0.045       # uoc luong ban dau: pin hao moi met
 
-OBS_DIM = SECTORS + 2 + 6 * MAX_CAND + 6 + 6 + 3 + 5
+N_IR = 3                # so mat thu hong ngoai quanh dau xe
+OBS_DIM = SECTORS + 2 + 6 * MAX_CAND + 2 * (N_IR + 2) + 6 + 3 + 5
 
 OBS_NAMES = (
     ["lidar_sector_%02d" % i for i in range(SECTORS)] +
@@ -36,7 +37,8 @@ OBS_NAMES = (
     sum([["cand%d_seen" % i, "cand%d_sin" % i, "cand%d_cos" % i,
           "cand%d_dist" % i, "cand%d_yawsin" % i, "cand%d_yawcos" % i]
          for i in range(MAX_CAND)], []) +
-    ["ir_call", "ir_call_seen", "ir_dock", "ir_dock_seen", "d_ir_call", "d_ir_dock"] +
+    ["ir_call_L", "ir_call_C", "ir_call_R", "ir_call_seen", "d_ir_call"] +
+    ["ir_dock_L", "ir_dock_C", "ir_dock_R", "ir_dock_seen", "d_ir_dock"] +
     ["mem_known", "mem_sin", "mem_cos", "mem_dist", "mem_headsin", "mem_headcos"] +
     ["battery", "battery_low", "return_margin"] +
     ["vel", "yaw_rate", "prev_u_left", "prev_u_right", "bump"]
@@ -65,7 +67,7 @@ class Perception:
         self.mem = None                # (x, y, goc truc) trong he odometry
         self.mem_age = 0
         self.ir_hand = -10 ** 9        # buoc cuoi cung con thay IR tram sac
-        self.prev_ir = [0.0, 0.0]
+        self.prev_ir = [0.0, 0.0]        # cuong do manh nhat moi kenh, buoc truoc
         self.prev_u = [0.0, 0.0]
         self.odo_prev = None
         self.batt_prev = battery
@@ -115,7 +117,12 @@ class Perception:
         ox, oy, oth = odo
         dx = self.mem[0] - ox
         dy = self.mem[1] - oy
-        return (math.hypot(dx, dy), wrap_angle(math.atan2(dy, dx) - oth),
+        d = math.hypot(dx, dy)
+        if d < 0.02:
+            # Dang dung ngay tai tram: goc "huong ve tram" la vo nghia va
+            # nhay loan xa theo sai so lam tron. Cho ve 0 cho on dinh.
+            return d, 0.0, wrap_angle(self.mem[2] - oth)
+        return (d, wrap_angle(math.atan2(dy, dx) - oth),
                 wrap_angle(self.mem[2] - oth))
 
     def return_margin(self, dist):
@@ -129,7 +136,7 @@ class Perception:
         else:
             # 2.0 chu khong phai 1.0: duong ve khong thang, con phai vong ra
             # truoc cua hoc. 0.12 la phan danh cho viec do dam va canh truc.
-            need = self.e_per_m * dist * 2.0 + 0.12
+            need = self.e_per_m * dist * 2.5 + 0.12
         return clamp(self.batt_prev - need, -1.0, 1.0)
 
     @property
@@ -154,9 +161,14 @@ class Perception:
             self.cands = detect(self.base, ranges, self.cos_base,
                                 self.sin_base, scan_theta - oth)
 
-        ir_call, ir_dock = float(ir[0]), float(ir[1])
-        seen_call = 1.0 if ir_call > 0.05 else 0.0
-        seen_dock = 1.0 if ir_dock > 0.05 else 0.0
+        # ir[kenh] = [trai, giua, phai]. Mot mat thi chi biet "co thay hay
+        # khong"; ba mat thi ti le giua chung cho ra huong.
+        ir_call = [float(v) for v in ir[0]]
+        ir_dock = [float(v) for v in ir[1]]
+        max_call = max(ir_call)
+        max_dock = max(ir_dock)
+        seen_call = 1.0 if max_call > 0.05 else 0.0
+        seen_dock = 1.0 if max_dock > 0.05 else 0.0
         if seen_dock > 0.5:
             self.ir_hand = self.steps
             self._remember_dock(odo)
@@ -192,10 +204,11 @@ class Perception:
             else:
                 obs += [0.0, 0.0, 0.0, 1.0, 0.0, 1.0]
 
-        obs += [ir_call, seen_call, ir_dock, seen_dock,
-                clamp((ir_call - self.prev_ir[0]) * 8.0, -1.0, 1.0),
-                clamp((ir_dock - self.prev_ir[1]) * 8.0, -1.0, 1.0)]
-        self.prev_ir = [ir_call, ir_dock]
+        obs += ir_call + [seen_call,
+                          clamp((max_call - self.prev_ir[0]) * 8.0, -1.0, 1.0)]
+        obs += ir_dock + [seen_dock,
+                          clamp((max_dock - self.prev_ir[1]) * 8.0, -1.0, 1.0)]
+        self.prev_ir = [max_call, max_dock]
 
         md, mb, mh = self.memory_polar(odo)
         if self.mem is None:

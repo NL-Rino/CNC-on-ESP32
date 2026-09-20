@@ -24,7 +24,10 @@ _POL = None
 
 # Cap 0-1 chi can tap ngan (song sot + ne vat can); cap 3 phai du dai de pin
 # can it nhat mot lan, neu khong xe khong co ly do gi de hoc di sac.
-STAGE_STEPS = (600, 700, 1000, 1300)
+# Nha to + nhiem vu 5 den goi & 3 lan sac thi tap phai dai han han truoc.
+# Mot chu ky pin (xa den duoi 20% roi nap day) mat ~1500 buoc, ba chu ky la
+# 4500 - cong them thoi gian di tim den goi.
+STAGE_STEPS = (900, 1400, 3000, 5000)
 
 
 def steps_for(stage, cap):
@@ -56,7 +59,7 @@ def evaluate(theta, hidden, stage, seeds, max_steps):
     env = make_env(stage=stage, max_steps=steps_for(stage, max_steps))
     agg = {"return": 0.0, "arrivals": 0.0, "charged": 0.0, "distance": 0.0,
            "bumps": 0.0, "fell": 0.0, "flat": 0.0, "cells": 0.0,
-           "full_charges": 0.0}
+           "full_charges": 0.0, "task_done": 0.0}
     for s in seeds:
         _, st = rollout(pol, env, s)
         for k in agg:
@@ -68,14 +71,15 @@ def evaluate(theta, hidden, stage, seeds, max_steps):
 
 # Dieu kien len cap trong chuong trinh hoc
 def stage_passed(stage, ev):
+    """`cells` bay gio la SO O LUOI LiDAR DA QUET QUA, khong phai o da di qua."""
     if stage == 0:
-        return ev["fell"] <= 0.10 and ev["cells"] >= 10
+        return ev["fell"] <= 0.10 and ev["cells"] >= 120
     if stage == 1:
-        return ev["fell"] <= 0.10 and ev["cells"] >= 9 and ev["bumps"] <= 50
+        return ev["fell"] <= 0.10 and ev["cells"] >= 180 and ev["bumps"] <= 200
     if stage == 2:
-        # Stage 2 chua co den goi, nen khong doi hoi arrivals. Chi doi hoi
-        # song chung duoc voi may cai hoc ma khong roi ban, khong huc lien tuc.
-        return ev["fell"] <= 0.10 and ev["cells"] >= 9 and ev["bumps"] <= 90
+        # Chua co den goi o bac nay; doi hoi song sot va biet tu ve sac.
+        return (ev["fell"] <= 0.10 and ev["flat"] <= 0.25
+                and ev["full_charges"] >= 0.5)
     return False
 
 
@@ -86,7 +90,7 @@ def main():
     ap.add_argument("--episodes", type=int, default=3, help="so tap moi ca the")
     ap.add_argument("--sigma", type=float, default=0.08)
     ap.add_argument("--lr", type=float, default=0.035)
-    ap.add_argument("--hidden", type=int, default=16)
+    ap.add_argument("--hidden", type=int, default=32)
     ap.add_argument("--max-steps", type=int, default=1600)
     ap.add_argument("--stage", type=int, default=-1,
                     help="-1 = tu quyet (nap lai thi theo file, moi thi 3)")
@@ -233,7 +237,7 @@ def main():
                 ev = evaluate(es.theta.astype(np.float32), hidden, stage,
                               eseeds, args.max_steps)
                 line += ("\n         eval: R %7.1f | toi_diem %.2f | sac %.2f"
-                         " (day %.2f) | o_da_di %.1f | va_cham %.1f"
+                         " (day %.2f) | o_phu %.0f | va_cham %.1f"
                          " | roi %.0f%% | het_pin %.0f%%"
                          % (ev["return"], ev["arrivals"], ev["charged"],
                             ev["full_charges"], ev["cells"], ev["bumps"],

@@ -27,7 +27,7 @@ extern "C" {
 #define LINK_F_ON_DOCK  (1u<<5)
 
 #define LINK_HDR_SIZE   12
-#define LINK_STATE_SIZE (LINK_HDR_SIZE + 44)
+#define LINK_STATE_SIZE (LINK_HDR_SIZE + 60)
 #define LINK_CMD_SIZE   (LINK_HDR_SIZE + 16)
 #define LINK_SCAN_SIZE(n) (LINK_HDR_SIZE + 12 + 2 * (n))
 
@@ -35,7 +35,9 @@ typedef struct {
     float x, y, th;       // odometry
     float v, w;
     float battery;
-    float ir_call, ir_dock;
+    // BA mat thu moi kenh: trai, giua, phai. Mot mat chi biet co thay hay
+    // khong; ba mat thi ti le cuong do giua chung cho ra HUONG cua den.
+    float ir_call[3], ir_dock[3];
     float u_applied_l;    // ga THUC SU vao dong co, khong phai ga duoc yeu cau
     float u_applied_r;
     uint8_t flags;

@@ -29,15 +29,17 @@ int link_pack_state(uint8_t *buf, uint32_t seq, uint32_t t_ms,
     put_f32(buf, o + 12, st->v);
     put_f32(buf, o + 16, st->w);
     put_f32(buf, o + 20, st->battery);
-    put_f32(buf, o + 24, st->ir_call);
-    put_f32(buf, o + 28, st->ir_dock);
-    put_f32(buf, o + 32, st->u_applied_l);
-    put_f32(buf, o + 36, st->u_applied_r);
-    buf[o + 40] = st->flags;
-    buf[o + 41] = 0;
-    buf[o + 42] = 0;
-    buf[o + 43] = 0;
-    return o + 44;
+    for (int i = 0; i < 3; ++i) {
+        put_f32(buf, o + 24 + 4 * i, st->ir_call[i]);
+        put_f32(buf, o + 36 + 4 * i, st->ir_dock[i]);
+    }
+    put_f32(buf, o + 48, st->u_applied_l);
+    put_f32(buf, o + 52, st->u_applied_r);
+    buf[o + 56] = st->flags;
+    buf[o + 57] = 0;
+    buf[o + 58] = 0;
+    buf[o + 59] = 0;
+    return o + 60;
 }
 
 int link_pack_scan(uint8_t *buf, uint32_t seq, uint32_t t_ms,

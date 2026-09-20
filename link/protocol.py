@@ -5,7 +5,7 @@ du lieu MOI NHAT. TCP gap mat goi se dung lai de gui lai goi cu - dung cai
 ma ta khong muon: mot goi cam bien tre 300 ms con te hon la mat han no.
 
 Ba loai goi:
-  STATE  robot -> nao, 20 Hz, 56 byte   (odometry, pin, vuc, hong ngoai, ga)
+  STATE  robot -> nao, 20 Hz, 72 byte   (odometry, pin, vuc, 6 mat IR, ga)
   SCAN   robot -> nao,  7 Hz, ~886 byte (mot vong quet LiDAR)
   CMD    nao -> robot, 20 Hz, 28 byte   (ga trai/phai)
 
@@ -23,13 +23,15 @@ T_SCAN = 2
 T_CMD = 3
 
 HDR = struct.Struct("<2sBBII")        # magic, ver, type, seq, t_ms
-# ox oy oth v omega batt ir_call ir_dock ul_ap ur_ap, co
+# ox oy oth v omega batt, ir_call[3], ir_dock[3], ul_ap ur_ap, co
+# BA mat thu moi kenh (trai, giua, phai). Mot mat thi chi biet co thay hay
+# khong chu khong biet den o dau; ba mat thi ti le cuong do cho ra huong.
 # ul_ap/ur_ap la ga THUC SU vao dong co, khong phai ga bo nao vua yeu cau.
 # Hai so nay khac nhau moi khi lop phan xa an toan can thiep hoac watchdog
 # cat dien - va bo nao phai biet dieu do, vi "lenh buoc truoc" la mot trong
 # 46 dau vao cua no. Thieu no thi trang thai GRU tren laptop se troi khoi
 # thuc te dung luc robot dang gap chuyen.
-STATE = struct.Struct("<10fB3x")
+STATE = struct.Struct("<14fB3x")
 SCAN = struct.Struct("<HfI2x")        # so diem, goc luc quet, thoi diem quet
 CMD = struct.Struct("<2fIB3x")        # ga trai, ga phai, seq da xu ly, co
 
@@ -61,15 +63,18 @@ def parse(buf):
 
 # ------------------------------------------------------------------- STATE
 def pack_state(seq, t_ms, odo, v, omega, battery, ir, flags, u_applied=(0.0, 0.0)):
+    """ir = [[goi_trai, goi_giua, goi_phai], [sac_trai, sac_giua, sac_phai]]."""
     return _hdr(T_STATE, seq, t_ms) + STATE.pack(
-        odo[0], odo[1], odo[2], v, omega, battery, ir[0], ir[1],
+        odo[0], odo[1], odo[2], v, omega, battery,
+        ir[0][0], ir[0][1], ir[0][2], ir[1][0], ir[1][1], ir[1][2],
         u_applied[0], u_applied[1], flags)
 
 
 def unpack_state(body):
-    ox, oy, oth, v, w, batt, irc, ird, ula, ura, flags = STATE.unpack_from(body, 0)
+    (ox, oy, oth, v, w, batt, c0, c1, c2, d0, d1, d2,
+     ula, ura, flags) = STATE.unpack_from(body, 0)
     return {"odo": (ox, oy, oth), "v": v, "omega": w, "battery": batt,
-            "ir": (irc, ird), "u_applied": (ula, ura),
+            "ir": [[c0, c1, c2], [d0, d1, d2]], "u_applied": (ula, ura),
             "cliff": (1.0 if flags & F_CLIFF_F else 0.0,
                       1.0 if flags & F_CLIFF_R else 0.0),
             "bumped": bool(flags & F_BUMP),

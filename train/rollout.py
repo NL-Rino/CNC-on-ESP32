@@ -31,6 +31,6 @@ def rollout(policy, env, seed, render_cb=None):
         "fell": bool(info.get("fell", False)),
         "flat": bool(info.get("flat", False)),
         "battery": env.robot.battery,
-        "cells": len(env.visited),
+        "cells": env.cover_n, "task_done": float(bool(info.get("task_done"))),
     }
     return total, stats

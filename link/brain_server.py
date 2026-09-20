@@ -171,7 +171,7 @@ def serve(policy_path=None, host="0.0.0.0", port=P.PORT, verbose=True,
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--policy", default="brains/car_bay_v1.npz")
+    ap.add_argument("--policy", default="brains/nha_v0.npz")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=P.PORT)
     ap.add_argument("--failsafe", type=float, default=NGUONG,

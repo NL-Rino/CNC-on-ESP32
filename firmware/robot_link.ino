@@ -30,7 +30,8 @@ static const uint16_t BRAIN_PORT = 4210;
 // --------------------------------------------- ham phan cung (tu viet lay)
 void  motors(float u_left, float u_right);   // [-1,1] -> PWM 2 cap banh
 bool  read_cliff(int idx);                   // 0 = truoc, 1 = sau
-float read_ir(int channel);                  // 0 = goi, 1 = tram sac
+// channel: 0 = den goi, 1 = tram sac. mat: 0 = trai, 1 = giua, 2 = phai.
+float read_ir(int channel, int mat);
 float read_battery(void);                    // 0..1
 bool  read_bump(void);
 // Dien ap tren tiep diem sac. Chi can biet CO CHAM hay khong, khong can biet
@@ -59,8 +60,10 @@ static void send_state(void)
     link_state_t st;
     read_odometry(&st.x, &st.y, &st.th, &st.v, &st.w);
     st.battery = read_battery();
-    st.ir_call = read_ir(0);
-    st.ir_dock = read_ir(1);
+    for (int i = 0; i < 3; ++i) {
+        st.ir_call[i] = read_ir(0, i);
+        st.ir_dock[i] = read_ir(1, i);
+    }
     st.u_applied_l = u_applied[0];
     st.u_applied_r = u_applied[1];
     st.flags = sticky_flags;

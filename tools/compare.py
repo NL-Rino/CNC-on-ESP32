@@ -42,7 +42,7 @@ def main():
     ap.add_argument("--episodes", type=int, default=30)
     ap.add_argument("--seed", type=int, default=5000)
     ap.add_argument("--stage", type=int, default=3)
-    ap.add_argument("--max-steps", type=int, default=1300)
+    ap.add_argument("--max-steps", type=int, default=5000)
     args = ap.parse_args()
 
     pol, meta = GRUPolicy.load(args.policy)

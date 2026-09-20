@@ -25,7 +25,11 @@ ACT_DIM = 2
 
 class EnvConfig:
     dt = 0.05                 # 20 Hz vong dieu khien
-    max_steps = 1600          # 80 giay - du de phai sac lai it nhat mot lan
+    max_steps = 5000          # 250 giay. Do duoc: mot lan xa het pin mat
+                              # ~1000 buoc, nen muon du 3 lan sac hop le thi
+                              # tap KHONG the ngan hon ~4000 buoc. De 1600
+                              # nhu truoc thi nhiem vu moi la bat kha thi -
+                              # xe chi kip cam sac dung mot lan.
     stage = 3
     battery_low = 0.40        # nguong coi la "sap het pin"
     battery_full = 0.97
@@ -39,9 +43,14 @@ class EnvConfig:
     # --- Dinh nghia HOAN THANH mot tap ---
     need_calls = 5            # phai toi duoc 5 cai den goi
     need_charges = 3          # va sac day du 3 lan
-    charge_below = 0.20       # phai DA TUNG tut xuong duoi muc nay trong chuyen
-                              # di thi lan sac sau do moi duoc tinh. Ghe vao
-                              # nap them luc con 80% thi khong tinh la mot lan.
+    # --- Mot lan sac duoc TINH khi ca ba dieu sau dung ---
+    charge_below = 0.40       # pin luc cam vao phai duoi muc nay
+    charge_far = 2.5          # ... va truoc do da di xa tram it nhat ngan nay
+    charge_path = 1.8         # ... va tu luc cat vao trong ban kinh do thi di
+                              # THANG ve tram: quang duong di duoc khong duoc
+                              # qua 1.8 lan khoang cach luc cat vao. Day la
+                              # cach do "di ve mot mach" - chan viec quanh
+                              # quan gan tram roi ghe vao nap cho du so lan.
     charge_full = 0.999       # ... VA sac len toi day. Bo di giua chung = khong tinh.
     cover_cell = 0.35         # o luoi do dien tich LiDAR da quet qua (m)
     layout = None             # mat bang tu ve (dict hoac duong dan .json);
@@ -146,10 +155,13 @@ class CarEnv:
         self.steps = 0
         self.visited = set()
         self._cover_init()
-        self.ran_low = False      # da tung tut duoi 20% ke tu lan sac day truoc
+        self.was_far = False      # da ra khoi ban kinh charge_far chua
+        self.far_anchor = 0.0     # khoang cach luc cat vao trong ban kinh do
+        self.near_path = 0.0      # quang duong di duoc TU LUC cat vao
         self.sess_ok = False      # lan sac dang do co du tu cach duoc tinh khong
         self.was_charging = False
         self.charge_tries = 0
+        self.plug_log = []        # nhat ky tung lan cam vao (de soi luat sac)
         self.task_done = False
         self.call = None
         self.call_expire = 0
@@ -384,12 +396,26 @@ class CarEnv:
                 rew += bonus
                 P["align"] += bonus
 
-        # --- mot lan sac chi duoc TINH khi DA TUNG duoi 20% VA len toi 100% ---
-        if r.battery < cfg.charge_below:
-            self.ran_low = True
+        # --- theo doi "di xa roi ve mot mach" ---
+        dock = self.world.dock
+        if dock is not None:
+            px, py = dock.pocket
+            d_dock = math.hypot(r.x - px, r.y - py)
+            if d_dock >= cfg.charge_far:
+                # Con o ngoai vong: dat lai moc, quang duong chua tinh
+                self.was_far = True
+                self.far_anchor = d_dock
+                self.near_path = 0.0
+            else:
+                self.near_path += moved
         if r.charging and not self.was_charging:
-            self.sess_ok = self.ran_low     # chot tu cach ngay luc cam vao
+            # Chot tu cach NGAY LUC CAM VAO: pin phai duoi nguong, phai da di
+            # xa, va tu luc cat vao trong vong thi phai di thang ve.
+            self.sess_ok = (b0 < cfg.charge_below and self.was_far and
+                            self.near_path <= cfg.charge_path * self.far_anchor)
             self.charge_tries += 1
+            self.plug_log.append((b0, self.was_far, self.far_anchor,
+                                  self.near_path, self.sess_ok))
         elif not r.charging and self.was_charging:
             self.sess_ok = False            # roi hoc giua chung: mat luot
         self.was_charging = r.charging
@@ -410,7 +436,8 @@ class CarEnv:
             P["full"] += cfg.w_full
             info["full_charge"] = True
             self.sess_ok = False
-            self.ran_low = False
+            self.was_far = False
+            self.near_path = 0.0
             self._cover_init()            # sac day xong -> vong tuan tra moi
 
         if self.lidar.scans_new:

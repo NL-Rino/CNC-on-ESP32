@@ -32,28 +32,35 @@ chiếm đúng một tia), tủ và sofa, đôi khi có **cầu thang** (LiDAR k
 | | |
 |---|---|
 | Tới được **5 đèn gọi** | mỗi lần vào trong 35 cm |
-| Sạc hợp lệ **3 lần** | phải **đã từng tụt dưới 20%** rồi mới cắm, **và** phải sạc lên **100%**. Bỏ ra giữa chừng là mất lượt |
+| Sạc hợp lệ **3 lần** | lúc cắm pin phải **dưới 40%**, trước đó phải **đã đi xa trạm ≥ 2,5 m**, và từ lúc cắt vào bán kính đó thì phải **đi thẳng một mạch về** (quãng đường đi được ≤ 1,8 lần khoảng cách lúc cắt vào), **và** phải sạc lên **100%**. Bỏ ra giữa chừng là mất lượt |
 | Thưởng khám phá | mỗi ô lưới 35 cm mà **LiDAR vừa nhìn thấy lần đầu** — không phải ô xe đã đi qua |
 
 Xong sớm thì được thưởng thêm, và tập kết thúc luôn.
 
 ### Bộ luật viết tay đang đạt tới đâu
 
+Đo lại với luật sạc mới, tập dài 5.000 bước (12 tập, stage 4):
+
 | | |
 |---|---:|
-| Rơi (cầu thang) | 8% |
-| Chết vì hết pin | 41% |
-| Phủ được | 77% căn nhà |
-| Đèn gọi | **0,8 / 5** |
-| Sạc hợp lệ | **0,4 / 3** |
+| Rơi (cầu thang) | 0% |
+| Chết vì hết pin | 67% |
+| Đèn gọi | **0,5 / 5** |
+| Sạc hợp lệ | **0,0 / 3** |
 | Hoàn thành cả nhiệm vụ | **0 / 12** |
 
-Nói thẳng: **cái bar này hiện chưa ai qua được, kể cả bộ luật viết tay.** Nút
-thắt là mâu thuẫn có thật giữa hai vế của luật — muốn sạc được tính thì phải
-để pin tụt dưới 20%, mà 20% pin chỉ còn đi được **2,2 m** trong căn nhà rộng
-3–3,8 m mỗi chiều. Xe phải học cách *quanh quẩn gần trạm khi pin đã vơi* rồi
-mới cắm; đó đúng là hành vi thông minh mà bài này đặt ra, nhưng bộ luật cứng
-chưa làm tốt. Mọi mảnh ghép khác đã đo đạc và kiểm thử xong.
+Hai điều đã đo được, nói thẳng:
+
+1. **Tập phải dài hơn.** Xả hết một bình pin mất ~1.000 bước, nên muốn có 3
+   lần sạc hợp lệ thì tập không thể ngắn hơn ~4.000 bước. `max_steps` cũ là
+   1.600 — với con số đó nhiệm vụ mới là *bất khả thi về mặt số học*, xe chỉ
+   kịp cắm sạc đúng một lần. Đã nâng mặc định lên 5.000.
+2. **Nút thắt bây giờ là đường về, không phải luật sạc.** Luật sạc chạy đúng
+   như mô tả (đã soi từng lần cắm: đi xa 2,51 m rồi về hết 3,05 m quãng
+   đường — thừa tiêu chuẩn 1,8×). Nhưng bộ luật cứng nhắm **thẳng** theo trí
+   nhớ về trạm, nên trong căn nhà có tường và cửa phòng nó mắc kẹt và chết
+   pin 67% số tập. Tìm đường về qua nhiều phòng chính là phần phải **học**,
+   bộ luật viết tay không làm được.
 
 ### Bộ não
 

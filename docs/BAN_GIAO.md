@@ -203,3 +203,28 @@ và mô phỏng là chuỗi phép tính nhỏ nối tiếp nên riêng tiền ch
 đắt hơn. Mô phỏng đã được tối ưu 628 → 150 µs/bước (gấp 4,2 lần) bằng cách bỏ
 `builtin max()` và duyệt trên tuple rút sẵn — thử numpy hoá thì **chậm hơn gấp
 đôi**. Một thế hệ ~4,5 giây ở đây, ~9–11 giây trên máy đó.
+
+---
+
+## Cập nhật: định nghĩa nhiệm vụ mới (mới nhất)
+
+Một tập coi là **hoàn thành** khi: tới được **5 đèn gọi** *và* **sạc hợp lệ 3 lần**.
+
+Một lần sạc được **tính** khi đủ cả bốn:
+
+1. lúc cắm vào, pin **dưới 40%** (`charge_below`);
+2. trước đó xe đã **đi xa trạm ≥ 2,5 m** (`charge_far`);
+3. từ lúc cắt vào bán kính đó, xe **đi thẳng một mạch về**: quãng đường đi
+   được ≤ **1,8 lần** khoảng cách lúc cắt vào (`charge_path`) — đây là cách
+   chặn kiểu quanh quẩn sát trạm rồi ghé vào cho đủ số lần;
+4. sạc lên **100%** (`charge_full`). Bỏ ra giữa chừng là mất lượt.
+
+Kèm theo đó: `max_steps` mặc định nâng **1.600 → 5.000**. Xả hết một bình pin
+mất ~1.000 bước, nên với tập 1.600 bước thì 3 lần sạc là bất khả thi về mặt
+số học — xe chỉ kịp cắm đúng một lần.
+
+Đo lại bộ luật viết tay với luật mới (12 tập, 5.000 bước): 0% rơi,
+**67% chết pin**, 0,5/5 đèn gọi, **0,0/3** sạc hợp lệ. Đã soi từng lần cắm
+(`CarEnv.plug_log`): luật sạc chạy đúng — nút thắt là **đường về**. Bộ luật
+cứng nhắm thẳng theo trí nhớ về trạm nên mắc kẹt ở tường và cửa phòng. Tìm
+đường về qua nhiều phòng là phần phải **học**.

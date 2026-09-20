@@ -23,8 +23,7 @@ I_IR_CALL = OBS_NAMES.index("ir_call_L")     # L, C, R roi seen, delta
 I_IR_CALL_SEEN = OBS_NAMES.index("ir_call_seen")
 I_IR_DOCK = OBS_NAMES.index("ir_dock_L")
 I_IR_DOCK_SEEN = OBS_NAMES.index("ir_dock_seen")
-LEASH = 0.30            # bien an toan tut duoi muc nay thi bat dau quanh quan
-                        # gan tram, cho pin tut du thap moi cam sac
+
 I_MEM = OBS_NAMES.index("mem_known")       # known, sin, cos, dist, hsin, hcos
 APPROACH = 0.40                            # doi truoc cua hoc bao xa (m)
 I_BATT = OBS_NAMES.index("battery")
@@ -160,13 +159,12 @@ class ReactiveController:
         # "Kinh nghiem": bien an toan am nghia la pin con lai khong du cho
         # quang duong ve tram nua - do chinh xe tu do hao pin moi met ma tinh.
         # Ve som mot chut bao gio cung re hon chet pin giua ban.
-        # Khong ve som: luat chi tinh mot lan sac khi da tung tut duoi 20%.
-        # Nen chi CAM SAC khi bien an toan bao phai ve, hoac cham san cung.
+        # Luat moi: lan sac duoc tinh khi pin duoi 40%, da di xa tram, va tu
+        # luc cat vao gan thi di THANG ve. Nen cach choi dung la: cu di kham
+        # pha cho toi khi pin duoi 40% hoac bien an toan bao phai ve, roi ve
+        # mot mach - KHONG quanh quan gan tram (quanh quan la mat luot).
         margin = obs[I_MARGIN]
-        low = self.force_low or margin < 0.05 or obs[I_BATT] < 0.13
-        # ... nhung truoc do da phai bat dau quanh quan gan tram roi, khong
-        # thi luc pin tut duoi 20%% xe dang o dau kia can nha va khong ve kip.
-        leash = (not low) and margin < LEASH
+        low = self.force_low or obs[I_BATT] < 0.38 or margin < 0.05
 
         if self.skip > 0:
             self.skip -= 1
@@ -259,14 +257,6 @@ class ReactiveController:
                     return (sp - turn, sp + turn)
                 # bi chan thi xuong phan ne vat can - nhung VAN giu trang thai
                 # san, ne xong quay lai duoi tiep
-
-        # 5b) Pin da voi: keo ve gan tram roi tiep tuc di quanh do
-        if leash and obs[I_MEM] > 0.5 and front > 0.35:
-            md = obs[I_MEM + 3] * 3.0
-            if md > 1.6:
-                mb = math.atan2(obs[I_MEM + 1], obs[I_MEM + 2])
-                turn = max(-0.5, min(0.5, 1.2 * mb))
-                return (0.45 - turn, 0.45 + turn)
 
         # 6) Tranh vat can
         if front < 0.40:

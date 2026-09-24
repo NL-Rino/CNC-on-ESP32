@@ -16,7 +16,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from . import shapes
 from .config import MachineProfile, PipeSpec
-from .toolpath import Contour, Toolpath
+from .toolpath import Contour, Point, Toolpath
 
 
 # --------------------------------------------------------------------------
@@ -418,9 +418,9 @@ class Job:
     name: str = "cong-viec"
     operations: List[Operation] = field(default_factory=list)
     pipe: Optional[PipeSpec] = None      # ghi đè phôi của hồ sơ máy
-    # Mặc định GIỮ NGUYÊN thứ tự người dùng đã xếp.  Chỉ khi bật rõ ràng thì
-    # phần mềm mới tự sắp lại (vạch dấu -> lỗ/rãnh -> cắt đứt từ ngoài vào).
-    optimize_order: bool = False
+    # Mặc định tự sắp thứ tự như máy laser (xem ``order_contours``).  Tắt đi
+    # thì cắt đúng thứ tự trong bảng, phần mềm chỉ cảnh báo chỗ vô lý.
+    optimize_order: bool = True
     notes: str = ""
     source_path: str = ""
 
@@ -452,8 +452,8 @@ class Job:
                 for note in contour.meta.pop("notes", []):
                     warnings.append(f"Nguyên công {i} ({op.label()}): {note}")
                 tp.add(contour)
-        if self.optimize_order and len(tp.contours) > 2:
-            tp.contours = order_contours(tp.contours)
+        if self.optimize_order and len(tp.contours) > 1:
+            tp.contours = order_contours(tp.contours, section, profile)
         else:
             warnings.extend(check_order(tp.contours))
         return tp, warnings
@@ -482,7 +482,7 @@ class Job:
             name=d.get("name", "cong-viec"),
             operations=[Operation.from_dict(o) for o in d.get("operations", [])],
             pipe=pipe,
-            optimize_order=bool(d.get("optimize_order", False)),
+            optimize_order=bool(d.get("optimize_order", True)),
             notes=d.get("notes", ""),
         )
 
@@ -508,47 +508,169 @@ def check_order(contours: Sequence[Contour]) -> List[str]:
     msgs: List[str] = []
     cut_off_at: Optional[float] = None
     for i, c in enumerate(contours, 1):
-        if c.wrap and c.kind == "cut":
-            x = min(p[0] for p in c.points)
-            cut_off_at = x if cut_off_at is None else min(cut_off_at, x)
-        elif cut_off_at is not None and min(p[0] for p in c.points) > cut_off_at:
+        lo = min(p[0] for p in c.points)
+        # Kể cả một nhát cắt đứt khác: nằm ngoài nhát đã cắt thì cũng rơi mất.
+        if cut_off_at is not None and lo > cut_off_at:
             msgs.append(
                 f"Nguyên công {i} ('{c.name}') nằm ngoài nhát cắt đứt phía trước "
                 f"(x > {cut_off_at:.0f} mm) - lúc đó phần phôi này đã rơi ra rồi. "
                 f"Hãy xếp nhát cắt đứt xuống sau, hoặc bật tự sắp xếp thứ tự."
             )
+        if c.wrap and c.kind == "cut":
+            cut_off_at = lo if cut_off_at is None else min(cut_off_at, lo)
     return msgs
 
 
-def order_contours(contours: Sequence[Contour]) -> List[Contour]:
-    """Sắp xếp thứ tự cắt theo láng giềng gần nhất để bớt quãng chạy không.
+def _travel_cost(section=None, profile=None):
+    """Hàm ước thời gian chạy không giữa hai tư thế (giây), như G0 thật.
 
-    Quy tắc công nghệ: cắt các lỗ/rãnh *trước*, cắt đứt/miệng cá *sau cùng* -
-    vì sau khi cắt đứt thì phần phôi phía ngoài rơi ra, không còn gá được nữa.
+    G0 cho mọi trục chạy cùng lúc nên thời gian là của **trục chậm nhất**, chứ
+    không phải khoảng cách Euclid trên mặt trải phẳng.  Và góc xoay tính theo
+    đường ngắn nhất qua mốc 360 độ: lỗ ở 5 độ và lỗ ở 355 độ chỉ cách nhau 10
+    độ, không phải 350.
     """
-    marks = [c for c in contours if c.kind == "mark"]
-    inner = [c for c in contours if c.kind != "mark" and not c.wrap]
-    outer = [c for c in contours if c.kind != "mark" and c.wrap]
+    def rate(role: str, fallback: float) -> float:
+        ax = profile.axis(role) if profile is not None else None
+        return max(1e-6, (ax.max_rate if ax and ax.max_rate > 0 else fallback) / 60.0)
 
-    def sort_group(group: Sequence[Contour]) -> List[Contour]:
-        if len(group) < 2:
-            return list(group)
-        remaining = list(group)
-        out = [remaining.pop(0)]
-        while remaining:
-            last = out[-1].points[-1]
-            best_i, best_d = 0, float("inf")
-            for i, c in enumerate(remaining):
-                p = c.points[0]
-                d = (p[0] - last[0]) ** 2 + (p[1] - last[1]) ** 2
-                if d < best_d:
-                    best_i, best_d = i, d
-            out.append(remaining.pop(best_i))
+    r_u = rate("along", 4000.0)
+    r_a = rate("rotary", 3600.0)
+    r_x = rate("cross", 3000.0)
+
+    def pose(pt: Point) -> Tuple[float, float, float]:
+        u, v = pt
+        if section is None:
+            return (u, v, 0.0)
+        ct = section.contact_at(v)
+        return (u, ct.theta, ct.cross)
+
+    def cost(a: Tuple[float, float, float], b: Tuple[float, float, float]) -> float:
+        dth = (b[1] - a[1] + 180.0) % 360.0 - 180.0
+        return max(abs(b[0] - a[0]) / r_u, abs(dth) / r_a, abs(b[2] - a[2]) / r_x)
+
+    return pose, cost
+
+
+def order_contours(contours: Sequence[Contour], section=None,
+                   profile=None) -> List[Contour]:
+    """Sắp thứ tự cắt như phần mềm của máy laser cắt ống.
+
+    Ba quy tắc, theo thứ tự ưu tiên:
+
+    1. **Làm xong từng chi tiết một, từ đầu tự do vào.**  Nhát cắt đứt gần đầu tự
+       do nhất cắt trước; mọi lỗ/rãnh/vạch dấu nằm phía ngoài nó (sẽ rơi theo
+       chi tiết đó) phải cắt *trước* nó.  Nhờ vậy trục dọc đi một chiều, không
+       chạy tới chạy lui khắp cây ống như khi cắt hết lỗ rồi mới quay lại cắt
+       đứt.  Nguyên công nằm phía trong mọi nhát cắt đứt thì làm trước nhát
+       cắt đứt cuối cùng - chương trình luôn kết thúc bằng một nhát cắt đứt.
+    2. Trong mỗi chi tiết: **vạch dấu trước** (phôi còn cứng vững), rồi mới đến
+       lỗ và rãnh.
+    3. Giữa các đường cùng nhóm: đi tới đường **gần nhất tính theo thời gian máy
+       thật**, rồi thử đổi chỗ từng đường xem có bớt được quãng chạy không.
+    """
+    contours = list(contours)
+    if len(contours) < 2:
+        return contours
+    pose, cost = _travel_cost(section, profile)
+    start = {id(c): pose(c.points[0]) for c in contours}
+    end = {id(c): pose(c.points[-1]) for c in contours}
+
+    def min_u(c: Contour) -> float:
+        return min(p[0] for p in c.points)
+
+    def max_u(c: Contour) -> float:
+        return max(p[0] for p in c.points)
+
+    def path_cost(seq: List[Contour], here, tail=None) -> float:
+        """Tổng thời gian chạy không, tính cả chặng cuối tới ``tail`` (điểm
+        bắt đầu của đường cố định đi ngay sau nhóm, ví dụ nhát cắt đứt)."""
+        total = 0.0
+        for c in seq:
+            if here is not None:
+                total += cost(here, start[id(c)])
+            here = end[id(c)]
+        if tail is not None and here is not None:
+            total += cost(here, tail)
+        return total
+
+    def nearest_from(first: Optional[Contour], group: List[Contour], here) -> List[Contour]:
+        left = list(group)
+        out: List[Contour] = []
+        if first is not None:
+            left.remove(first)
+            out.append(first)
+            here = end[id(first)]
+        while left:
+            best = min(left, key=lambda c: cost(here, start[id(c)]))
+            left.remove(best)
+            out.append(best)
+            here = end[id(best)]
         return out
 
-    # vạch dấu trước (chưa cắt gì), rồi lỗ/rãnh, cuối cùng mới cắt đứt
-    marks = sort_group(marks)
-    inner = sort_group(inner)
-    # cắt đứt theo thứ tự từ đầu tự do vào trong để phôi luôn còn được đỡ
-    outer.sort(key=lambda c: -max(p[0] for p in c.points))
-    return marks + inner + outer
+    def improve(seq: List[Contour], here, tail) -> List[Contour]:
+        """Dời từng đường sang chỗ khác nếu tổng quãng chạy không giảm."""
+        best = path_cost(seq, here, tail)
+        for _ in range(4 * len(seq) + 4):
+            changed = False
+            for i in range(len(seq)):
+                item = seq[i]
+                rest = seq[:i] + seq[i + 1:]
+                for j in range(len(rest) + 1):
+                    if j == i:
+                        continue
+                    trial = rest[:j] + [item] + rest[j:]
+                    c = path_cost(trial, here, tail)
+                    if c < best - 1e-9:
+                        seq, best, changed = trial, c, True
+                        break
+                if changed:
+                    break
+            if not changed:
+                break
+        return seq
+
+    def solve(group: List[Contour], here, tail) -> List[Contour]:
+        """Đường hở: đầu là chỗ mỏ đang đứng (có thể chưa biết), cuối cố định."""
+        if len(group) < 2:
+            return list(group)
+        if here is not None:
+            tries = [nearest_from(None, group, here)]
+        else:
+            # chưa biết mỏ ở đâu: thử lần lượt từng đường làm đường đầu tiên
+            tries = [nearest_from(c, group, None) for c in group]
+        tries = [improve(t, here, tail) for t in tries]
+        return min(tries, key=lambda t: path_cost(t, here, tail))
+
+    partoffs = sorted((c for c in contours if c.wrap and c.kind != "mark"),
+                      key=lambda c: -min_u(c))
+    remaining = [c for c in contours if not (c.wrap and c.kind != "mark")]
+    groups: List[Tuple[List[Contour], Optional[Contour]]] = []
+    for po in partoffs:
+        cut_at = min_u(po)
+        grp = [c for c in remaining if max_u(c) > cut_at]
+        taken = {id(c) for c in grp}
+        remaining = [c for c in remaining if id(c) not in taken]
+        groups.append((grp, po))
+    if groups:
+        grp, po = groups[-1]
+        groups[-1] = (grp + remaining, po)
+    else:
+        groups.append((remaining, None))
+
+    seq: List[Contour] = []
+    # Lúc bắt đầu chạy, mỏ đứng ở gốc chi tiết: đúng chỗ vừa "đặt gốc tại đây".
+    here = pose((0.0, 0.0))
+    for grp, po in groups:
+        marks = [c for c in grp if c.kind == "mark"]
+        cuts = [c for c in grp if c.kind != "mark"]
+        tail = start[id(po)] if po is not None else None
+        for part, part_tail in ((marks, None if cuts else tail), (cuts, tail)):
+            if not part:
+                continue
+            ordered = solve(part, here, part_tail)
+            seq.extend(ordered)
+            here = end[id(ordered[-1])]
+        if po is not None:
+            seq.append(po)
+            here = end[id(po)]
+    return seq

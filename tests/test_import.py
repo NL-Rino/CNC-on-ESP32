@@ -411,15 +411,15 @@ class TestJobIntegration(unittest.TestCase):
 
     def test_ti_le_xoay_va_lat_deu_co_tac_dung(self):
         path = _tmp("a.dxf", DXF_RECT)
-        job = jobs.Job(name="nhap")
+        job = jobs.Job(name="nhap", optimize_order=False)
         job.add("pattern", file=path, x_offset=100.0, scale=2.0)
         big = job.build_toolpath(self.profile)[0].contours[0]
-        job2 = jobs.Job(name="nhap")
+        job2 = jobs.Job(name="nhap", optimize_order=False)
         job2.add("pattern", file=path, x_offset=100.0)
         small = job2.build_toolpath(self.profile)[0].contours[0]
         self.assertAlmostEqual(big.length, small.length * 2.0, places=3)
 
-        job3 = jobs.Job(name="nhap")
+        job3 = jobs.Job(name="nhap", optimize_order=False)
         job3.add("pattern", file=path, x_offset=100.0, rotate=90.0)
         rot = job3.build_toolpath(self.profile)[0].contours[0]
         self.assertAlmostEqual(rot.length, small.length, places=3)

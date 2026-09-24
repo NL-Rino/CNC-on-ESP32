@@ -503,9 +503,14 @@ class TestJobOrderAndLeads(unittest.TestCase):
         self.section = self.p.pipe.section()
 
     # ---- thứ tự cắt ----
-    def test_mac_dinh_giu_nguyen_thu_tu_nguoi_dung_dat(self):
-        job = Job()
-        self.assertFalse(job.optimize_order)
+    def test_mac_dinh_tu_sap_thu_tu(self):
+        self.assertTrue(Job().optimize_order)
+        # tệp công việc cũ không ghi gì thì cũng tự sắp; ghi rõ false thì giữ
+        self.assertTrue(Job.from_dict({"operations": []}).optimize_order)
+        self.assertFalse(Job.from_dict({"optimize_order": False}).optimize_order)
+
+    def test_tat_tu_sap_thi_giu_nguyen_thu_tu_nguoi_dung_dat(self):
+        job = Job(optimize_order=False)
         job.add("cutoff", x=320.0)
         job.add("slot", x=120.0, theta=0.0, length=40.0, width_deg=40.0)
         job.add("circle", diameter=20.0, x=200.0, theta=90.0)
@@ -526,14 +531,14 @@ class TestJobOrderAndLeads(unittest.TestCase):
         self.assertEqual(tp.contours[-1].kind, "cut")
 
     def test_canh_bao_khi_nguyen_cong_nam_ngoai_nhat_cat_dut(self):
-        job = Job()
+        job = Job(optimize_order=False)
         job.add("cutoff", x=200.0)
         job.add("slot", x=300.0, theta=0.0, length=40.0, width_deg=40.0)
         _tp, warns = job.build_toolpath(self.p)
         self.assertTrue(any("đã rơi ra rồi" in w for w in warns), warns)
 
     def test_khong_canh_bao_khi_thu_tu_hop_ly(self):
-        job = Job()
+        job = Job(optimize_order=False)
         job.add("slot", x=120.0, theta=0.0, length=40.0, width_deg=40.0)
         job.add("cutoff", x=300.0)
         _tp, warns = job.build_toolpath(self.p)

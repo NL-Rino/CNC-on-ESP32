@@ -1,5 +1,94 @@
 # Nhật ký thay đổi
 
+## v1.12.0 — 2026-09-24
+
+### Máy chạy như máy laser cắt ống
+
+Trước khi sửa phải **đo được** máy đang phí thời gian ở đâu. Mô hình thời gian cũ
+coi máy chạy đều theo F, không thấy được cái giá của việc dừng hẳn rồi khởi động
+lại — mà đó chính là chỗ máy thật mất nhiều nhất. Nên việc đầu tiên là viết bộ
+lập kế hoạch chạy lại đúng thuật toán của FluidNC (`pipecut/planner.py`): gia tốc
+từng trục, tốc độ qua điểm nối theo `junction_deviation`, bộ đệm chỉ nhìn trước
+`planner_blocks` khối, lệnh M3/M5/G4 bắt dừng hẳn. Soát với 8 trường hợp tính tay
+được (đoạn thẳng, tam giác vận tốc, góc vuông, quay đầu, lệnh đồng bộ, bộ đệm hữu
+hạn, trục chậm kìm tốc độ): đều khớp.
+
+Đo 6 công việc mẫu × 9 hồ sơ máy: **40% thời gian máy không cắt.** Giữa hai đường
+cắt máy làm `M5 → G0 Z20 (dừng) → G0 Y A (dừng) → G0 Z3.8 (dừng)` — nhấc 20 mm kể cả
+trên ống tròn, nơi mặt ống chỗ nào cũng cao như nhau.
+
+**Chạy không kiểu nhảy ếch** (`pipecut/travel.py`):
+
+* **Chỉ nhấc vừa đủ**: cao hơn chỗ kim loại cao nhất nằm dưới thân mỏ dọc suốt
+  đường đi `travel_height` mm (mặc định 6). Ống tròn: 6 mm. Ống hộp xoay qua góc:
+  tự nhấc 13,9 mm để lướt qua góc đang nhô lên.
+* **Cung trơn**: rời điểm cắt theo phương thẳng đứng (không kéo lê béc qua xỉ),
+  uốn sang ngang, hạ thẳng đứng xuống đúng cao độ mồi. Mỗi đầu là một phần tư
+  elip chia 10 đoạn để bộ lập kế hoạch chạy qua không phải hãm.
+* **Kiểm va chạm từng điểm**, có tính bề rộng thân mỏ (`torch_width`, 16 mm).
+  Đường bao mặt phôi dựng sẵn theo từng nấc góc xoay; soát với hình học chính xác:
+  **không lần nào thấp hơn thực tế**, cao hơn trung vị 0,13 mm. Cung nào sát phôi
+  hơn lúc đang cắt thì rút ngắn quãng uốn; tới cùng quay về nhấc thẳng - hạ thẳng.
+* Đường cắt đầu tiên và đầu cắt đang nghiêng vẫn lên cao độ an toàn như cũ.
+
+**Thứ tự cắt như máy laser**, và giờ **bật sẵn**: làm xong từng chi tiết một từ đầu
+tự do vào (trục dọc đi một chiều), vạch dấu trước trong mỗi chi tiết, rồi đường gần
+nhất đo bằng **thời gian máy thật** (trục chậm nhất quyết định, góc quay tính qua
+mốc 360°), cuối cùng thử đổi chỗ từng đường. Mỗi nhóm là đường hở có điểm cuối cố
+định là nhát cắt đứt đang chờ — lần viết đầu tôi quên điểm cuối nên có công việc
+bị chạy ngược 284 mm, đo ra mới thấy. Tệp công việc đã lưu `"optimize_order": false`
+vẫn giữ nguyên.
+
+**Mồi xong vừa hạ vừa vào dao** (`pierce_blend`): hạ Z trong lúc chạy đoạn vào dao
+(nằm trong phế liệu), tốc độ Z vẫn không vượt `plunge_feed`. Không có đoạn vào dao
+thì hạ thẳng như cũ.
+
+**Mồi lại trên mép ở góc ống hộp**: chế độ pivot giữ đúng điểm trên phôi trong lúc
+xoay, nên lúc mồi lại béc nằm ngay đầu mạch cắt cũ — mồi thẳng ở cao độ cắt, khỏi
+lên cao độ mồi rồi hạ. Chế độ index bỏ qua cung góc nên vẫn đục thật. Phân biệt
+bằng hình học, không dựa vào tên chế độ. Thêm `restart_delay` (mặc định −1 = bằng
+`pierce_delay`, cho chắc): mồi trên mép thường chỉ cần 0,1–0,3 s, nhưng tuỳ máy
+plasma nên để người dùng tự thử.
+
+**Xoay góc lúc đã tắt mỏ chạy `G0`** thay vì `G1 F…` bị trần `max_feed` kìm lại.
+
+### Kết quả
+
+So trên cùng bộ đo, thời gian chờ mồi/tắt **giữ nguyên**:
+
+| | Trước | Sau |
+|---|---|---|
+| 6 công việc mẫu × 9 hồ sơ | 3042 s | 2729 s (−10%), không cắt −22% |
+| Cây ống 3 chi tiết, ống tròn ⌀60 | 283 s | 214 s (−24%) |
+| Cây ống 3 chi tiết, ống hộp 50×50 | 196 s | 164 s (−16%) |
+| Một nhát cắt đứt ống hộp 50×50, pivot | 31,1 s | 25,9 s; 22,7 s với `restart_delay` 0,2 |
+
+Chậm hơn đúng một công việc: ống cổ 45°, vì thứ tự cũ của nó **sai** (xem dưới).
+
+### Sửa lỗi
+
+* **Mồi lại ở đầu cung góc cao hơn 0,4 mm**: độ cao lấy theo điểm cắt kế tiếp thay
+  vì chỗ béc đang đứng.
+* **Hai nhát cắt đứt bị cắt ngược**: công việc mẫu ống cổ 45° cắt nhát ở u=108
+  trước, làm rơi luôn khúc chứa nhát ở u=248 — nhát sau cắt vào không khí. Cách
+  sắp cũ bỏ qua công việc có ≤ 2 đường.
+* **Cảnh báo thứ tự bỏ sót** trường hợp một nhát cắt đứt nằm ngoài nhát đã cắt.
+* Thẻ **Máy** giờ cuộn được: trên màn hình thấp bảng trục bị ép còn một dòng và ba
+  nút *Áp dụng / Lưu / Mở hồ sơ máy* bị đẩy ra ngoài.
+
+### Khác
+
+* Thời gian ước tính và thanh thời gian Mô phỏng dùng chung bộ lập kế hoạch mới:
+  sát máy thật hơn và luôn khớp tuyệt đối. Dòng thống kê chia ra thời gian *cắt ·
+  chạy không · chờ mồi/tắt · nhấc/hạ mỏ*.
+* Thông số mới: `travel_height`, `restart_delay` (tiến trình); `leapfrog`,
+  `leapfrog_ramp`, `leapfrog_steps`, `torch_width`, `pierce_blend`,
+  `junction_deviation`, `planner_blocks` (chuyển động). Hồ sơ máy cũ nạp vào tự lấy
+  giá trị mặc định.
+* 31 bài kiểm thử mới, tổng 301. Bài kiểm va chạm soát ngay trên G-code xuất ra, và
+  đã thử ngược: tính độ cao lướt chỉ theo hai đầu (quên góc nhô giữa đường) thì bài
+  đỏ ngay.
+
 ## v1.11.0 — 2026-09-05
 
 ### Căn tâm mâm cặp bằng tay: căn một lần, dùng mãi

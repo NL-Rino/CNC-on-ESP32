@@ -20,8 +20,11 @@ class ScrollColumn(ttk.Frame):
     widget vào ``.inner`` chứ không phải vào chính đối tượng này.
     """
 
-    def __init__(self, master, **kw):
+    def __init__(self, master, stretch: bool = False, **kw):
         super().__init__(master, **kw)
+        # stretch=True: nội dung giãn theo bề ngang khung (dùng cho cả một thẻ);
+        # False: khung co theo bề rộng nội dung (dùng cho một cột bên cạnh).
+        self.stretch = stretch
         p = theme.current()
         self.canvas = tk.Canvas(self, highlightthickness=0, borderwidth=0,
                                 background=p.bg)
@@ -31,6 +34,8 @@ class ScrollColumn(ttk.Frame):
         self.inner = ttk.Frame(self.canvas)
         self._win = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
         self.inner.bind("<Configure>", self._on_inner)
+        if stretch:
+            self.canvas.bind("<Configure>", self._on_canvas)
         # Con lăn chuột chỉ cướp quyền khi trỏ đang nằm trong cột này.
         self.bind("<Enter>", self._grab_wheel)
         self.bind("<Leave>", self._release_wheel)
@@ -38,9 +43,14 @@ class ScrollColumn(ttk.Frame):
     # -- nội dung đổi kích thước thì cập nhật vùng cuộn và bề rộng cột --
     def _on_inner(self, _event=None) -> None:
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        if self.stretch:
+            return
         want = self.inner.winfo_reqwidth()
         if want and want != int(self.canvas.cget("width")):
             self.canvas.configure(width=want)
+
+    def _on_canvas(self, event) -> None:
+        self.canvas.itemconfigure(self._win, width=max(event.width, self.inner.winfo_reqwidth()))
 
     def _on_scroll(self, first: str, last: str) -> None:
         """Chỉ hiện thanh cuộn khi nội dung thật sự dài hơn khung."""

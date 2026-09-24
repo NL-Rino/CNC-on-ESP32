@@ -142,7 +142,10 @@ class MainWindow:
 
     # ------------------------------------------------------------------
     def _build_machine_tab(self) -> None:
-        t = self.tab_machine
+        # Nhiều ô thông số hơn chiều cao màn hình máy tính xách tay: cho cuộn.
+        self.machine_scroll = ScrollColumn(self.tab_machine, stretch=True)
+        self.machine_scroll.pack(fill="both", expand=True)
+        t = self.machine_scroll.inner
         conn = ttk.LabelFrame(t, text="Kết nối", padding=PAD)
         conn.pack(side="top", fill="x")
         ttk.Label(conn, text="Cổng / địa chỉ").grid(row=0, column=0, sticky="w")
@@ -211,7 +214,9 @@ class MainWindow:
             ("cut_height", "Cao độ cắt [mm]", pr.cut_height),
             ("pierce_height", "Cao độ mồi [mm]", pr.pierce_height),
             ("pierce_delay", "Thời gian mồi [s]", pr.pierce_delay),
+            ("restart_delay", "Chờ mồi lại trên mép [s] (-1 = như mồi)", pr.restart_delay),
             ("safe_height", "Cao độ an toàn [mm]", pr.safe_height),
+            ("travel_height", "Hở khi chạy không [mm] (0 = kiểu cũ)", pr.travel_height),
             ("lead_in", "Vào dao [mm]", pr.lead_in),
             ("lead_type", "Kiểu vào dao", pr.lead_type, "choice", ["arc", "line", "none"]),
             ("lead_start", "Vị trí điểm mồi [% chu vi]", pr.lead_start),
@@ -243,6 +248,9 @@ class MainWindow:
             ("corner_lift", "Nhấc mỏ khi xoay góc [mm]", m.corner_lift),
             ("corner_pivot_arcs", "Chia cung góc mấy lần xoay",
              float(m.corner_pivot_arcs)),
+            ("leapfrog", "Chạy không kiểu nhảy ếch", m.leapfrog, "bool"),
+            ("torch_width", "Bề rộng thân mỏ [mm]", m.torch_width),
+            ("pierce_blend", "Vừa hạ vừa vào dao", m.pierce_blend, "bool"),
         ], columns=1)
         self.f_motion.pack(fill="x")
 
@@ -979,9 +987,9 @@ class MainWindow:
     def _retheme_widgets(self) -> None:
         """Đổi màu những widget Tk thuần - ttk.Style không với tới được."""
         p = theme.current()
-        col = getattr(self, "control_column", None)
-        if col is not None:
-            col.apply_theme()
+        for col in (getattr(self, "control_column", None), getattr(self, "machine_scroll", None)):
+            if col is not None:
+                col.apply_theme()
         dlg = getattr(self, "_probe_dlg", None)
         if dlg is not None:
             try:
@@ -1298,15 +1306,17 @@ class MainWindow:
         p.pipe.length = self.f_pipe.get("length", p.pipe.length)
         p.pipe.material = self.f_pipe.get("material", p.pipe.material)
         for key in ("kerf", "cut_feed", "power", "cut_height", "pierce_height",
-                    "pierce_delay", "safe_height", "lead_in", "overcut",
-                    "lead_start", "lead_angle"):
+                    "pierce_delay", "restart_delay", "safe_height", "travel_height",
+                    "lead_in", "overcut", "lead_start", "lead_angle"):
             setattr(p.process, key, self.f_proc.get(key, getattr(p.process, key)))
         p.process.kind = self.f_proc.get("kind", p.process.kind)
         p.process.lead_type = self.f_proc.get("lead_type", p.process.lead_type)
         p.process.lead_side = self.f_proc.get("lead_side", p.process.lead_side)
         for key in ("chord_tolerance", "simplify_tolerance", "min_segment", "max_segment",
-                    "max_feed", "max_bevel", "bevel_pivot"):
+                    "max_feed", "max_bevel", "bevel_pivot", "torch_width"):
             setattr(p.motion, key, self.f_motion.get(key, getattr(p.motion, key)))
+        p.motion.leapfrog = bool(self.f_motion.get("leapfrog", p.motion.leapfrog))
+        p.motion.pierce_blend = bool(self.f_motion.get("pierce_blend", p.motion.pierce_blend))
         p.motion.feed_radius_mode = self.f_motion.get("feed_radius_mode", p.motion.feed_radius_mode)
         p.motion.uniform_feed = bool(self.f_motion.get("uniform_feed", p.motion.uniform_feed))
         p.motion.corner_mode = LABEL_CORNER.get(
@@ -1575,7 +1585,8 @@ class MainWindow:
         s = program.stats
         self.lbl_stats.configure(
             text=f"{len(program.passes)} đường · {s.cut_length:.0f} mm cắt · "
-                 f"{s.pierces} điểm mồi · {s.lines} dòng · ước tính {s.time_text}")
+                 f"{s.pierces} điểm mồi · {s.lines} dòng · ước tính {s.time_text}"
+                 + (f"\n{s.split_text}" if s.split_text else ""))
         order = " → ".join(f"{i}.{ps.name}" for i, ps in enumerate(program.passes, 1))
         self.lbl_order.configure(
             text=("tự xếp: " if self.job.optimize_order else "thứ tự cắt: ") + order[:110])

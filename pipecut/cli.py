@@ -325,7 +325,9 @@ def cmd_gen(args: argparse.Namespace) -> int:
     print(f"Số biên dạng   : {len(toolpath.contours)}")
     print(f"Chiều dài cắt  : {s.cut_length:.1f} mm  ({s.pierces} điểm mồi)")
     print(f"Số dòng G-code : {s.lines}  ({s.moves} lệnh dịch chuyển)")
-    print(f"Thời gian ước  : {s.time_text}")
+    print(f"Thời gian ước  : {s.time_text}  (tính cả tăng/giảm tốc như FluidNC)")
+    if s.split_text:
+        print(f"  trong đó     : {s.split_text}")
     print(f"Giới hạn trục  : " + ", ".join(f"{k}:{v[0]:.1f}..{v[1]:.1f}" for k, v in s.bounds.items()))
     print(f"Đã ghi         : {out}")
     for w in warns + s.warnings:

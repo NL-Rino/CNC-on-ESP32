@@ -421,15 +421,24 @@ Tab **3. Công việc**:
 3. Dùng **Lên / Xuống** để đổi thứ tự, **Bật/tắt** để tạm bỏ qua một nguyên công.
 4. **Lưu...** thành tệp `.json` để dùng lại.
 
-> **Thứ tự cắt.** Mặc định phần mềm **cắt đúng thứ tự trong bảng** — xếp sao thì
-> chạy vậy. Dòng chữ dưới bảng luôn hiện thứ tự thật sự sẽ chạy để đối chiếu.
+> **Thứ tự cắt.** Mặc định phần mềm **tự sắp như máy laser cắt ống** (ô *Tự sắp
+> xếp thứ tự cắt* được tích sẵn). Dòng chữ dưới bảng luôn hiện thứ tự thật sự sẽ
+> chạy để đối chiếu. Ba quy tắc, theo thứ tự ưu tiên:
 >
-> Tích ô *Tự sắp xếp thứ tự cắt* nếu muốn phần mềm tự lo: *vạch dấu → lỗ/rãnh →
-> cắt đứt*, các nhát cắt đứt xếp từ đầu tự do vào trong (sau khi cắt đứt thì
-> phần phôi phía ngoài rơi ra, không còn gá được nữa).
+> 1. **Làm xong từng chi tiết một, từ đầu tự do vào.** Nhát cắt đứt gần đầu tự
+>    do nhất cắt trước; mọi lỗ/rãnh/vạch dấu nằm phía ngoài nó (sẽ rơi theo chi
+>    tiết đó) được cắt *trước* nó. Trục dọc nhờ vậy đi một chiều, không chạy tới
+>    chạy lui khắp cây ống. Chương trình luôn kết thúc bằng một nhát cắt đứt.
+> 2. Trong mỗi chi tiết: **vạch dấu trước** (phôi còn cứng vững), rồi lỗ và rãnh.
+> 3. Giữa các đường cùng nhóm: đi tới đường **gần nhất tính theo thời gian máy
+>    thật** — trục chậm nhất quyết định, và góc quay tính qua mốc 360° (lỗ ở 350°
+>    và lỗ ở 10° chỉ cách nhau 20°) — rồi thử đổi chỗ từng đường xem có bớt được
+>    quãng chạy không.
 >
-> Khi tự xếp thủ công, nếu có nguyên công nằm **ngoài** một nhát cắt đứt đứng
-> trước nó, phần mềm sẽ cảnh báo chứ không tự đổi thứ tự của bạn.
+> Bỏ tích thì cắt đúng thứ tự trong bảng. Khi đó nếu có nguyên công nằm **ngoài**
+> một nhát cắt đứt đứng trước nó — kể cả một nhát cắt đứt khác — phần mềm cảnh
+> báo chứ không tự đổi thứ tự của bạn. Tệp công việc cũ đã lưu `"optimize_order":
+> false` vẫn giữ nguyên như cũ.
 
 > **Thư viện nguyên công lọc theo phôi.** Khai báo ống hộp thì danh sách không
 > hiện *miệng cá* và *lỗ xuyên thành* — hai biên dạng đó là giao của hai mặt trụ,
@@ -478,7 +487,65 @@ Vài lưu ý theo từng nguyên công:
 
 **Chạy khô lần đầu:** tắt nguồn plasma/laser, nâng cao độ an toàn lên 40–50 mm,
 cho chạy hết chương trình và quan sát. Đây là cách rẻ nhất để phát hiện sai gốc
-toạ độ hoặc va chạm.
+toạ độ hoặc va chạm. Lưu ý từ bản 1.12 chạy không giữa hai đường cắt dùng *Hở khi
+chạy không* chứ không dùng cao độ an toàn — muốn chạy khô cao hẳn lên thì đặt tạm
+*Hở khi chạy không* = 0 (quay về kiểu cũ: lần nào cũng nhấc lên cao độ an toàn).
+
+### 8.1 Máy di chuyển thế nào — như máy laser cắt ống
+
+**Chạy không giữa hai đường cắt: "nhảy ếch".** Cách cũ nhấc thẳng lên cao độ an
+toàn (20 mm), chạy ngang, rồi hạ thẳng xuống — ba lệnh riêng nên máy dừng hẳn hai
+lần giữa chừng. Giờ thì:
+
+* **Chỉ nhấc cao vừa đủ**: phần mềm tính chỗ kim loại cao nhất nằm dưới thân mỏ
+  (rộng *Bề rộng thân mỏ*, mặc định 16 mm) dọc suốt đường đi, rồi cộng thêm *Hở khi
+  chạy không* (mặc định 6 mm). Ống tròn thì mặt ống chỗ nào cũng cao như nhau nên
+  chỉ nhấc 6 mm; ống hộp xoay qua góc thì tự nhấc cao hơn để lướt qua góc đang nhô
+  lên (ống 50×50: 13,9 mm).
+* **Vừa nhấc vừa đi, vừa đi vừa hạ** theo một cung trơn: rời điểm cắt **theo phương
+  thẳng đứng** (không kéo lê béc qua xỉ vừa cắt), uốn dần sang ngang, tới nơi thì
+  hạ xuống cũng thẳng đứng, dừng đúng ở cao độ mồi.
+* **Kiểm va chạm từng điểm** dọc cung. Nếu cung nào sát phôi hơn lúc đang cắt thì
+  phần mềm rút ngắn quãng uốn; tới cùng thì quay về nhấc thẳng — hạ thẳng ở độ cao
+  đã tính qua điểm cao nhất, kiểu này luôn an toàn.
+
+Đường cắt **đầu tiên** vẫn nhấc lên cao độ an toàn vì lúc đó phần mềm chưa biết mỏ
+đang ở đâu so với phôi. Máy có **đầu cắt nghiêng** (trục vát) mà đầu đang nghiêng
+thì cũng giữ cao độ an toàn: thân mỏ nghiêng quét theo cung, mô hình mỏ thẳng đứng
+không bảo đảm được. Bỏ tích *Chạy không kiểu nhảy ếch* thì vẫn nhấc vừa đủ nhưng
+lên thẳng, đi ngang, xuống thẳng.
+
+**Mồi xong vừa hạ vừa vào dao.** Đục thủng xong không đứng yên hạ Z về cao độ cắt
+nữa, mà hạ trong lúc chạy đoạn vào dao — đoạn đó nằm trong phế liệu nên cao hơn một
+chút cũng không sao. Tốc độ trục Z lúc hạ vẫn không vượt *tốc độ hạ đầu cắt*. Biên
+dạng không có đoạn vào dao thì vẫn hạ thẳng như cũ để giữ mép chi tiết.
+
+**Mồi lại ở góc ống hộp (chế độ pivot).** Trong lúc xoay 45°, mỏ giữ đúng điểm vừa
+cắt xong trên phôi, nên lúc mồi lại béc nằm **ngay trên đầu mạch cắt cũ**. Đó là mồi
+trên mép: không phải đục thủng tôn nên khỏi lên cao độ mồi rồi hạ xuống, mồi thẳng
+ở cao độ cắt. Chế độ *index* thì khác: cung góc bị bỏ qua lúc tắt mỏ, béc mồi lại
+trên tôn nguyên, nên vẫn đục thật như cũ. Phần mềm phân biệt hai trường hợp bằng
+hình học (điểm mồi lại có trùng điểm tắt mỏ không), không dựa vào tên chế độ.
+
+> **Nên thử: *Chờ mồi lại trên mép*.** Mặc định bằng *Thời gian mồi* (-1) cho chắc,
+> vì phần mềm không biết máy plasma của bạn cần bao lâu để hồ quang bắt lại. Mồi
+> trên mép thường chỉ cần 0,1–0,3 s. Cách thử: cắt một nhát cắt đứt ống hộp với
+> 0,2 s rồi xem bốn đầu cung góc — nếu đầu cung bị sót một đoạn chưa đứt thì tăng
+> lên. Với ống 50×50 mỗi nhát cắt đứt có 8 lần mồi lại, 0,2 s tiết kiệm được 3,2 s.
+
+**Xoay góc lúc đã tắt mỏ chạy `G0`.** Trục X và Z chạy kèm để béc bám đúng điểm trên
+phôi; `G0` của FluidNC vẫn nội suy thẳng trong không gian trục nên đường đi y hệt
+`G1`, chỉ là trục xoay đạt đúng tốc độ tối đa của nó thay vì bị trần *Trần tốc độ*
+(dành cho lúc cắt) kìm lại. Tự đặt *corner_rotate_rate* thì vẫn chạy `G1` ở tốc độ đó.
+
+**Thời gian ước tính giờ tính cả tăng/giảm tốc.** Phần mềm chạy lại đúng thuật toán
+lập kế hoạch chuyển động của FluidNC — gia tốc từng trục, tốc độ qua góc theo
+`junction_deviation`, bộ đệm chỉ nhìn trước `planner_blocks` khối, và mọi lệnh
+M3/M5/G4 bắt máy dừng hẳn. Nên con số dài hơn trước một chút nhưng sát máy thật, và
+thanh thời gian ở thẻ **Mô phỏng** dùng đúng bộ này nên hai bên luôn khớp. Dòng thống
+kê ở thẻ **Xem trước** còn chia ra máy đang tiêu thời gian vào đâu: *cắt · chạy không
+· chờ mồi/tắt · nhấc/hạ mỏ*. Hai thông số `junction_deviation` và `planner_blocks`
+trong hồ sơ máy phải khớp với tệp cấu hình FluidNC (mẫu: 0,01 và 32).
 
 ---
 

@@ -24,19 +24,29 @@ class TestPlayback(unittest.TestCase):
         self.assertEqual(self.p.letter("radial"), "Z")
         self.assertEqual(self.p.layout, "pipe_moves")
 
+    # Máy thật phải tăng tốc từ 0 và hãm về 0: một đoạn thẳng đứng một mình,
+    # đủ dài để chạm tốc độ đặt v với gia tốc a, mất đúng L/v + v/a giây
+    # (hình thang vận tốc) - nhiều hơn L/v của mô hình chạy đều v/a giây.
+    def _trap(self, length_mm, feed_mm_min, accel):
+        v = feed_mm_min / 60.0
+        return length_mm / v + v / accel
+
     def test_thoi_gian_doan_cat_dung_bang_quang_duong_chia_toc_do(self):
         pb = Playback(self.p, ["G90", "G21", f"G1 {self.along}120 F600"])
-        self.assertAlmostEqual(pb.duration, 120.0 / 600.0 * 60.0, places=6)
+        a = self.p.axis(ROLE_ALONG).accel
+        self.assertAlmostEqual(pb.duration, self._trap(120.0, 600.0, a), places=6)
+        self.assertGreater(pb.duration, 120.0 / 600.0 * 60.0)
 
     def test_thoi_gian_chay_nhanh_theo_truc_cham_nhat(self):
         ax = self.p.axis(ROLE_ALONG)
         ax.max_rate = 3000.0
         pb = Playback(self.p, ["G90", f"G0 {self.along}150"])
-        self.assertAlmostEqual(pb.duration, 150.0 / 3000.0 * 60.0, places=6)
+        self.assertAlmostEqual(pb.duration, self._trap(150.0, 3000.0, ax.accel), places=6)
 
     def test_dung_G4_duoc_tinh_vao_thoi_gian(self):
         pb = Playback(self.p, ["G90", f"G1 {self.along}10 F600", "G4 P1.5"])
-        self.assertAlmostEqual(pb.duration, 1.0 + 1.5, places=6)
+        a = self.p.axis(ROLE_ALONG).accel
+        self.assertAlmostEqual(pb.duration, self._trap(10.0, 600.0, a) + 1.5, places=6)
 
     def test_noi_suy_vi_tri_theo_thoi_gian(self):
         pb = Playback(self.p, ["G90", f"G1 {self.along}60 F600"])

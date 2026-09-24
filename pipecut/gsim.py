@@ -7,9 +7,10 @@ trả lời câu hỏi "tại giây thứ t, bốn trục đang ở đâu, ngu�
 Nhờ vậy tab Mô phỏng có thể chạy, tạm dừng, tua tới lui và đổi tốc độ mà
 không cần kết nối máy.
 
-Mô hình thời gian là *tam giác vận tốc phẳng* (chạy đều theo F, không mô hình
-hoá gia tốc), nên thời gian hiển thị là cận dưới - máy thật luôn lâu hơn một
-chút vì phải tăng/giảm tốc.
+Thời lượng từng dòng lấy từ :mod:`pipecut.planner` - chạy lại đúng cách
+FluidNC lập kế hoạch chuyển động (gia tốc từng trục, tốc độ qua góc, bộ đệm
+nhìn trước có hạn) - nên thời gian mô phỏng khớp với máy thật chứ không còn
+là cận dưới như khi coi máy chạy đều theo F.
 """
 
 from __future__ import annotations
@@ -96,6 +97,8 @@ class Playback:
         t = 0.0
         cutting = False          # lượt cắt trước có liền mạch với đoạn này không
         section = pf.pipe.section()
+        from .planner import plan
+        line_times = plan(pf, lines).line_times
         along = pf.letter(ROLE_ALONG)
         rotary = pf.letter(ROLE_ROTARY)
         cross = pf.letter(ROLE_CROSS)
@@ -139,6 +142,7 @@ class Playback:
                     moved = True
 
             if saw_dwell and dwell_time > 0:
+                dwell_time = line_times.get(index, dwell_time)
                 self.moves.append(SimMove(t, dwell_time, dict(pos), dict(pos),
                                           rapid=False, torch=torch, dwell=True,
                                           line=index))
@@ -150,8 +154,10 @@ class Playback:
             dist = math.sqrt(sum((target[c] - pos.get(c, 0.0)) ** 2 for c in letters))
             if dist < 1e-9:
                 continue
-            duration = (self._rapid_time(pos, target) if rapid_mode
-                        else dist / max(feed, 1.0) * 60.0)
+            duration = line_times.get(index)
+            if duration is None:     # dòng bộ lập kế hoạch bỏ qua (quá ngắn)
+                duration = (self._rapid_time(pos, target) if rapid_mode
+                            else dist / max(feed, 1.0) * 60.0)
             move = SimMove(t, duration, dict(pos), dict(target), rapid=rapid_mode,
                            torch=torch, line=index, feed=feed)
             self.moves.append(move)

@@ -162,7 +162,13 @@ class ProcessSpec:
     cut_height: float = 1.6        # chiều cao mỏ cắt khi cắt (mm, so với Z0 chạm ống)
     pierce_height: float = 3.8     # chiều cao khi mồi/đục lỗ
     pierce_delay: float = 0.6      # thời gian chờ mồi (giây)
-    safe_height: float = 20.0      # chiều cao an toàn để di chuyển nhanh
+    restart_delay: float = -1.0    # chờ khi mồi lại ngay trên đầu mạch cắt cũ (ở góc
+                                   # ống hộp, chế độ pivot).  Không phải đục thủng
+                                   # tôn nên thường ngắn hơn nhiều; -1 = như pierce_delay
+    safe_height: float = 20.0      # chiều cao an toàn: lúc bắt đầu, lúc kết thúc
+    travel_height: float = 6.0     # chạy không giữa hai đường cắt: cao hơn chỗ kim
+                                   # loại cao nhất dưới thân mỏ bấy nhiêu mm.
+                                   # 0 = kiểu cũ, lần nào cũng nhấc lên safe_height
     on_command: str = "M3"         # lệnh bật nguồn cắt
     off_command: str = "M5"        # lệnh tắt nguồn cắt
     power: float = 1000.0          # giá trị S (laser/plasma THC/spindle)
@@ -241,6 +247,16 @@ class MotionSpec:
     corner_lift: float = 6.0          # nhấc thêm bao nhiêu mm khi xoay góc (nếu tắt mỏ)
     corner_rotate_rate: float = 0.0   # tốc độ xoay khi index (độ/phút, 0 = tối đa của trục)
     corner_dwell: float = 0.0         # dừng thêm sau khi xoay xong (giây)
+    # --- chạy không kiểu "nhảy ếch" như máy laser ---
+    leapfrog: bool = True             # vừa nhấc vừa đi, vừa đi vừa hạ theo cung trơn
+    leapfrog_ramp: float = 10.0       # quãng ngang để uốn từ thẳng đứng sang ngang (mm)
+    leapfrog_steps: int = 10          # số đoạn chia mỗi cung uốn
+    torch_width: float = 16.0         # bề rộng phần thấp nhất của mỏ, để kiểm va chạm (mm)
+    pierce_blend: bool = True         # mồi xong vừa hạ xuống độ cao cắt vừa chạy đoạn
+                                      # vào dao (nằm trong phế liệu), không đứng yên hạ
+    # --- bộ lập kế hoạch của FluidNC (khớp với tệp cấu hình YAML) ---
+    junction_deviation: float = 0.01  # junction_deviation_mm
+    planner_blocks: int = 32          # planner_blocks
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "MotionSpec":

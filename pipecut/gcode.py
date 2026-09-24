@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from .config import (MachineProfile, ROLE_BEVEL, ROLE_RADIAL, ROLE_ROTARY,
                      ROLE_SWIVEL)
 from .kinematics import AxisValues, Kinematics
+from .travel import TravelPlanner
 from .pathops import Pass, process_contour
 from .toolpath import Contour, CutPoint, Toolpath
 
@@ -31,11 +32,27 @@ class ProgramStats:
     moves: int = 0
     cut_length: float = 0.0      # mm đường cắt thật trên bề mặt
     rapid_length: float = 0.0
-    estimated_time: float = 0.0  # giây
-    pierces: int = 0
+    estimated_time: float = 0.0  # giây - theo đúng cách FluidNC tăng/giảm tốc
+    time_split: Dict[str, float] = field(default_factory=dict)  # giây theo loại chuyển động
+    pierces: int = 0             # số lần bật nguồn cắt (kể cả mồi lại ở góc)
+    edge_starts: int = 0         # trong đó: mồi lại ngay trên đầu mạch cắt cũ
     warnings: List[str] = field(default_factory=list)
     contours: List[Dict[str, object]] = field(default_factory=list)
     bounds: Dict[str, Tuple[float, float]] = field(default_factory=dict)
+
+    @property
+    def split_text(self) -> str:
+        """Thời gian chia theo việc máy đang làm, gọn một dòng."""
+        total = self.estimated_time
+        if not self.time_split or total <= 0:
+            return ""
+        from .planner import CATEGORY_LABELS
+        parts = []
+        for key in ("cut", "travel", "dwell", "lift", "plunge", "index"):
+            t = self.time_split.get(key, 0.0)
+            if t >= 0.05 and t / total >= 0.005:
+                parts.append(f"{CATEGORY_LABELS[key]} {100 * t / total:.0f}%")
+        return " · ".join(parts)
 
     @property
     def time_text(self) -> str:
@@ -180,6 +197,7 @@ class PostProcessor:
         self.kin = Kinematics(profile)
         self.process = profile.process
         self.motion = profile.motion
+        self.travel: Optional[TravelPlanner] = None
 
     # ------------------------------------------------------------------
     def build(self, toolpath: Toolpath, name: Optional[str] = None) -> Program:
@@ -190,6 +208,7 @@ class PostProcessor:
         job_name = name or toolpath.name
 
         section = toolpath.section or pf.pipe.section()
+        self.travel = TravelPlanner(pf, section)
         z_safe = pr.safe_height
         z_cut = pr.cut_height
         z_pierce = pr.pierce_height
@@ -235,13 +254,16 @@ class PostProcessor:
         stats.warnings.extend(self._limit_warnings(passes, z_safe, z_cut))
         program = Program(lines=b.lines, stats=stats, passes=passes, name=job_name)
 
-        # Thời gian chạy được tính lại bằng chính bộ diễn giải dùng cho mô phỏng,
-        # để con số trên giao diện và trên thanh thời gian mô phỏng luôn khớp nhau.
+        # Thời gian chạy tính bằng bộ lập kế hoạch giống hệt FluidNC (có gia tốc,
+        # tốc độ qua góc, bộ đệm nhìn trước).  Mô phỏng dùng đúng bộ này nên con
+        # số trên giao diện và trên thanh thời gian mô phỏng luôn khớp nhau.
         # (nhập ở đây để tránh phụ thuộc vòng giữa hai module)
-        from .gsim import Playback
+        from .planner import plan
 
         try:
-            stats.estimated_time = Playback(pf, program.stream_lines()).duration
+            res = plan(pf, program.stream_lines())
+            stats.estimated_time = res.total
+            stats.time_split = {k: round(v, 3) for k, v in res.by_category.items()}
         except Exception:
             pass  # giữ ước tính tích luỹ nếu có gì bất thường
         return program
@@ -264,12 +286,8 @@ class PostProcessor:
         b.blank()
         b.comment(f"--- {ps.name} ({len(pts)} diem) ---")
 
-        # 1) nâng lên chiều cao an toàn
+        # 1-2) chạy không tới điểm mồi, quay theo đường ngắn nhất
         z_surf = pts[0].surface_z          # ống hộp: bề mặt ở góc lượn cao hơn
-        if use_z:
-            b.move({z_letter: pf.axis(ROLE_RADIAL).apply(z_safe + z_surf)}, None)
-
-        # 2) chạy nhanh tới điểm mồi, quay theo đường ngắn nhất
         start = CutPoint(x=pts[0].x, v=pts[0].v, theta=pts[0].theta,
                          cross=pts[0].cross, surface_z=pts[0].surface_z,
                          bevel=pts[0].bevel)
@@ -281,8 +299,27 @@ class PostProcessor:
         shift = start.theta - pts[0].theta
         target = kin.axis_values(start, None)
         prev_pos = dict(b.position)
-        b.move(target, None, comment="toi diem moi")
-        stats.rapid_length += self._rapid_len(prev_pos, target)
+
+        # Đã biết máy đang đứng đâu (không phải đường cắt đầu tiên) thì chạy
+        # kiểu nhảy ếch, chỉ nhấc cao vừa đủ.  Đường đầu tiên thì chưa biết mỏ
+        # đang ở đâu so với phôi nên vẫn nhấc lên chiều cao an toàn cho chắc.
+        hop: List[AxisValues] = []
+        if use_z and self.travel is not None and all(c in prev_pos for c in target) \
+                and z_letter in prev_pos:
+            dest = dict(target)
+            dest[z_letter] = pf.axis(ROLE_RADIAL).apply(z_pierce + z_surf)
+            hop = self.travel.hop(prev_pos, dest)
+        if hop:
+            here = prev_pos
+            for i, w in enumerate(hop):
+                b.move(w, None, comment="toi diem moi" if i == len(hop) - 1 else "")
+                stats.rapid_length += self._rapid_len(here, w)
+                here = w
+        else:
+            if use_z:
+                b.move({z_letter: pf.axis(ROLE_RADIAL).apply(z_safe + z_surf)}, None)
+            b.move(target, None, comment="toi diem moi")
+            stats.rapid_length += self._rapid_len(prev_pos, target)
         stats.estimated_time += self._rapid_time(prev_pos, target)
 
         # 3) mồi / bật nguồn cắt
@@ -294,13 +331,29 @@ class PostProcessor:
         b.raw(on_cmd)
         stats.pierces += 1
         b.dwell(pr.pierce_delay)
-        if use_z and abs(z_pierce - z_cut) > 1e-6:
-            b.move({z_letter: pf.axis(ROLE_RADIAL).apply(z_cut + z_surf)}, pr.plunge_feed,
-                   comment="ha xuong chieu cao cat")
-            stats.estimated_time += abs(z_pierce - z_cut) / max(pr.plunge_feed, 1.0) * 60.0
-        elif use_z:
-            b.move({z_letter: pf.axis(ROLE_RADIAL).apply(z_cut + z_surf)}, pr.plunge_feed)
         stats.estimated_time += pr.pierce_delay
+
+        # Đục thủng xong thì hạ về độ cao cắt.  Có đoạn vào dao thì hạ **trong
+        # lúc chạy** đoạn đó (nó nằm trong phế liệu nên cao hơn một chút cũng
+        # không sao) - máy khỏi phải đứng yên chờ trục Z.  Tốc độ trục Z trong
+        # lúc hạ vẫn không vượt plunge_feed.
+        drop = (z_pierce - z_cut) if use_z else 0.0
+        drop_len = 0.0
+        if drop > 1e-6 and self.motion.pierce_blend and ps.lead_in_count > 0:
+            for i in range(min(ps.lead_in_count, len(pts) - 1)):
+                drop_len += kin.surface_distance(pts[i], pts[i + 1])
+        if drop_len < 0.3:
+            drop_len = 0.0
+            if use_z:
+                b.move({z_letter: pf.axis(ROLE_RADIAL).apply(z_cut + z_surf)}, pr.plunge_feed,
+                       comment="ha xuong chieu cao cat" if drop > 1e-6 else "")
+                stats.estimated_time += abs(drop) / max(pr.plunge_feed, 1.0) * 60.0
+
+        def extra(done: float) -> float:
+            """Còn cao hơn độ cao cắt bao nhiêu sau ``done`` mm đường vào dao."""
+            if drop_len <= 0.0:
+                return 0.0
+            return drop * max(0.0, 1.0 - done / drop_len)
 
         # 4) chạy cắt: mỗi đoạn có F riêng theo tốc độ bề mặt không đổi.
         #    Trước hết dò xem máy có giữ nổi tốc độ đặt trên cả đường không -
@@ -331,7 +384,9 @@ class PostProcessor:
         cut_len = 0.0
         prev_kind = pts[0].kind
         torch_off_now = False
+        off_at: Optional[CutPoint] = None    # chỗ trên phôi lúc vừa tắt mỏ
         indexed = 0
+        done = 0.0                           # mm đường cắt đã đi từ điểm mồi
         for raw_pt in pts[1:]:
             cur = CutPoint(x=raw_pt.x, v=raw_pt.v, theta=raw_pt.theta + shift,
                            cross=raw_pt.cross, surface_z=raw_pt.surface_z,
@@ -347,9 +402,11 @@ class PostProcessor:
                         b.dwell(pr.off_delay)
                         stats.estimated_time += pr.off_delay
                         torch_off_now = True
+                        off_at = prev
                 elif torch_off_now:
                     # Hoàn tất vòng quay **ở độ cao đang nhấc** rồi mới hạ xuống:
                     # nếu hạ trước khi quay xong, mỏ cắt sẽ cắm vào thành phôi.
+                    here = prev                  # mỏ đang đứng trên điểm nào của phôi
                     if use_z and prev.z_axis is not None and self.motion.corner_lift > 0 \
                             and self.motion.corner_mode == "index":
                         # giữ đúng độ cao bám góc tại điểm kết thúc vòng quay
@@ -363,42 +420,70 @@ class PostProcessor:
                             stats.estimated_time += step / max(
                                 self._index_feed(kin.axis_values(prev, z_now),
                                                  vals, step), 1e-6) * 60.0
-                    # xoay xong: hạ xuống, mồi lại rồi cắt tiếp
-                    target_cut_z = (cur.z_axis if cur.z_axis is not None
-                                    else z_cut + cur.surface_z)
-                    if use_z:
-                        b.move({z_letter: pf.axis(ROLE_RADIAL).apply(
-                            target_cut_z + (z_pierce - z_cut))}, None)
+                        here = cur
+                    # Xoay xong: mồi lại.  Độ cao lấy theo đúng chỗ béc đang
+                    # đứng, không phải điểm cắt kế tiếp (hai điểm có thể chênh
+                    # nhau vài phần mm trên cung góc).
+                    cut_z_here = z_cut + here.surface_z
                     on_line = pr.on_command
                     if power and ("S" not in on_line.upper()):
                         on_line = f"{on_line} S{fmt(power, 0)}"
-                    b.raw(on_line)
-                    b.dwell(pr.pierce_delay)
+                    edge = off_at is not None and abs(here.x - off_at.x) < 0.2 \
+                        and abs(here.v - off_at.v) < 0.2
+                    if edge:
+                        # Béc nằm ngay trên đầu mạch cắt cũ (pivot giữ nguyên
+                        # điểm trên phôi trong lúc xoay): mồi trên mép, không
+                        # phải đục thủng tôn nên khỏi lên độ cao mồi rồi hạ.
+                        if use_z:
+                            b.move({z_letter: pf.axis(ROLE_RADIAL).apply(cut_z_here)}, None)
+                        wait = pr.restart_delay if pr.restart_delay >= 0 else pr.pierce_delay
+                        b.raw(on_line)
+                        b.dwell(wait)
+                        stats.edge_starts += 1
+                    else:
+                        if use_z:
+                            b.move({z_letter: pf.axis(ROLE_RADIAL).apply(
+                                cut_z_here + (z_pierce - z_cut))}, None)
+                        wait = pr.pierce_delay
+                        b.raw(on_line)
+                        b.dwell(wait)
+                        if use_z:
+                            b.move({z_letter: pf.axis(ROLE_RADIAL).apply(cut_z_here)},
+                                   pr.plunge_feed)
                     stats.pierces += 1
-                    stats.estimated_time += pr.pierce_delay
-                    if use_z:
-                        b.move({z_letter: pf.axis(ROLE_RADIAL).apply(target_cut_z)},
-                               pr.plunge_feed)
+                    stats.estimated_time += wait
                     torch_off_now = False
                     if self.motion.corner_dwell > 0:
                         b.dwell(self.motion.corner_dwell)
                         stats.estimated_time += self.motion.corner_dwell
                 prev_kind = cur.kind
 
-            va = kin.axis_values(prev, z_now)
-            vb = kin.axis_values(cur, z_now)
+            step_len = kin.surface_distance(prev, cur)
+            za = None if z_now is None else z_now + extra(done)
+            zb = None if z_now is None else z_now + extra(done + step_len)
+            va = kin.axis_values(prev, za)
+            vb = kin.axis_values(cur, zb)
             l_mach = kin.machine_distance(va, vb)
             if l_mach <= 1e-9:
                 continue
             if cur.kind == "index":
-                # pha xoay không cắt: chạy nhanh nhất trong khả năng các trục
+                # pha xoay không cắt: chạy nhanh nhất trong khả năng các trục.
+                # Mỏ đã tắt thì dùng G0 - trục xoay chạy đúng tốc độ tối đa của
+                # nó, không bị trần max_feed (dành cho lúc cắt) kìm lại.
                 feed = self._index_feed(va, vb, l_mach)
+                if torch_off_now and self.motion.corner_rotate_rate <= 0:
+                    feed = None
                 l_real = 0.0
             else:
-                feed, l_real, l_mach = kin.feed_for(prev, cur, feed_target, z_now, z_now)
-            b.move(kin.axis_values(cur, z_now), feed)
+                feed, l_real, l_mach = kin.feed_for(prev, cur, feed_target, za, zb)
+                if za is not None and zb is not None and abs(zb - za) > 1e-9:
+                    # đang vừa đi vừa hạ: trục Z không được nhanh hơn plunge_feed
+                    feed = min(feed, pr.plunge_feed * l_mach / abs(zb - za))
+            b.move(vb, feed)
             cut_len += l_real
-            stats.estimated_time += l_mach / max(feed, 1e-6) * 60.0
+            done += step_len
+            stats.estimated_time += (self._rapid_time(va, vb) if feed is None
+                                     else l_mach / max(feed, 1e-6) * 60.0)
             prev = cur
 
         if (indexed and self.motion.corner_mode == "index"

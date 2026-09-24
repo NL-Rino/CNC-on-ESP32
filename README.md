@@ -499,9 +499,10 @@ Trên Windows có thể nháy đúp `chay_gui.py` để mở giao diện.
    khai báo phôi    toạ độ          công, nhập số  hình 2D/3D     chạy thử      theo dõi
 ```
 
-* **Thứ tự cắt giữ đúng như bảng nguyên công.** Phần mềm không tự đổi; muốn nó
-  tự xếp (vạch dấu → lỗ/rãnh → cắt đứt từ ngoài vào) thì tích ô *Tự sắp xếp thứ
-  tự cắt*. Dòng chữ dưới bảng luôn hiện thứ tự thật sự sẽ chạy.
+* **Thứ tự cắt tự sắp như máy laser**: từng chi tiết một từ đầu tự do vào, vạch
+  dấu trước, rồi đường gần nhất theo thời gian máy thật. Bỏ tích *Tự sắp xếp thứ
+  tự cắt* thì cắt đúng thứ tự trong bảng. Dòng chữ dưới bảng luôn hiện thứ tự
+  thật sự sẽ chạy.
 * **Thư viện nguyên công lọc theo dạng phôi** — khai báo ống hộp thì không hiện
   *miệng cá* và *lỗ xuyên thành* (chỉ có nghĩa với ống tròn).
 * **Chọn chỗ vết mồi rơi vào**: *Vị trí điểm mồi* (% chu vi biên dạng) xoay điểm
@@ -571,6 +572,52 @@ cắt đồng đều từ mặt phẳng sang góc lượn.
 
 ---
 
+## Chạy như máy laser cắt ống
+
+Đo bằng một bộ lập kế hoạch chạy lại đúng thuật toán của FluidNC (gia tốc từng
+trục, tốc độ qua góc, bộ đệm nhìn trước có hạn), trước khi sửa **40% thời gian máy
+không cắt** — phần lớn là nhấc mỏ lên 20 mm rồi dừng hẳn ba lần giữa mỗi đường cắt,
+và ở góc ống hộp thì mỗi lần mồi lại đều nhấc lên hạ xuống như đục thủng tôn.
+
+| Sửa gì | Như máy laser thế nào |
+|---|---|
+| **Chạy không kiểu nhảy ếch** | vừa nhấc vừa đi, vừa đi vừa hạ theo cung trơn, rời điểm cắt thẳng đứng |
+| **Chỉ nhấc vừa đủ** | cao hơn chỗ kim loại cao nhất dưới thân mỏ dọc đường đi 6 mm — ống tròn 6 mm thay vì 20; ống hộp xoay qua góc tự nhấc 13,9 mm |
+| **Kiểm va chạm từng điểm** | có tính bề rộng thân mỏ; không an toàn thì quay về nhấc thẳng - hạ thẳng |
+| **Thứ tự cắt từng chi tiết** | từ đầu tự do vào, trục dọc đi một chiều; khoảng cách đo bằng thời gian máy, tính quay qua mốc 360° |
+| **Mồi xong vừa hạ vừa vào dao** | không đứng yên chờ trục Z; đoạn vào dao nằm trong phế liệu |
+| **Mồi lại trên mép ở góc ống hộp** | béc nằm ngay đầu mạch cắt cũ nên mồi thẳng ở cao độ cắt |
+| **Xoay góc lúc tắt mỏ chạy `G0`** | trục xoay đạt tốc độ tối đa thay vì bị trần tốc độ cắt kìm lại |
+
+Kết quả, so trên cùng bộ đo, **thời gian chờ mồi/tắt giữ nguyên** (không đụng vào
+thông số quy trình cắt):
+
+| | Trước | Sau |
+|---|---|---|
+| 6 công việc mẫu × 9 hồ sơ máy | 3042 s | **2729 s (−10%)**, thời gian không cắt −22% |
+| Cây ống 3 chi tiết, ống tròn ⌀60 | 283 s | **214 s (−24%)** |
+| Cây ống 3 chi tiết, ống hộp 50×50 | 196 s | **164 s (−16%)** |
+
+Một nhát cắt đứt ống hộp 50×50 chế độ pivot: 31,1 s → 25,9 s, và 22,7 s nếu đặt thêm
+*Chờ mồi lại trên mép* 0,2 s (mặc định vẫn bằng thời gian mồi — xem
+[mục 8.1 hướng dẫn](docs/HUONG_DAN.md#81-máy-di-chuyển-thế-nào--như-máy-laser-cắt-ống)
+cách thử cho máy của bạn).
+
+Sửa luôn ba lỗi tìm ra trong lúc đo: mồi lại ở đầu cung góc bị **cao hơn 0,4 mm**
+(lấy độ cao theo điểm kế tiếp thay vì chỗ béc đang đứng); công việc mẫu ống cổ 45°
+**cắt nhát trong trước**, làm rơi luôn khúc chứa nhát ngoài; và hàm cảnh báo thứ tự
+không bắt được trường hợp đó.
+
+Thời gian ước tính giờ tính cả tăng/giảm tốc nên sát máy thật hơn, và khớp tuyệt đối
+với thanh thời gian ở thẻ Mô phỏng. Dòng thống kê chia ra máy tiêu thời gian vào đâu:
+
+```
+ước tính 0m 57s
+cắt 49% · chạy không 29% · chờ (mồi, tắt) 18% · nhấc/hạ mỏ 4%
+```
+
+---
+
 ## Cấu trúc mã nguồn
 
 ```
@@ -588,6 +635,8 @@ pipecut/
   jobs.py        mô tả công việc bằng JSON + danh mục nguyên công
   protocol.py    phân tích phản hồi Grbl/FluidNC, mã lỗi tiếng Việt
   clamp.py       căn tâm mâm cặp bằng tay: chạm 4 mặt ống ra gốc chuẩn
+  travel.py      chạy không kiểu nhảy ếch, có kiểm va chạm
+  planner.py     ước thời gian đúng như FluidNC lập kế hoạch chuyển động
   probing.py     chế độ dò cạnh: tự tìm phôi rồi đặt gốc toạ độ
   transport.py   cổng COM (pyserial), mạng LAN/WiFi (Telnet) hoặc máy ảo
   importers/     nhập biên dạng: DXF, SVG, G-code phẳng, STL/OBJ, CSV/JSON

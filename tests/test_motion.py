@@ -218,8 +218,21 @@ class TestGcode(unittest.TestCase):
         i = next(i for i, l in enumerate(lines) if l.startswith("M3"))
         before = " ".join(lines[max(0, i - 3):i])
         self.assertIn(f"Z{fmt(self.p.process.pierce_height)}", before)
-        after = " ".join(lines[i:i + 4])
-        self.assertIn(f"Z{fmt(self.p.process.cut_height)}", after)
+        # Hạ về độ cao cắt trong lúc chạy đoạn vào dao: Z giảm dần một chiều,
+        # tới độ cao cắt chậm nhất khi hết đoạn vào dao, không bao giờ thấp hơn.
+        zs = []
+        for line in lines[i + 1:]:
+            if line.startswith("M5"):
+                break
+            for w in line.split():
+                if w.startswith("Z"):
+                    zs.append(float(w[1:]))
+        lead = self.prog.passes[0].lead_in_count
+        self.assertTrue(zs, "phải có lệnh hạ Z sau khi mồi")
+        self.assertEqual(zs, sorted(zs, reverse=True))
+        self.assertAlmostEqual(min(zs), self.p.process.cut_height, places=3)
+        reached = next(k for k, z in enumerate(zs) if abs(z - self.p.process.cut_height) < 1e-3)
+        self.assertLessEqual(reached, lead)
 
     def test_xuat_modal_khong_lap_lai_tu_lenh(self):
         along = self.p.letter(ROLE_ALONG)
@@ -306,7 +319,8 @@ class TestLeadPerOperation(unittest.TestCase):
     def test_hai_nguyen_cong_dat_khac_nhau_thi_ra_khac_nhau(self):
         from pipecut.jobs import Job
         from pipecut.gcode import build_program
-        job = Job(name="t")
+        # giữ thứ tự nhập để biết lượt nào của nguyên công nào
+        job = Job(name="t", optimize_order=False)
         job.add("slot", x=100.0, theta=0.0, length=40.0, width_deg=45.0, corner=5.0)
         job.add("slot", x=200.0, theta=0.0, length=40.0, width_deg=45.0, corner=5.0,
                 lead_custom=True, lead_type="none")

@@ -445,6 +445,36 @@ python -m pipecut send ra.nc --port 127.0.0.1:2323
 
 ## Cài đặt
 
+### Windows: tải bộ cài, không cần Python
+
+Vào [**Releases**](https://github.com/NL-Rino/CNC-on-ESP32/releases/latest), tải
+`PipeCutStudio-<phiên bản>-setup.exe` rồi chạy.
+
+* Cài vào *Program Files* (hoặc chỉ cho riêng bạn nếu máy không có quyền quản trị),
+  tạo lối tắt ở Start menu và — nếu tích — ngoài Desktop. Gỡ trong *Settings → Apps*.
+* Start menu có sẵn lối vào **Công việc mẫu**, **Cấu hình FluidNC cho ESP32**, **Hồ
+  sơ máy mẫu** và **Hướng dẫn sử dụng**.
+* Không muốn cài: tải `…-portable.zip`, giải nén, chạy `PipeCutStudio.exe`.
+* Cần dùng dòng lệnh: `pipecut.exe` nằm cạnh `PipeCutStudio.exe` trong thư mục cài
+  (`pipecut.exe gen …`, `pipecut.exe ports`…).
+
+Hồ sơ máy lưu ở `%USERPROFILE%\.pipecut\machine.json` — **lần sau mở là tự nạp**;
+công việc và G-code mặc định lưu vào `Documents\PipeCut`. Cài lại hay nâng cấp
+không mất mấy thứ đó.
+
+> **Windows SmartScreen** có thể báo "Windows protected your PC" vì tệp chưa ký số:
+> bấm *More info → Run anyway*. Tệp được dựng tự động từ đúng mã nguồn trong kho này
+> trên máy Windows của GitHub (xem [quy trình dựng](.github/workflows/windows.yml)).
+>
+> Nối ESP32-S3 qua cổng **USB** (cổng nối thẳng chip) thì Windows 10/11 nhận luôn.
+> Cổng **UART** đi qua chip CP2102 hoặc CH340 — CH340 thường phải cài driver của
+> hãng WCH.
+
+Tự dựng bộ cài trên máy mình: cài Python 3.10+ và Inno Setup 6, rồi chạy
+`packaging\build_windows.bat`.
+
+### Chạy từ mã nguồn (mọi hệ điều hành)
+
 Cần **Python 3.9 trở lên**.
 
 ```bash
@@ -637,6 +667,7 @@ pipecut/
   clamp.py       căn tâm mâm cặp bằng tay: chạm 4 mặt ống ra gốc chuẩn
   travel.py      chạy không kiểu nhảy ếch, có kiểm va chạm
   planner.py     ước thời gian đúng như FluidNC lập kế hoạch chuyển động
+  paths.py       thư mục tài nguyên đi kèm và thư mục ghi của người dùng
   probing.py     chế độ dò cạnh: tự tìm phôi rồi đặt gốc toạ độ
   transport.py   cổng COM (pyserial), mạng LAN/WiFi (Telnet) hoặc máy ảo
   importers/     nhập biên dạng: DXF, SVG, G-code phẳng, STL/OBJ, CSV/JSON
@@ -649,6 +680,7 @@ pipecut/
 config/          hồ sơ máy mẫu (ống tròn, ống hộp, xoay góc, trục vát,
                  laser, hai bản ESP32-S3: dò bằng mỏ cắt và đầu đảo)
 firmware/        cấu hình FluidNC: ESP32 gốc, S3 (4 trục), S3 + trục đảo
+packaging/       đóng gói .exe (PyInstaller) và bộ cài Windows (Inno Setup)
 examples/        tệp công việc mẫu + bản vẽ mẫu (DXF, SVG, G-code phẳng)
 docs/            hướng dẫn sử dụng và tài liệu kỹ thuật
 tests/           230 bài kiểm thử (chạy bằng thư viện chuẩn)

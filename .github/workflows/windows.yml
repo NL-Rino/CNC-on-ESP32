@@ -1,0 +1,143 @@
+# Dựng PipeCutStudio.exe và bộ cài cho Windows, trên máy Windows thật của GitHub.
+#
+# * Mỗi lần đẩy lên main: dựng, kiểm thử, cài thử - kết quả ở mục Artifacts của lượt chạy.
+# * Chạy tay (Actions -> Windows -> Run workflow) với "release" bật, hoặc đẩy tag v*:
+#   đăng thêm bản Release kèm tệp cài đặt để tải về.
+name: Windows
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Đăng bản Release kèm tệp cài đặt"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cài công cụ
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller pyserial pillow pytest pyyaml
+
+      - name: Phiên bản
+        id: ver
+        shell: bash
+        run: echo "version=$(python -c 'import pipecut; print(pipecut.__version__)')" >> "$GITHUB_OUTPUT"
+
+      - name: Kiểm thử trên Windows
+        run: python -m pytest -q
+
+      - name: Đóng gói (PyInstaller)
+        run: |
+          python packaging/make_icon.py
+          python -m PyInstaller packaging/pipecut.spec --noconfirm --clean
+
+      - name: Chạy thử bản đóng gói
+        shell: pwsh
+        run: |
+          $d = "dist\PipeCutStudio"
+          New-Item -ItemType Directory -Force -Path chay-thu | Out-Null
+          Push-Location chay-thu
+          & "..\$d\pipecut.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw "pipecut.exe --version hỏng" }
+          & "..\$d\pipecut.exe" -p "..\$d\config\machine_round.json" gen "..\$d\examples\vi_du_ong_T.json" -o t.nc
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path t.nc)) { throw "pipecut.exe gen hỏng" }
+          # Bản giao diện không có cửa sổ dòng lệnh: tự kiểm rồi ghi kết quả ra tệp
+          $p = Start-Process "..\$d\PipeCutStudio.exe" -ArgumentList "--selftest", "st.txt" -Wait -PassThru
+          Get-Content st.txt
+          if ($p.ExitCode -ne 0) { throw "PipeCutStudio.exe --selftest hỏng" }
+          Pop-Location
+
+      - name: Bản chạy liền (zip)
+        shell: pwsh
+        run: Compress-Archive -Path dist\PipeCutStudio -DestinationPath "dist\PipeCutStudio-${{ steps.ver.outputs.version }}-portable.zip"
+
+      - name: Dựng bộ cài (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          try {
+            Invoke-WebRequest "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/Vietnamese.isl" -OutFile packaging\Vietnamese.isl
+            Write-Host "Có bản dịch tiếng Việt cho bộ cài"
+          } catch {
+            Write-Host "Không tải được Vietnamese.isl - bộ cài dùng tiếng Anh"
+          }
+          & $iscc "/DAppVersion=${{ steps.ver.outputs.version }}" packaging\installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC hỏng" }
+
+      - name: Cài thử, chạy thử, gỡ thử
+        shell: pwsh
+        run: |
+          $setup = "dist\PipeCutStudio-${{ steps.ver.outputs.version }}-setup.exe"
+          $dir = "$env:RUNNER_TEMP\PipeCut cai thu"
+          $p = Start-Process $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER", "/DIR=`"$dir`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Cài đặt hỏng: $($p.ExitCode)" }
+          & "$dir\pipecut.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw "Bản đã cài không chạy" }
+          foreach ($f in "PipeCutStudio.exe", "config\machine_default.json", "examples\vi_du_ong_hop.json", "firmware\fluidnc_pipe4axis_s3.yaml", "docs\HUONG_DAN.md") {
+            if (-not (Test-Path "$dir\$f")) { throw "Thiếu $f sau khi cài" }
+          }
+          $p = Start-Process "$dir\PipeCutStudio.exe" -ArgumentList "--selftest", "$env:RUNNER_TEMP\st2.txt" -Wait -PassThru
+          Get-Content "$env:RUNNER_TEMP\st2.txt"
+          if ($p.ExitCode -ne 0) { throw "Bản đã cài: giao diện hỏng" }
+          # Trình gỡ của Inno tự chép sang thư mục tạm rồi chạy lại, nên -Wait trả về sớm
+          Start-Process "$dir\unins000.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES" -Wait
+          $t = 0
+          while ((Test-Path "$dir\PipeCutStudio.exe") -and $t -lt 60) { Start-Sleep -Seconds 2; $t += 2 }
+          if (Test-Path "$dir\PipeCutStudio.exe") { throw "Gỡ cài đặt không sạch" }
+          Write-Host "Cài - chạy - gỡ: đều được"
+
+      - name: Nhật ký thay đổi của bản này
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          parts = re.split(r"(?m)^## ", text)
+          body = "## " + parts[1] if len(parts) > 1 else text
+          body += ("\n\n---\n**Tải về:** `PipeCutStudio-*-setup.exe` để cài đặt "
+                   "(Start menu, Desktop, gỡ trong Settings), hoặc `*-portable.zip` "
+                   "giải nén là chạy, không cần cài.\n")
+          open("release-notes.md", "w", encoding="utf-8").write(body)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PipeCutStudio-${{ steps.ver.outputs.version }}-windows
+          path: |
+            dist/PipeCutStudio-*-setup.exe
+            dist/PipeCutStudio-*-portable.zip
+
+      - name: Đăng bản Release
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: PipeCut Studio ${{ steps.ver.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          body_path: release-notes.md
+          files: |
+            dist/PipeCutStudio-*-setup.exe
+            dist/PipeCutStudio-*-portable.zip

@@ -675,7 +675,22 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+def _utf8_output() -> None:
+    """In tiếng Việt không vỡ trên Windows.
+
+    Cửa sổ lệnh Windows thì Python tự lo, nhưng khi kết quả được chuyển hướng
+    vào tệp hay ống dẫn (``pipecut gen ... > log.txt``) thì mã hoá mặc định là
+    cp1252 - gặp chữ "ố" là ném lỗi và chương trình dừng giữa chừng.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    _utf8_output()
     ap = build_parser()
     args = ap.parse_args(argv)
     if not hasattr(args, "profile"):

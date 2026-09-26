@@ -223,6 +223,38 @@ dịch chuyển thật của ống.
 
 ## 4. Cài đặt phần mềm
 
+### Windows
+
+Tải `PipeCutStudio-<phiên bản>-setup.exe` ở trang
+[Releases](https://github.com/NL-Rino/CNC-on-ESP32/releases/latest) rồi chạy:
+
+1. Chọn cài cho **mọi người dùng** (cần quyền quản trị) hoặc **chỉ riêng tôi**.
+2. Tích *Tạo lối tắt ngoài Desktop* nếu muốn.
+3. Xong bấm *Chạy PipeCut Studio*.
+
+Windows có thể hiện *"Windows protected your PC"* vì tệp chưa ký số — bấm **More
+info → Run anyway**.
+
+Lưu ở đâu:
+
+| Cái gì | Ở đâu | Ghi chú |
+|---|---|---|
+| Phần mềm, ví dụ, cấu hình FluidNC, tài liệu | `C:\Program Files\PipeCut Studio` | Start menu có lối vào từng thư mục |
+| Hồ sơ máy của bạn | `%USERPROFILE%\.pipecut\machine.json` | lưu vào đây thì **lần sau mở tự nạp** |
+| Công việc, G-code, ảnh xuất | `Documents\PipeCut` | chỗ mặc định của hộp thoại Lưu |
+
+Nâng cấp: chạy bộ cài bản mới đè lên, không cần gỡ trước; hồ sơ máy và công việc
+không bị động tới. Gỡ: *Settings → Apps → PipeCut Studio*.
+
+Không muốn cài thì tải bản `…-portable.zip`, giải nén ra đâu cũng được, chạy
+`PipeCutStudio.exe`. Dòng lệnh là `pipecut.exe` cùng thư mục.
+
+**Driver cổng COM:** cắm cổng **USB** của S3-DevKitC-1 (nối thẳng chip) thì
+Windows 10/11 nhận ngay. Cổng **UART** đi qua chip chuyển đổi: CP2102 thường tự
+cài qua Windows Update, CH340 phải tải driver của hãng WCH.
+
+### Chạy từ mã nguồn
+
 ```bash
 pip install -r requirements.txt     # chỉ cần pyserial
 python -m pipecut ui                # mở giao diện

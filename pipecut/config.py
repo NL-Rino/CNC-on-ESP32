@@ -462,15 +462,28 @@ class MachineProfile:
         return cls()
 
 
-DEFAULT_PROFILE_PATHS = (
-    os.path.join(os.getcwd(), "config", "machine_default.json"),
-    os.path.join(os.path.expanduser("~"), ".pipecut", "machine.json"),
-)
+def profile_search_paths() -> List[str]:
+    """Các chỗ phần mềm tự tìm hồ sơ máy khi mở, theo thứ tự ưu tiên.
+
+    Hồ sơ người dùng đã lưu (``~/.pipecut/machine.json``) đứng **đầu**: nếu để
+    hồ sơ mẫu đi kèm lên trước thì bản cài vào Program Files - nơi có sẵn
+    ``config/machine_default.json`` - sẽ luôn che mất hồ sơ người dùng đã lưu.
+    Tính lại mỗi lần gọi, vì thư mục đang đứng có thể đổi sau khi nạp module.
+    """
+    from .paths import resource, user_profile_path
+    out: List[str] = []
+    for p in (user_profile_path(),
+              os.path.join(os.getcwd(), "config", "machine_default.json"),
+              resource("config", "machine_default.json")):
+        p = os.path.abspath(p)
+        if p not in out:
+            out.append(p)
+    return out
 
 
 def find_profile() -> MachineProfile:
     """Tìm hồ sơ máy ở các vị trí quen thuộc, không có thì trả về mặc định."""
-    for p in DEFAULT_PROFILE_PATHS:
+    for p in profile_search_paths():
         if os.path.exists(p):
             try:
                 return MachineProfile.load(p)

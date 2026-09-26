@@ -1,5 +1,45 @@
 # Nhật ký thay đổi
 
+## v1.13.0 — 2026-09-26
+
+### Bộ cài cho Windows
+
+`PipeCutStudio-1.13.0-setup.exe` — cài như phần mềm bình thường, **không cần cài
+Python**:
+
+* cài vào *Program Files*, hoặc chỉ cho riêng người dùng nếu máy không có quyền
+  quản trị;
+* lối tắt ở Start menu và (tuỳ chọn) ngoài Desktop, kèm lối vào công việc mẫu,
+  cấu hình FluidNC cho ESP32, hồ sơ máy mẫu và hướng dẫn;
+* gỡ trong *Settings → Apps*; cài bản mới đè lên không mất hồ sơ máy, công việc;
+* kèm bản `…-portable.zip` giải nén là chạy.
+
+Trong thư mục cài có hai tệp chạy: `PipeCutStudio.exe` (giao diện, không bật
+cửa sổ dòng lệnh đen) và `pipecut.exe` (dòng lệnh).
+
+Bộ cài được dựng **tự động trên máy Windows thật của GitHub**
+(`.github/workflows/windows.yml`), mỗi lượt đều: chạy toàn bộ kiểm thử trên
+Windows → đóng gói → chạy thử cả hai tệp exe → dựng bộ cài → **cài thử, chạy thử
+bản đã cài, gỡ thử** → rồi mới đăng Release. Tự dựng trên máy mình:
+`packaging\build_windows.bat`.
+
+### Sửa để chạy đúng khi đã cài
+
+* **"Lưu hồ sơ máy thì lần sau mở là có sẵn" trước đây không đúng hẳn**: hộp
+  thoại mặc định lưu `machine.json` vào thư mục đang đứng — không nằm trong danh
+  sách chỗ phần mềm tự tìm khi mở. Giờ mặc định lưu vào `~/.pipecut/machine.json`,
+  và chỗ đó được tìm **đầu tiên** (trước đây hồ sơ mẫu đi kèm đứng trước, nên bản
+  cài trong Program Files sẽ luôn che mất hồ sơ bạn đã lưu).
+* Phần mềm tìm hồ sơ mẫu, ví dụ, cấu hình theo **thư mục cài** chứ không chỉ theo
+  thư mục đang đứng — chạy từ lối tắt nào cũng thấy.
+* Hộp thoại lưu công việc, G-code, ảnh mặc định vào `Documents\PipeCut` (Program
+  Files không ghi được); mở công việc lần đầu thì vào thẳng thư mục ví dụ.
+* Dòng lệnh in tiếng Việt không vỡ khi chuyển hướng ra tệp trên Windows (trước
+  đây `pipecut gen … > log.txt` dừng giữa chừng vì bảng mã cp1252).
+* Cửa sổ có biểu tượng riêng thay cho chiếc lông vũ của Tk.
+
+4 bài kiểm thử mới về đường dẫn, tổng 305.
+
 ## v1.12.0 — 2026-09-24
 
 ### Máy chạy như máy laser cắt ống

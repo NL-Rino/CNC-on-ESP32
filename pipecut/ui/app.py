@@ -682,8 +682,10 @@ class MainWindow:
         if not self.playback:
             self.status_var.set("Chưa có chương trình để chụp.")
             return
+        from ..paths import documents_dir
         path = filedialog.asksaveasfilename(
             defaultextension=".svg", filetypes=[("Ảnh SVG", "*.svg")],
+            initialdir=documents_dir(create=True),
             initialfile=f"{self.job.name}-mo-phong.svg")
         if not path:
             return
@@ -1361,16 +1363,30 @@ class MainWindow:
 
     def save_profile(self) -> None:
         self.apply_profile(silent=True)
+        # Mặc định lưu đúng chỗ phần mềm tự đọc lại lúc mở - nhờ vậy "lưu xong,
+        # lần sau mở là có sẵn" mới đúng.  Không để mặc định vào thư mục đang
+        # đứng: bản cài trong Program Files thì chỗ đó không ghi được.
+        from ..paths import user_dir, user_profile_path
         path = filedialog.asksaveasfilename(defaultextension=".json",
                                             filetypes=[("Hồ sơ máy", "*.json")],
-                                            initialfile="machine.json")
-        if path:
+                                            initialdir=user_dir(create=True),
+                                            initialfile=os.path.basename(user_profile_path()))
+        if not path:
+            return
+        try:
             self.profile.save(path)
-            self.profile_path = path
-            self.status_var.set(f"Đã lưu hồ sơ máy: {path}")
+        except OSError as exc:
+            messagebox.showerror("Không lưu được", f"{path}\n\n{exc}")
+            return
+        self.profile_path = path
+        auto = os.path.abspath(path) == os.path.abspath(user_profile_path())
+        self.status_var.set(f"Đã lưu hồ sơ máy: {path}"
+                            + (" - lần sau mở phần mềm sẽ tự nạp." if auto else ""))
 
     def open_profile(self) -> None:
-        path = filedialog.askopenfilename(filetypes=[("Hồ sơ máy", "*.json")])
+        from ..paths import resource
+        path = filedialog.askopenfilename(filetypes=[("Hồ sơ máy", "*.json")],
+                                          initialdir=resource("config"))
         if not path:
             return
         try:
@@ -1528,7 +1544,12 @@ class MainWindow:
             self.generate()
 
     def open_job(self) -> None:
-        path = filedialog.askopenfilename(filetypes=[("Công việc", "*.json")])
+        from ..paths import documents_dir, resource
+        start = documents_dir()
+        if not os.path.isdir(start) or not os.listdir(start):
+            start = resource("examples")       # chưa có gì thì mở thư mục ví dụ
+        path = filedialog.askopenfilename(filetypes=[("Công việc", "*.json")],
+                                          initialdir=start)
         if path:
             self._load_job(path)
 
@@ -1547,8 +1568,10 @@ class MainWindow:
 
     def save_job(self) -> None:
         self.job.name = self.var_job_name.get().strip() or "cong-viec"
+        from ..paths import documents_dir
         path = filedialog.asksaveasfilename(defaultextension=".json",
                                             filetypes=[("Công việc", "*.json")],
+                                            initialdir=documents_dir(create=True),
                                             initialfile=f"{self.job.name}.json")
         if path:
             self.job.save(path)
@@ -1597,8 +1620,10 @@ class MainWindow:
     def export_svg(self) -> None:
         if not self.program:
             return
+        from ..paths import documents_dir
         path = filedialog.asksaveasfilename(defaultextension=".svg",
                                             filetypes=[("Bản vẽ SVG", "*.svg")],
+                                            initialdir=documents_dir(create=True),
                                             initialfile=f"{self.job.name}.svg")
         if path:
             from ..svgview import save_svg
@@ -1610,8 +1635,10 @@ class MainWindow:
             self.generate()
         if not self.program:
             return
+        from ..paths import documents_dir
         path = filedialog.asksaveasfilename(defaultextension=".nc",
                                             filetypes=[("G-code", "*.nc *.gcode *.tap")],
+                                            initialdir=documents_dir(create=True),
                                             initialfile=f"{self.job.name}.nc")
         if path:
             self.program.save(path)
@@ -1744,6 +1771,13 @@ def _summary(op: Operation) -> str:
 
 def main(profile_path: Optional[str] = None, job_path: Optional[str] = None) -> int:
     root = tk.Tk()
+    if sys.platform == "win32":
+        # Biểu tượng cửa sổ và thanh tác vụ (bản đóng gói để pipecut.ico cạnh exe)
+        from ..paths import resource
+        try:
+            root.iconbitmap(default=resource("pipecut.ico"))
+        except tk.TclError:
+            pass
     MainWindow(root, profile_path, job_path)
     root.mainloop()
     return 0

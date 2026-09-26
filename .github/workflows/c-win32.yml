@@ -59,6 +59,7 @@ jobs:
           $p.WaitForExit()
           Write-Host ("mã thoát: 0x{0:X8}" -f $p.ExitCode)
           if (Test-Path st\selftest.txt) { Get-Content st\selftest.txt } else { Write-Host "không có selftest.txt" }
+          if (Test-Path selftest_error.txt) { Get-Content selftest_error.txt }
           if ($p.ExitCode -ne 0) { throw "--selftest hỏng" }
           # Ảnh 3D nào cũng phải có đủ màu - trắng trơn hay chỉ có nền là vẽ hỏng
           $shots = Select-String -Path st\selftest.txt -Pattern "colors=(\d+)"

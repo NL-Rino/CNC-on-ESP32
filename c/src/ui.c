@@ -21,6 +21,7 @@
 #include <commdlg.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1322,7 +1323,25 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show)
         CreateDirectoryW(selftest_dir, NULL);
         swprintf(rp, MAX_PATH, L"%ls\\selftest.txt", selftest_dir);
         g_report = _wfopen(rp, L"wb");
-        if (!g_report) return 2;
+        if (!g_report) {
+            /* ghi lý do bằng API gốc của Windows, không qua thư viện C */
+            int en = errno;
+            DWORD le = GetLastError();
+            HANDLE hf = CreateFileW(L"selftest_error.txt", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+            if (hf != INVALID_HANDLE_VALUE) {
+                char msg[1400], u8[1000];
+                WideCharToMultiByte(CP_UTF8, 0, rp, -1, u8, sizeof u8, NULL, NULL);
+                HANDLE t = CreateFileW(rp, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+                DWORD le2 = t == INVALID_HANDLE_VALUE ? GetLastError() : 0;
+                if (t != INVALID_HANDLE_VALUE) CloseHandle(t);
+                int n = snprintf(msg, sizeof msg, "path=[%s] errno=%d lasterror=%lu acp=%u createfile=%lu\r\n", u8, en,
+                                 (unsigned long)le, GetACP(), (unsigned long)le2);
+                DWORD w;
+                WriteFile(hf, msg, (DWORD)n, &w, NULL);
+                CloseHandle(hf);
+            }
+            return 2;
+        }
         SetUnhandledExceptionFilter(on_crash);
         fprintf(g_report, "start\n");
         fflush(g_report);

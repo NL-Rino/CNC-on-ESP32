@@ -24,7 +24,15 @@ jobs:
       - name: Dựng
         run: |
           make -C c
-          ls -l c/*.exe
+          # bản đối chứng: manifest không đặt trang mã UTF-8 (chẩn đoán)
+          sed '/activeCodePage/d' c/res/app.manifest > c/res/app-noacp.manifest
+          sed 's/app.manifest/app-noacp.manifest/' c/res/app.rc > c/res/app-noacp.rc
+          x86_64-w64-mingw32-windres -I c/res -i c/res/app-noacp.rc -o c/res-noacp.o
+          cd c && x86_64-w64-mingw32-gcc -O2 -std=c99 -Wall -DUNICODE -D_UNICODE -mwindows -municode \
+            -o PipeCutC-noacp.exe src/section.c src/ops.c src/gcode.c src/planner.c src/demo.c \
+            src/ui.c src/view3d.c src/comm.c res-noacp.o -s -static -static-libgcc \
+            -lm -lcomctl32 -lcomdlg32 -lgdi32 -luser32 -lws2_32 -ladvapi32 -lshell32
+          ls -l *.exe
       - uses: actions/upload-artifact@v4
         with:
           name: PipeCutC-exe
@@ -48,6 +56,24 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path t.nc)) { throw "pipecutc gen hỏng" }
           & bin\pipecutc.exe plan t.nc
           if ($LASTEXITCODE -ne 0) { throw "pipecutc plan hỏng" }
+
+      - name: Chẩn đoán khởi động
+        shell: pwsh
+        env:
+          PIPECUT_TRACE: "1"
+        run: |
+          foreach ($exe in "PipeCutC.exe", "PipeCutC-noacp.exe") {
+            New-Item -ItemType Directory -Force -Path "d-$exe" | Out-Null
+            $p = Start-Process "bin\$exe" -ArgumentList "--selftest", "$PWD\d-$exe" -PassThru `
+                   -RedirectStandardError "err-$exe.txt" -RedirectStandardOutput "out-$exe.txt"
+            $null = $p.Handle
+            if (-not $p.WaitForExit(120000)) { $p.Kill() }
+            $p.WaitForExit()
+            Write-Host ("{0}: mã thoát 0x{1:X8}" -f $exe, $p.ExitCode)
+            Get-Content "err-$exe.txt", "out-$exe.txt" -ErrorAction SilentlyContinue
+            Get-Content "d-$exe\selftest.txt" -ErrorAction SilentlyContinue
+            Get-Content selftest_error.txt -ErrorAction SilentlyContinue
+          }
 
       - name: Tự kiểm giao diện trên Windows
         shell: pwsh

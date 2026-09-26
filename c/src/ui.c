@@ -1304,6 +1304,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show)
 
     int argc = 0;
     wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (GetEnvironmentVariableW(L"PIPECUT_TRACE", NULL, 0)) {
+        /* vết khởi động ra stderr (khi được chuyển hướng) để tìm lỗi trên máy không màn hình */
+        char u8[1200];
+        WideCharToMultiByte(CP_UTF8, 0, GetCommandLineW(), -1, u8, sizeof u8, NULL, NULL);
+        fprintf(stderr, "wWinMain acp=%u argc=%d cmd=[%s]\n", GetACP(), argc, u8);
+        fflush(stderr);
+    }
     const wchar_t *selftest_dir = NULL, *connect_to = NULL;
     for (int i = 1; i < argc; i++) {
         if (!wcscmp(argv[i], L"--selftest") && i + 1 < argc) { selftest_dir = argv[++i]; g_selftest = 1; }

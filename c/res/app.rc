@@ -1,0 +1,29 @@
+#include <winver.h>
+#include <winuser.h>
+
+1 ICON "pipecut.ico"
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "app.manifest"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION 0,1,0,0
+PRODUCTVERSION 0,1,0,0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", "NL-Rino"
+      VALUE "FileDescription", "PipeCut C - pipe cutter CAM (Win32 + GDI)"
+      VALUE "FileVersion", "0.1.0"
+      VALUE "ProductName", "PipeCut C"
+      VALUE "ProductVersion", "0.1.0"
+      VALUE "OriginalFilename", "PipeCutC.exe"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

@@ -686,7 +686,8 @@ firmware/        cấu hình FluidNC: ESP32 gốc, S3 (4 trục), S3 + trục đ
 packaging/       đóng gói .exe (PyInstaller) và bộ cài Windows (Inno Setup)
 examples/        tệp công việc mẫu + bản vẽ mẫu (DXF, SVG, G-code phẳng)
 docs/            hướng dẫn sử dụng và tài liệu kỹ thuật
-tests/           230 bài kiểm thử (chạy bằng thư viện chuẩn)
+tests/           315 bài kiểm thử (chạy bằng thư viện chuẩn)
+c/               bản thử viết lại bằng C thuần (Win32 + GDI) - xem c/README.md
 ```
 
 Chạy kiểm thử:

@@ -1,0 +1,106 @@
+# Bản thử viết bằng C thuần (thư mục c/): dựng bằng MinGW-w64 trên Linux, rồi
+# chạy tự kiểm trên máy Windows thật của GitHub.  Đẩy tag c-v* thì đăng thêm bản
+# Release (đánh dấu bản thử) kèm tệp zip.
+name: C Win32
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["c/**", ".github/workflows/c-win32.yml"]
+    tags: ["c-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cài MinGW-w64
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 make
+      - name: Dựng
+        run: |
+          make -C c
+          ls -l c/*.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PipeCutC-exe
+          path: c/*.exe
+
+  test:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: PipeCutC-exe
+          path: bin
+
+      - name: Dòng lệnh
+        shell: pwsh
+        run: |
+          & bin\pipecutc.exe gen round 60 t.nc
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path t.nc)) { throw "pipecutc gen hỏng" }
+          & bin\pipecutc.exe plan t.nc
+          if ($LASTEXITCODE -ne 0) { throw "pipecutc plan hỏng" }
+
+      - name: Tự kiểm giao diện trên Windows
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path st | Out-Null
+          $p = Start-Process bin\PipeCutC.exe -ArgumentList "--selftest", "`"$PWD\st`"" -PassThru
+          $null = $p.Handle          # giữ handle, nếu không ExitCode có thể rỗng
+          if (-not $p.WaitForExit(120000)) { $p.Kill(); throw "--selftest treo" }
+          $p.WaitForExit()
+          Get-Content st\selftest.txt
+          if ($p.ExitCode -ne 0) { throw "--selftest hỏng: $($p.ExitCode)" }
+          # Ảnh 3D nào cũng phải có đủ màu - trắng trơn hay chỉ có nền là vẽ hỏng
+          $shots = Select-String -Path st\selftest.txt -Pattern "colors=(\d+)"
+          if ($shots.Count -ne 6) { throw "Thiếu ảnh 3D" }
+          foreach ($m in $shots) {
+            if ([int]$m.Matches[0].Groups[1].Value -lt 500) { throw "Ảnh 3D quá ít màu: $($m.Line)" }
+          }
+          # Chụp cửa sổ ba thẻ (để xem phông chữ tiếng Việt trên Windows thật)
+          foreach ($tab in 0, 1, 2) {
+            $p = Start-Process bin\PipeCutC.exe -ArgumentList "--shot", "`"$PWD\st\ui$tab.bmp`"", "$tab" -PassThru
+            if (-not $p.WaitForExit(60000)) { $p.Kill(); throw "--shot treo" }
+          }
+          Get-ChildItem st
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PipeCutC-selftest
+          path: st
+
+      - name: Đóng gói
+        if: startsWith(github.ref, 'refs/tags/c-v')
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}".Substring(3)
+          New-Item -ItemType Directory -Force -Path "PipeCutC-$v" | Out-Null
+          Copy-Item bin\PipeCutC.exe, bin\pipecutc.exe, c\README.md "PipeCutC-$v\"
+          Compress-Archive -Path "PipeCutC-$v" -DestinationPath "PipeCutC-$v-win64.zip"
+
+      - name: Đăng bản Release (bản thử)
+        if: startsWith(github.ref, 'refs/tags/c-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: PipeCut C ${{ github.ref_name }} (bản thử C/Win32)
+          prerelease: true
+          files: PipeCutC-*-win64.zip
+          body: |
+            Bản thử viết lại bằng **C thuần, chỉ Win32 + GDI**, không thư viện ngoài.
+            Một tệp `PipeCutC.exe` ~230 KB, giải nén là chạy, không cần cài.
+
+            Có: ống tròn / ống hộp, cắt đứt, lỗ, rãnh, sinh G-code FluidNC, ước thời
+            gian như FluidNC, mô phỏng 3D, nối máy qua cổng COM hoặc WiFi, nạp lệnh,
+            nhích trục, đặt gốc, dừng khẩn.
+
+            Chưa có nhiều thứ của bản Python (nhập DXF/SVG/STL, căn tâm mâm cặp, dò
+            cạnh, hồ sơ máy JSON…) — xem `README.md` trong tệp zip. Phần mềm chính vẫn
+            là **PipeCut Studio** (bản Python) ở các bản Release `v*`.

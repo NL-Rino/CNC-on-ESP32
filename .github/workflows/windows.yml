@@ -9,6 +9,8 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+    # bản thử C (thư mục c/) có quy trình riêng: c-win32.yml
+    paths-ignore: ["c/**", ".github/workflows/c-win32.yml"]
   workflow_dispatch:
     inputs:
       release:

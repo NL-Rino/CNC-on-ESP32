@@ -1,6 +1,7 @@
 # Bản thử viết bằng C thuần (thư mục c/): dựng bằng MinGW-w64 trên Linux, rồi
-# chạy tự kiểm trên máy Windows thật của GitHub.  Đẩy tag c-v* thì đăng thêm bản
-# Release (đánh dấu bản thử) kèm tệp zip.
+# chạy tự kiểm trên máy Windows thật của GitHub.  Đăng bản Release (đánh dấu bản
+# thử) kèm tệp zip: đẩy tag c-v*, hoặc Actions -> C Win32 -> Run workflow và tích
+# "release" (phiên bản lấy từ c/VERSION).
 name: C Win32
 
 on:
@@ -9,6 +10,11 @@ on:
     paths: ["c/**", ".github/workflows/c-win32.yml"]
     tags: ["c-v*"]
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Đăng bản Release thử (tag c-v + c/VERSION)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -84,19 +90,24 @@ jobs:
           path: st
 
       - name: Đóng gói
-        if: startsWith(github.ref, 'refs/tags/c-v')
+        id: pkg
+        if: startsWith(github.ref, 'refs/tags/c-v') || (github.event_name == 'workflow_dispatch' && inputs.release)
         shell: pwsh
         run: |
-          $v = "${{ github.ref_name }}".Substring(3)
+          if ("${{ github.ref }}".StartsWith("refs/tags/c-v")) { $v = "${{ github.ref_name }}".Substring(3) }
+          else { $v = (Get-Content c\VERSION -Raw).Trim() }
+          "version=$v" >> $env:GITHUB_OUTPUT
           New-Item -ItemType Directory -Force -Path "PipeCutC-$v" | Out-Null
           Copy-Item bin\PipeCutC.exe, bin\pipecutc-cli.exe, c\README.md "PipeCutC-$v\"
           Compress-Archive -Path "PipeCutC-$v" -DestinationPath "PipeCutC-$v-win64.zip"
 
       - name: Đăng bản Release (bản thử)
-        if: startsWith(github.ref, 'refs/tags/c-v')
+        if: startsWith(github.ref, 'refs/tags/c-v') || (github.event_name == 'workflow_dispatch' && inputs.release)
         uses: softprops/action-gh-release@v2
         with:
-          name: PipeCut C ${{ github.ref_name }} (bản thử C/Win32)
+          tag_name: c-v${{ steps.pkg.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: PipeCut C ${{ steps.pkg.outputs.version }} (bản thử C/Win32)
           prerelease: true
           files: PipeCutC-*-win64.zip
           body: |

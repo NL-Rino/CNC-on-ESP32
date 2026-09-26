@@ -108,7 +108,9 @@ Ra hai tệp:
   theo cắt / chạy không / nâng hạ / xoay / chờ).
 
 Mỗi lần đẩy mã, [GitHub Actions](../.github/workflows/c-win32.yml) dựng lại và
-chạy tự kiểm trên máy Windows thật.
+chạy tự kiểm trên máy Windows thật. Muốn đăng thành bản Release để tải về: vào
+**Actions → C Win32 → Run workflow**, tích **release** (phiên bản lấy từ tệp
+`VERSION`).
 
 ## Tự kiểm
 

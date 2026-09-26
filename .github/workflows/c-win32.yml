@@ -53,12 +53,13 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path st | Out-Null
-          $p = Start-Process bin\PipeCutC.exe -ArgumentList "--selftest", "`"$PWD\st`"" -PassThru
+          $p = Start-Process bin\PipeCutC.exe -ArgumentList "--selftest", "$PWD\st" -PassThru
           $null = $p.Handle          # giữ handle, nếu không ExitCode có thể rỗng
           if (-not $p.WaitForExit(120000)) { $p.Kill(); throw "--selftest treo" }
           $p.WaitForExit()
-          Get-Content st\selftest.txt
-          if ($p.ExitCode -ne 0) { throw "--selftest hỏng: $($p.ExitCode)" }
+          Write-Host ("mã thoát: 0x{0:X8}" -f $p.ExitCode)
+          if (Test-Path st\selftest.txt) { Get-Content st\selftest.txt } else { Write-Host "không có selftest.txt" }
+          if ($p.ExitCode -ne 0) { throw "--selftest hỏng" }
           # Ảnh 3D nào cũng phải có đủ màu - trắng trơn hay chỉ có nền là vẽ hỏng
           $shots = Select-String -Path st\selftest.txt -Pattern "colors=(\d+)"
           if ($shots.Count -ne 6) { throw "Thiếu ảnh 3D" }
@@ -67,7 +68,7 @@ jobs:
           }
           # Chụp cửa sổ ba thẻ (để xem phông chữ tiếng Việt trên Windows thật)
           foreach ($tab in 0, 1, 2) {
-            $p = Start-Process bin\PipeCutC.exe -ArgumentList "--shot", "`"$PWD\st\ui$tab.bmp`"", "$tab" -PassThru
+            $p = Start-Process bin\PipeCutC.exe -ArgumentList "--shot", "$PWD\st\ui$tab.bmp", "$tab" -PassThru
             if (-not $p.WaitForExit(60000)) { $p.Kill(); throw "--shot treo" }
           }
           Get-ChildItem st

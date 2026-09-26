@@ -1023,12 +1023,9 @@ static int bmp_colors(const wchar_t *path)
 }
 
 /* Tự kiểm: sinh 2 chương trình mẫu, ghi số liệu và ảnh 3D ra thư mục. */
-static int selftest(const wchar_t *dir)
+static int selftest(FILE *f, const wchar_t *dir)
 {
     wchar_t path[MAX_PATH];
-    swprintf(path, MAX_PATH, L"%ls\\selftest.txt", dir);
-    FILE *f = _wfopen(path, L"wb");
-    if (!f) return 1;
     for (int box = 0; box < 2; box++) {
         SendDlgItemMessageW(g_panel, ID_KIND, CB_SETCURSEL, box, 0);
         pipe_kind_changed();
@@ -1038,6 +1035,7 @@ static int selftest(const wchar_t *dir)
         regen();
         fprintf(f, "%s lines=%d pierces=%d cut=%.3f total=%.6f stops=%d moves=%d\n", box ? "box" : "round",
                 g_gc.lines, g_gc.pierces, g_gc.cut_length, g_plan.total, g_plan.full_stops, g_plan.n);
+        fflush(f);
         /* thời điểm giữa nhát cắt dài nhất để thấy hồ quang */
         double tbest = 0, lbest = -1;
         for (int i = 0; i < g_plan.n; i++)
@@ -1059,7 +1057,7 @@ static int selftest(const wchar_t *dir)
         }
     }
     fprintf(f, "bench 1280x800 %.2f ms/frame\n", view3d_bench(g_view, 1280, 800, 60));
-    fclose(f);
+    fprintf(f, "ok\n");
     return 0;
 }
 
@@ -1277,6 +1275,20 @@ static LRESULT CALLBACK main_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     return DefWindowProcW(h, msg, wp, lp);
 }
 
+/* Khi tự kiểm: có sự cố thì ghi mã lỗi vào báo cáo thay vì biến mất không dấu vết. */
+static FILE *g_report;
+
+static LONG WINAPI on_crash(EXCEPTION_POINTERS *e)
+{
+    if (g_report) {
+        fprintf(g_report, "CRASH code=0x%08lx addr=%p\n", (unsigned long)e->ExceptionRecord->ExceptionCode,
+                e->ExceptionRecord->ExceptionAddress);
+        fclose(g_report);
+        g_report = NULL;
+    }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 static int is_local(const wchar_t *t)
 {
     return !wcsncmp(t, L"127.0.0.1", 9) || !wcsncmp(t, L"localhost", 9);
@@ -1305,6 +1317,16 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show)
         else if (!wcscmp(argv[i], L"--quit-after") && i + 1 < argc) g_quit_after = _wtoi(argv[++i]);
     }
     if (g_autorun && (!connect_to || !is_local(connect_to))) g_autorun = 0;   /* không bao giờ tự chạy máy thật */
+    if (selftest_dir) {
+        wchar_t rp[MAX_PATH];
+        CreateDirectoryW(selftest_dir, NULL);
+        swprintf(rp, MAX_PATH, L"%ls\\selftest.txt", selftest_dir);
+        g_report = _wfopen(rp, L"wb");
+        if (!g_report) return 2;
+        SetUnhandledExceptionFilter(on_crash);
+        fprintf(g_report, "start\n");
+        fflush(g_report);
+    }
     if (connect_to || g_logfile[0]) g_selftest = 1;
 
     if (!g_selftest) {
@@ -1339,11 +1361,17 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show)
     HWND h = CreateWindowExW(WS_EX_CONTROLPARENT, L"PipeCutMain", APP_NAME L" " APP_VER L" - bản thử C/Win32 thuần",
                              WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT, S(1360), S(860),
                              NULL, NULL, inst, NULL);
-    if (!h) return 1;
+    if (!h) {
+        if (g_report) { fprintf(g_report, "CreateWindowEx failed, error %lu\n", GetLastError()); fclose(g_report); }
+        return 3;
+    }
     if (selftest_dir) {
-        int rc = selftest(selftest_dir);
+        fprintf(g_report, "window ok dpi=%d\n", g_dpi);
+        int rc = selftest(g_report, selftest_dir);
         DestroyWindow(h);
         LocalFree(argv);
+        fclose(g_report);
+        g_report = NULL;
         return rc;
     }
     ShowWindow(h, g_selftest ? SW_SHOWNORMAL : show);

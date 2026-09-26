@@ -1,5 +1,43 @@
 # Nhật ký thay đổi
 
+## v1.14.0 — 2026-09-26
+
+### Khung 3D dễ nhìn
+
+Khung mô phỏng cũ khó nhìn vì bốn lẽ, sửa đúng bốn lẽ đó:
+
+| Trước | Giờ |
+|---|---|
+| Khung ôm cả cây ống 1 m, vùng đang cắt chỉ còn vài chục điểm ảnh | Mặc định **nhìn cận vùng cắt** quanh mỏ (khung đứng yên vì ống trượt qua dưới mỏ); nút *Xem toàn cảnh* hoặc nháy đúp để đổi |
+| Thân ống tô một màu phẳng, không thấy tròn hay vuông | **Đổ bóng theo ánh sáng** (đèn gắn theo góc nhìn): ống tròn thấy tròn, ống hộp thấy mặt phẳng và góc bo chuyển sắc; **miệng ống thấy thành ống** và lòng ống tối |
+| Khung máy là mấy nét mảnh cắt ngang qua ống, mỏ cắt là một vạch | Cột và cần mang mỏ là **khối đặc** màu than chì, đặt một bên như máy cắt ống thật nên không che vùng cắt (cột nằm trước hay sau ống thì vẽ đúng thứ tự che khuất); **mỏ cắt thân kim loại, béc đồng**, **hồ quang phát sáng** khi cắt; sàn là lưới mờ |
+| Chỉ thấy phần đã cắt | **Đường sắp cắt nét đứt**, đường đã cắt nét đậm có viền tối; mỏ tắt thì có chữ **"hở … mm"** tới mặt phôi |
+
+Thêm: bảng số toạ độ **chữ sáng trên nền tối** (trước đây chữ tối trên nền xanh
+đậm, gần như không đọc được), ba trục X/Y/Z ở góc để biết đang nhìn từ phía nào,
+**phóng to quanh con trỏ chuột** (trước đây phóng quanh góc trên-trái nên hình
+trôi đi). Ảnh xuất SVG dùng đúng bộ dựng cảnh này; ảnh minh hoạ trong tài liệu đã
+vẽ lại.
+
+Vẽ vẫn bằng Canvas của Tkinter - không thêm thư viện, chạy được trong bản
+`.exe`. Đo được 20-22 ms/khung hình (khoảng 45-50 khung/giây, trước là 10 ms)
+nên chạy mô phỏng vẫn mượt.
+
+### Có cần viết lại bằng ngôn ngữ khác không
+
+Đã đo trước khi quyết: nạp phần mềm 0,1 s, dựng cửa sổ 0,2-0,5 s, sinh G-code
+kèm mô phỏng 0,1-0,5 s, vẽ 3D chưa tới 25 ms/khung. Không có chỗ nào chậm tới mức
+người dùng cảm thấy, còn bản `PipeCutStudio.exe` đã chạy không cần cài Python.
+Nên giữ nguyên Python và 315 bài kiểm thử đã soát từng phép tính.
+
+### Bộ cài
+
+* Lối tắt không còn đặt thư mục làm việc là Documents của tài khoản quản trị đã
+  chạy bộ cài (cài cho mọi người dùng thì trỏ nhầm người) - phần mềm tự tính
+  Documents của người đang dùng lúc chạy.
+
+9 bài kiểm thử mới cho khung 3D, tổng 315.
+
 ## v1.13.0 — 2026-09-26
 
 ### Bộ cài cho Windows

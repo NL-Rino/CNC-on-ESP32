@@ -55,14 +55,17 @@ class TestContrast(unittest.TestCase):
 
     TEXT_PAIRS = [("fg", "bg"), ("fg", "surface"), ("fg", "field"),
                   ("fg_dim", "bg"), ("fg_faint", "bg"),
-                  ("console_fg", "console_bg")]
+                  ("console_fg", "console_bg"),
+                  # số toạ độ in đè lên khung nhìn 3D (nền xanh ở cả hai chế độ)
+                  ("hud_fg", "hud_bg")]
     MARK_PAIRS = [("accent", "bg"), ("accent_hover", "bg"),
                   ("ok", "ok_soft"), ("warn", "warn_soft"),
                   ("danger", "danger_soft"),
                   ("cut", "view_flat"), ("mark", "view_flat"),
                   ("lead", "view_flat"), ("rapid", "view_flat"),
                   ("console_err", "console_bg"), ("console_ok", "console_bg"),
-                  ("console_info", "console_bg"), ("console_tx", "console_bg")]
+                  ("console_info", "console_bg"), ("console_tx", "console_bg"),
+                  ("axis_x", "hud_bg"), ("axis_y", "hud_bg"), ("axis_z", "hud_bg")]
 
     def test_chu_du_tuong_phan(self):
         for name, pal in palette.THEMES.items():
@@ -95,6 +98,16 @@ class TestContrast(unittest.TestCase):
                            contrast(pal.metal_edge, background))
                 self.assertGreaterEqual(
                     best, 3.0, f"{name}: phôi chìm vào nền {background} ({best:.2f}:1)")
+
+
+    def test_khung_may_tach_khoi_nen_va_phoi(self):
+        """Khung máy sơn than chì phải tách khỏi nền xanh và khỏi thân phôi sáng."""
+        for name, pal in palette.THEMES.items():
+            for background in (pal.view_top, pal.view_bottom):
+                r = max(contrast(pal.machine_body, background),
+                        contrast(pal.machine_edge, background))
+                self.assertGreaterEqual(r, 1.8, f"{name}: khung máy chìm vào nền {background}")
+            self.assertGreaterEqual(contrast(pal.machine_body, pal.metal_fill), 3.0, name)
 
 
 class TestThemeSwitching(unittest.TestCase):

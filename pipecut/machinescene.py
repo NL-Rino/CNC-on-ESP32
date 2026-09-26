@@ -36,34 +36,50 @@ from . import palette as _pal
 COLOR_PIPE_FILL = COLOR_PIPE_EDGE = COLOR_PIPE_LINE = COLOR_SEAM = ""
 COLOR_CHUCK = COLOR_CHUCK_FILL = COLOR_TRACE = COLOR_TORCH = ""
 COLOR_TORCH_HOT = COLOR_FRAME = ""
+COLOR_MACHINE = COLOR_MACHINE_EDGE = COLOR_NOZZLE = COLOR_ARC_CORE = ""
+COLOR_SPECULAR = COLOR_INSIDE = COLOR_GROUND = COLOR_GHOST = COLOR_HALO = ""
+COLOR_GLOW = COLOR_GAP = COLOR_HUD_BG = ""
 
 
 def _sync_colors(p=None) -> None:
     """Dựng màu cảnh máy từ bảng màu.
 
-    Thân ống, mâm cặp và khung máy đều là sắc độ của một màu trung tính duy
-    nhất, pha dần về phía nền - nhờ vậy chuyển sang chế độ tối là cả cảnh tự
-    tối theo mà vẫn giữ đúng thứ tự đậm nhạt giữa các bộ phận.
+    Khung nhìn 3D nền xanh lam ở cả chế độ sáng lẫn tối, nên phôi và máy giữ
+    màu kim loại ở cả hai - y như FreeCAD, vật thể không đổi màu theo giao
+    diện.  Nếu để chúng chạy theo màu nền thì sang chế độ tối thân ống hoá
+    đen thui, nhìn không ra hình khối nữa.
     """
     global COLOR_PIPE_FILL, COLOR_PIPE_EDGE, COLOR_PIPE_LINE, COLOR_SEAM
     global COLOR_CHUCK, COLOR_CHUCK_FILL, COLOR_TRACE, COLOR_TORCH
     global COLOR_TORCH_HOT, COLOR_FRAME
+    global COLOR_MACHINE, COLOR_MACHINE_EDGE, COLOR_NOZZLE, COLOR_ARC_CORE
+    global COLOR_SPECULAR, COLOR_INSIDE, COLOR_GROUND, COLOR_GHOST, COLOR_HALO
+    global COLOR_GLOW, COLOR_GAP, COLOR_HUD_BG
     p = p or _pal.current()
-    # Khung nhìn 3D nền xanh lam ở cả chế độ sáng lẫn tối, nên phôi và máy giữ
-    # màu kim loại ở cả hai - y như FreeCAD, vật thể không đổi màu theo giao
-    # diện.  Nếu để chúng chạy theo màu nền thì sang chế độ tối thân ống hoá
-    # đen thui, nhìn không ra hình khối nữa.
     metal = p.metal_edge
     COLOR_PIPE_FILL = p.metal_fill
     COLOR_PIPE_EDGE = metal
-    COLOR_PIPE_LINE = p.mix(metal, p.metal_fill, 0.55)
-    COLOR_SEAM = p.mix(metal, p.accent, 0.45)
-    COLOR_CHUCK = p.mix(metal, p.metal_fill, 0.15)
-    COLOR_CHUCK_FILL = p.mix(metal, p.metal_fill, 0.55)
+    COLOR_PIPE_LINE = p.mix(metal, p.metal_fill, 0.62)
+    COLOR_SEAM = p.accent
+    COLOR_CHUCK = p.machine_edge
+    COLOR_CHUCK_FILL = p.machine_body
     COLOR_TRACE = p.cut
     COLOR_TORCH = p.tool
     COLOR_TORCH_HOT = p.torch_on
-    COLOR_FRAME = p.mix(metal, p.view_bottom, 0.45)
+    COLOR_FRAME = p.machine_edge
+    COLOR_MACHINE = p.machine_body
+    COLOR_MACHINE_EDGE = p.machine_edge
+    COLOR_NOZZLE = p.nozzle
+    COLOR_ARC_CORE = p.arc_core
+    COLOR_SPECULAR = p.specular
+    COLOR_INSIDE = p.mix(metal, p.hud_bg, 0.35)          # lòng ống, khuất sáng
+    COLOR_GROUND = p.mix(p.view_top, p.view_bottom, 0.5)
+    COLOR_GROUND = p.mix(COLOR_GROUND, p.hud_fg, 0.22)     # lưới sàn: nhạt, không rối mắt
+    COLOR_GHOST = p.mix(p.cut, p.metal_edge, 0.2)          # đường sắp cắt (nét đứt)
+    COLOR_HALO = p.mix(p.cut, p.hud_bg, 0.6)               # viền tối cho vết cắt nổi lên
+    COLOR_GLOW = p.mix(p.torch_on, p.view_top, 0.45)
+    COLOR_GAP = p.mix(p.hud_fg, p.view_top, 0.25)
+    COLOR_HUD_BG = p.hud_bg
 
 
 _sync_colors()
@@ -74,18 +90,26 @@ _pal.on_change(_sync_colors)
 class Prim:
     """Một hình nguyên thuỷ trong hệ toạ độ camera (chưa nhân tỉ lệ màn hình)."""
 
-    kind: str                       # poly | fill | dot
+    kind: str                       # poly | fill | dot | text
     points: List[Vec2] = field(default_factory=list)
     color: str = "#000000"
     width: float = 1.0
     fill: Optional[str] = None
     radius: float = 0.0             # cho kind="dot", tính bằng điểm ảnh
+    dash: Tuple[int, ...] = ()      # nét đứt (điểm ảnh), rỗng = nét liền
+    text: str = ""                  # cho kind="text"
 
 
 class Camera:
     """Phép chiếu trục đo, xoay được quanh phôi."""
 
-    def __init__(self, azimuth: float = 38.0, elevation: float = 24.0):
+    # Mặc định nhìn từ phía đầu tự do, hơi chếch trên: thấy miệng ống (biết ngay
+    # là ống chứ không phải thanh đặc), thấy mặt trên nơi đang cắt, và cột máy
+    # nằm phía sau ống nên không che vùng cắt.
+    DEFAULT_AZIMUTH = -38.0
+    DEFAULT_ELEVATION = 28.0
+
+    def __init__(self, azimuth: float = DEFAULT_AZIMUTH, elevation: float = DEFAULT_ELEVATION):
         self.azimuth = azimuth
         self.elevation = elevation
         self._update()
@@ -114,6 +138,58 @@ class Camera:
 
     def faces_viewer(self, normal: Vec3) -> bool:
         return sum(a * b for a, b in zip(normal, self.dir)) > 0.0
+
+    def depth(self, p: Vec3) -> float:
+        """Càng lớn càng gần người xem (hướng nhìn ``dir`` chỉ về phía người xem)."""
+        return sum(a * b for a, b in zip(p, self.dir))
+
+
+# ----------------------------------------------------------------------
+# Ánh sáng: một đèn chiếu từ trên - trái - phía người xem
+# ----------------------------------------------------------------------
+def _rgb(c: str) -> Tuple[int, int, int]:
+    c = c.lstrip("#")
+    return (int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16))
+
+
+def _hex(r: float, g: float, b: float) -> str:
+    return "#%02x%02x%02x" % tuple(max(0, min(255, int(round(v)))) for v in (r, g, b))
+
+
+def _unit(v: Vec3) -> Vec3:
+    n = math.sqrt(sum(a * a for a in v)) or 1.0
+    return (v[0] / n, v[1] / n, v[2] / n)
+
+
+class Light:
+    """Chiếu sáng kiểu Blinn-Phong đơn giản, gắn theo camera.
+
+    Đèn đi theo góc nhìn nên xoay tới đâu mặt hướng về người xem cũng sáng,
+    mặt quay đi thì tối dần - đủ để mắt đọc ra hình khối tròn hay vuông.
+    """
+
+    def __init__(self, cam: Camera):
+        d, r, u = cam.dir, cam.right, cam.up
+        self.L = _unit(tuple(0.55 * d[i] + 0.75 * u[i] - 0.35 * r[i] for i in range(3)))
+        self.H = _unit(tuple(self.L[i] + d[i] for i in range(3)))
+        self._cache: Dict[Tuple[str, int, int, int], str] = {}
+
+    def shade(self, base: str, n: Vec3, ambient: float = 0.42, diffuse: float = 0.6,
+              spec: float = 0.5, shininess: float = 26.0) -> str:
+        key = (base, int(n[0] * 64), int(n[1] * 64), int(n[2] * 64))
+        hit = self._cache.get(key)
+        if hit is not None:
+            return hit
+        ndl = max(0.0, sum(a * b for a, b in zip(n, self.L)))
+        ndh = max(0.0, sum(a * b for a, b in zip(n, self.H)))
+        k = ambient + diffuse * ndl
+        s = spec * ndh ** shininess
+        br, bg, bb = _rgb(base)
+        wr, wg, wb = _rgb(COLOR_SPECULAR or "#000000")
+        out = _hex(br * k + (wr - br * k) * s, bg * k + (wg - bg * k) * s,
+                   bb * k + (wb - bb * k) * s)
+        self._cache[key] = out
+        return out
 
 
 def convex_hull(points: Sequence[Vec2]) -> List[Vec2]:
@@ -208,43 +284,120 @@ def build_scene(
     show_frame: bool = True,
     show_trace: bool = True,
     trace_limit: int = 900,
+    plan: Sequence[TracePoint] = (),
 ) -> List[Prim]:
-    """Dựng toàn bộ cảnh máy, trả về danh sách hình theo đúng thứ tự vẽ."""
+    """Dựng toàn bộ cảnh máy, trả về danh sách hình theo đúng thứ tự vẽ.
+
+    ``trace`` là phần đã cắt tới thời điểm này (vẽ đậm), ``plan`` là toàn bộ
+    đường sẽ cắt của chương trình (vẽ mờ nét đứt) - nhìn là biết máy sắp đi đâu.
+
+    Thứ tự vẽ theo chiều sâu (vật xa vẽ trước, vật gần vẽ đè lên): sàn -> cột
+    máy nếu nằm sau ống -> ống và mâm cặp (cái nào xa hơn vẽ trước) -> cột máy
+    nếu nằm trước ống -> cần mang mỏ -> mỏ cắt và hồ quang.
+    """
     pose = MachinePose(profile, state)
     P = cam.project
+    light = Light(cam)
     out: List[Prim] = []
 
+    column: List[Prim] = []
+    column_front = False
     if show_frame:
-        out.extend(_frame(pose, P))
-    out.extend(_pipe(pose, cam, P))
-    out.extend(_chuck(pose, cam, P))
-    if show_trace and trace:
-        out.extend(_trace(pose, cam, P, trace, trace_limit))
-    out.extend(_torch(pose, P))
+        out.extend(_ground(pose, P))
+        column, column_front = _column(pose, cam, light, P)
+        if not column_front:
+            out.extend(column)
+
+    tube = _pipe(pose, cam, light, P)
+    if show_trace:
+        if plan:
+            tube.extend(_trace(pose, cam, P, plan, trace_limit, ghost=True))
+        if trace:
+            tube.extend(_trace(pose, cam, P, trace, trace_limit))
+    chuck = _chuck(pose, cam, light, P)
+    # Người xem ở phía mâm cặp (dir.y > 0) thì mâm cặp gần hơn: vẽ sau ống.
+    if cam.dir[1] > 0:
+        out.extend(tube + chuck)
+    else:
+        out.extend(chuck + tube)
+
+    if show_frame and column_front:
+        out.extend(column)
+    if show_frame:
+        out.extend(_arm(pose, cam, light, P))
+    out.extend(_torch(pose, cam, light, P))
     return out
 
 
-def _frame(pose: MachinePose, P) -> List[Prim]:
-    """Bệ máy và cột mang mỏ cắt - làm mốc để thấy ống đang trượt."""
-    r, length = pose.radius, pose.length
-    base = -r * 1.9
-    span = max(length, 200.0)
-    y0 = min(pose.y_head, -span * 0.1)
-    y1 = max(pose.y_tail, span * 1.05)
+def _box(cam: Camera, light: Light, P, x0: float, x1: float, y0: float, y1: float,
+         z0: float, z1: float, color: str, edge: str) -> List[Prim]:
+    """Khối hộp đặc: chỉ vẽ các mặt hướng về người xem (khối lồi, không chồng nhau)."""
+    c = [(x, y, z) for x in (x0, x1) for y in (y0, y1) for z in (z0, z1)]
+    faces = [
+        ((-1, 0, 0), [0, 1, 3, 2]), ((1, 0, 0), [4, 6, 7, 5]),
+        ((0, -1, 0), [0, 4, 5, 1]), ((0, 1, 0), [2, 3, 7, 6]),
+        ((0, 0, -1), [0, 2, 6, 4]), ((0, 0, 1), [1, 5, 7, 3]),
+    ]
     out: List[Prim] = []
-    for side in (-1.0, 1.0):
-        out.append(Prim("poly", [P((side * r * 1.7, y0, base)),
-                                 P((side * r * 1.7, y1, base))], COLOR_FRAME, 2.0))
-    for k in range(7):
-        y = y0 + (y1 - y0) * k / 6
-        out.append(Prim("poly", [P((-r * 1.7, y, base)), P((r * 1.7, y, base))],
-                        COLOR_FRAME, 1.0))
-    top = r * 3.0
-    for x in (-r * 1.7, r * 1.7):
-        out.append(Prim("poly", [P((x, 0.0, base)), P((x, 0.0, top))], COLOR_FRAME, 2.0))
-    out.append(Prim("poly", [P((-r * 1.7, 0.0, top)), P((r * 1.7, 0.0, top))],
-                    COLOR_FRAME, 3.0))
+    for n, idx in faces:
+        if cam.faces_viewer(n):
+            col = light.shade(color, n, ambient=0.5, diffuse=0.5, spec=0.25)
+            out.append(Prim("fill", [P(c[k]) for k in idx], edge, 1.0, fill=col))
     return out
+
+
+def _ground(pose: MachinePose, P) -> List[Prim]:
+    """Lưới sàn mờ phía dưới và hai ray bệ máy - cho mắt cảm giác chiều sâu."""
+    r = pose.radius
+    base = -r * 1.9
+    y0 = min(pose.y_head, -r * 8.0) - r * 2.0
+    y1 = max(pose.y_tail, r * 8.0) + r * 2.0
+    step = _nice_step((y1 - y0) / 24.0)
+    out: List[Prim] = []
+    half = r * 3.2
+    k0, k1 = int(math.floor(y0 / step)), int(math.ceil(y1 / step))
+    for k in range(k0, k1 + 1):
+        y = k * step
+        out.append(Prim("poly", [P((-half, y, base)), P((half, y, base))], COLOR_GROUND, 1.0))
+    xs = int(half // step)
+    for k in range(-xs, xs + 1):
+        x = k * step
+        out.append(Prim("poly", [P((x, y0, base)), P((x, y1, base))], COLOR_GROUND, 1.0))
+    for side in (-1.0, 1.0):                                       # hai ray bệ máy
+        out.append(Prim("poly", [P((side * r * 1.7, y0, base)), P((side * r * 1.7, y1, base))],
+                        COLOR_MACHINE_EDGE, 2.4))
+    return out
+
+
+def _nice_step(raw: float) -> float:
+    """Bước lưới tròn số: 1, 2, 5 x 10^k mm."""
+    raw = max(raw, 1e-6)
+    e = 10 ** math.floor(math.log10(raw))
+    for m in (1, 2, 5, 10):
+        if m * e >= raw:
+            return m * e
+    return 10 * e
+
+
+def _column(pose: MachinePose, cam: Camera, light: Light, P) -> Tuple[List[Prim], bool]:
+    """Cột máy một bên ống (như máy cắt ống thật), mang cần với ra trên ống."""
+    r = pose.radius
+    base = -r * 1.9
+    top = pose.top_height + r * 2.4
+    w = r * 0.28
+    x = -r * 1.9
+    prims = _box(cam, light, P, x - w, x + w, -w, w, base, top, COLOR_MACHINE, COLOR_MACHINE_EDGE)
+    front = cam.depth((x, 0.0, 0.0)) > cam.depth((0.0, 0.0, 0.0)) + r * 0.2
+    return prims, front
+
+
+def _arm(pose: MachinePose, cam: Camera, light: Light, P) -> List[Prim]:
+    """Cần ngang mang cụm mỏ cắt - trục X chạy dọc cần này."""
+    r = pose.radius
+    z = pose.top_height + r * 2.4
+    h = r * 0.18
+    return _box(cam, light, P, -r * 2.2, r * 1.6, -h * 1.4, h * 1.4, z - h, z + h,
+                COLOR_MACHINE, COLOR_MACHINE_EDGE)
 
 
 def _ring(pose: MachinePose, radius_scale: float, y: float, step: int = 6) -> List[Vec3]:
@@ -260,90 +413,129 @@ def _section_ring(pose: MachinePose, y: float, steps: int = 72) -> List[Vec3]:
     return [pose.surface(per * i / steps, y) for i in range(steps)]
 
 
-def _pipe(pose: MachinePose, cam: Camera, P) -> List[Prim]:
-    out: List[Prim] = []
-    r = pose.radius
-    # 1) thân phôi tô đặc -> che hết những gì nằm phía sau
-    hull = convex_hull([P(p) for p in _section_ring(pose, pose.y_head)
-                        + _section_ring(pose, pose.y_tail)])
-    if len(hull) >= 3:
-        out.append(Prim("fill", hull, COLOR_PIPE_EDGE, 1.4, fill=COLOR_PIPE_FILL))
-    # 2) hai vành đầu phôi, chỉ nửa hướng về người xem
+def _samples(pose: MachinePose, steps: int) -> List[float]:
+    """Các vị trí cung để chia dải: đều nhau, cộng thêm đúng các điểm gãy của
+    ống hộp để cạnh phẳng/cung góc không bị dải nào vắt ngang qua."""
     per = pose.section.perimeter
-    steps = 96
-    for y in (pose.y_head, pose.y_tail):
-        out.extend(_visible_runs(
-            [(per * i / steps, P(pose.surface(per * i / steps, y)))
-             for i in range(steps + 1)],
-            cam, pose, COLOR_PIPE_EDGE, 1.2))
-    # 3) đường sinh - quay theo trục A nên nhìn thấy phôi đang xoay.
-    #    Với ống hộp, thêm hẳn đường sinh ở các cạnh để thấy rõ hình hộp.
-    marks = [per * k / 12 for k in range(12)]
-    edges = [b for b in pose.section.breakpoints() if b < per - 1e-9]
-    for v in sorted(set(marks + edges)):
+    vs = {round(per * i / steps, 9) for i in range(steps)}
+    vs.update(round(b, 9) for b in pose.section.breakpoints() if 0.0 <= b < per - 1e-9)
+    return sorted(vs)
+
+
+def _pipe(pose: MachinePose, cam: Camera, light: Light, P) -> List[Prim]:
+    """Thân phôi tô sáng tối theo pháp tuyến, miệng ống thấy rõ thành ống."""
+    out: List[Prim] = []
+    per = pose.section.perimeter
+    y0, y1 = pose.y_head, pose.y_tail
+    vs = _samples(pose, 96)
+    # 1) các dải dọc thân ống hướng về người xem.  Khối lồi nên các dải nhìn
+    #    thấy không bao giờ đè lên nhau - khỏi sắp theo chiều sâu.
+    for k, va in enumerate(vs):
+        vb = vs[k + 1] if k + 1 < len(vs) else vs[0] + per
+        n = pose.normal((va + vb) / 2.0)
+        if not cam.faces_viewer(n):
+            continue
+        col = light.shade(COLOR_PIPE_FILL, n, ambient=0.34, diffuse=0.7)
+        quad = [P(pose.surface(va, y0)), P(pose.surface(vb, y0)),
+                P(pose.surface(vb, y1)), P(pose.surface(va, y1))]
+        out.append(Prim("fill", quad, col, 1.0, fill=col))
+    # 2) đường bao ngoài cho sắc nét
+    hull = convex_hull([P(p) for p in _section_ring(pose, y0) + _section_ring(pose, y1)])
+    if len(hull) >= 3:
+        out.append(Prim("poly", hull + [hull[0]], COLOR_PIPE_EDGE, 1.2))
+    # 3) miệng ống phía đầu tự do: vành khăn + lòng ống tối
+    if cam.faces_viewer((0.0, -1.0, 0.0)):
+        ring = _section_ring(pose, y0, 96)
+        cap = light.shade(COLOR_PIPE_FILL, (0.0, -1.0, 0.0), ambient=0.5)
+        out.append(Prim("fill", [P(q) for q in ring], COLOR_PIPE_EDGE, 1.2, fill=cap))
+        inner = _inner_ring(pose, y0, 96)
+        if inner:
+            out.append(Prim("fill", [P(q) for q in inner], COLOR_PIPE_EDGE, 1.0,
+                            fill=COLOR_INSIDE))
+    # 4) đường sinh mảnh cho thấy ống đang xoay, vạch mốc 0 độ đậm màu nhấn
+    for m in range(8):
+        v = per * m / 8
         if not cam.faces_viewer(pose.normal(v)):
             continue
-        is_edge = any(abs(v - b) < 1e-6 for b in edges)
-        if abs(v) < 1e-9:
-            color, width = COLOR_SEAM, 2.2          # vạch mốc 0 độ
-        elif is_edge:
-            color, width = COLOR_PIPE_EDGE, 1.4     # cạnh ống hộp
-        else:
-            color, width = COLOR_PIPE_LINE, 1.0
-        out.append(Prim("poly", [P(pose.surface(v, pose.y_head)),
-                                 P(pose.surface(v, pose.y_tail))], color, width))
+        seam = m == 0
+        out.append(Prim("poly", [P(pose.surface(v, y0)), P(pose.surface(v, y1))],
+                        COLOR_SEAM if seam else COLOR_PIPE_LINE, 2.2 if seam else 1.0))
     return out
 
 
-def _visible_runs(samples, cam: Camera, pose: MachinePose, color: str,
-                  width: float) -> List[Prim]:
-    """Gom các điểm liền nhau còn nhìn thấy thành từng nét."""
+def _inner_ring(pose: MachinePose, y: float, steps: int) -> List[Vec3]:
+    """Mép trong của thành ống ở mặt đầu: tiết diện co vào đúng chiều dày thành."""
+    t = max(0.0, float(pose.profile.pipe.wall_thickness))
+    per = pose.section.perimeter
+    pts = [pose.section.point_at(per * i / steps) for i in range(steps)]
+    a = max(abs(p[0]) for p in pts) or 1.0
+    b = max(abs(p[1]) for p in pts) or 1.0
+    if t <= 0 or t >= min(a, b):
+        return []
+    fx, fy = (a - t) / a, (b - t) / b
+    out: List[Vec3] = []
+    for cx, cy in pts:
+        rx, rz = pose._rotate(cx * fx, cy * fy)
+        out.append((rx, y, rz))
+    return out
+
+
+def _cylinder_y(cam: Camera, light: Light, P, radius: float, y0: float, y1: float,
+                color: str, edge: str, steps: int = 48) -> List[Prim]:
+    """Trụ tròn nằm dọc trục ống (mâm cặp), tô sáng tối và mặt trước."""
     out: List[Prim] = []
-    run: List[Vec2] = []
-    for v, pt in samples:
-        if cam.faces_viewer(pose.normal(v)):
-            run.append(pt)
-        elif len(run) >= 2:
-            out.append(Prim("poly", run, color, width))
-            run = []
-        else:
-            run = []
-    if len(run) >= 2:
-        out.append(Prim("poly", run, color, width))
+    for k in range(steps):
+        a0, a1 = 2 * math.pi * k / steps, 2 * math.pi * (k + 1) / steps
+        am = (a0 + a1) / 2
+        n = (math.sin(am), 0.0, math.cos(am))
+        if not cam.faces_viewer(n):
+            continue
+        col = light.shade(color, n, ambient=0.5, diffuse=0.55, spec=0.35)
+        q = [P((radius * math.sin(a0), y0, radius * math.cos(a0))),
+             P((radius * math.sin(a1), y0, radius * math.cos(a1))),
+             P((radius * math.sin(a1), y1, radius * math.cos(a1))),
+             P((radius * math.sin(a0), y1, radius * math.cos(a0)))]
+        out.append(Prim("fill", q, col, 1.0, fill=col))
+    for yy, n in ((y0, (0.0, -1.0, 0.0)), (y1, (0.0, 1.0, 0.0))):
+        if cam.faces_viewer(n):
+            ring = [P((radius * math.sin(2 * math.pi * k / steps), yy,
+                       radius * math.cos(2 * math.pi * k / steps))) for k in range(steps)]
+            out.append(Prim("fill", ring, edge, 1.2,
+                            fill=light.shade(color, n, ambient=0.55, diffuse=0.5)))
     return out
 
 
-def _chuck(pose: MachinePose, cam: Camera, P) -> List[Prim]:
+def _chuck(pose: MachinePose, cam: Camera, light: Light, P) -> List[Prim]:
     """Mâm cặp kẹp đuôi ống - tịnh tiến và quay cùng ống."""
-    out: List[Prim] = []
     r = pose.radius
     y0, y1 = pose.y_tail, pose.y_tail + r * 0.9
-    hull = convex_hull([P(p) for p in _ring(pose, 1.55, y0, 10)
-                        + _ring(pose, 1.55, y1, 10)])
-    if len(hull) >= 3:
-        out.append(Prim("fill", hull, COLOR_CHUCK, 1.4, fill=COLOR_CHUCK_FILL))
+    out = _cylinder_y(cam, light, P, r * 1.55, y0, y1, COLOR_MACHINE, COLOR_MACHINE_EDGE)
     for k in range(0, 360, 120):        # ba vấu kẹp cho thấy mâm đang quay
         a = math.radians(k - pose.rotary)
         n = (math.sin(a), 0.0, math.cos(a))
-        if not cam.faces_viewer(n):
+        if not cam.faces_viewer(n) and not cam.faces_viewer((0.0, -1.0, 0.0)):
             continue
-        rc = pose.radius
-        out.append(Prim("poly", [P((rc * 1.55 * n[0], y0, rc * 1.55 * n[2])),
-                                 P((rc * 0.98 * n[0], y0, rc * 0.98 * n[2]))],
-                        COLOR_CHUCK, 3.0))
+        out.append(Prim("poly", [P((r * 1.5 * n[0], y0 - 0.5, r * 1.5 * n[2])),
+                                 P((r * 1.0 * n[0], y0 - 0.5, r * 1.0 * n[2]))],
+                        COLOR_MACHINE_EDGE, 4.0))
     return out
 
 
 def _trace(pose: MachinePose, cam: Camera, P, trace: Sequence[TracePoint],
-           limit: int) -> List[Prim]:
-    """Vết cắt đã hình thành - chỉ vẽ phần đang hướng về phía người xem."""
+           limit: int, ghost: bool = False) -> List[Prim]:
+    """Vết cắt trên phôi - chỉ vẽ phần đang hướng về phía người xem.
+
+    Đã cắt: lõi màu cắt trên nền viền tối, nổi hẳn lên mặt kim loại sáng.
+    Sắp cắt (``ghost``): nét đứt mờ.
+    """
     out: List[Prim] = []
     stride = max(1, len(trace) // max(limit, 1))
+    runs: List[List[Vec2]] = []
     run: List[Vec2] = []
 
     def flush():
         if len(run) >= 2:
-            out.append(Prim("poly", list(run), COLOR_TRACE, 2.4))
+            runs.append(list(run))
         run.clear()
 
     prev_ok = False
@@ -361,44 +553,91 @@ def _trace(pose: MachinePose, cam: Camera, P, trace: Sequence[TracePoint],
             flush()
             prev_ok = False
     flush()
+    if ghost:
+        return [Prim("poly", r_, COLOR_GHOST, 1.6, dash=(5, 4)) for r_ in runs]
+    out.extend(Prim("poly", r_, COLOR_HALO, 5.0) for r_ in runs)
+    out.extend(Prim("poly", r_, COLOR_TRACE, 2.4) for r_ in runs)
     return out
 
 
-def _torch(pose: MachinePose, P) -> List[Prim]:
-    """Mỏ cắt: chạy ngang theo X, lên xuống theo Z, đứng yên theo phương dọc."""
+def _torch(pose: MachinePose, cam: Camera, light: Light, P) -> List[Prim]:
+    """Mỏ cắt: thân trụ kim loại, béc đồng hình côn, hồ quang khi đang cắt.
+
+    Chạy ngang theo X, lên xuống theo Z, đứng yên theo phương dọc ống.
+    """
     out: List[Prim] = []
     r = pose.radius
     x = pose.cross
-    tip = pose.top_height + pose.lift   # Z0 = mũi cắt chạm bề mặt ở vị trí mốc
-    nozzle = tip + r * 0.32
-    body_top = tip + r * 1.5
-    out.append(Prim("poly", [P((-r * 1.6, 0.0, body_top)), P((r * 1.6, 0.0, body_top))],
-                    COLOR_FRAME, 4.0))
-    out.append(Prim("poly", [P((x, 0.0, nozzle)), P((x, 0.0, body_top))], COLOR_TORCH, 7.0))
-    w = r * 0.22
-    out.append(Prim("fill", [P((x - w, 0.0, nozzle)), P((x + w, 0.0, nozzle)),
-                             P((x, 0.0, tip))], COLOR_TORCH, 1.0, fill=COLOR_TORCH))
+    tip = pose.top_height + pose.lift       # Z0 = mũi cắt chạm bề mặt ở vị trí mốc
+    rt = max(4.0, min(16.0, r * 0.26))      # bán kính thân mỏ
+    nozzle = tip + rt * 1.6
+    body_top = pose.top_height + r * 2.4
+    d = cam.dir
+    h = _unit((d[0], d[1], 0.0)) if abs(d[0]) + abs(d[1]) > 1e-9 else (1.0, 0.0, 0.0)
+    side = cam.right
+
+    def strips(z0: float, z1: float, r0: float, r1: float, color: str, k: int = 10):
+        for i in range(k):
+            f0 = -math.pi / 2 + math.pi * i / k
+            f1 = -math.pi / 2 + math.pi * (i + 1) / k
+            fm = (f0 + f1) / 2
+            n = tuple(math.cos(fm) * h[j] + math.sin(fm) * side[j] for j in range(3))
+            col = light.shade(color, n, ambient=0.45, diffuse=0.6, spec=0.6, shininess=30)
+
+            def pt(f, rr, z):
+                return P((x + rr * (math.cos(f) * h[0] + math.sin(f) * side[0]),
+                          rr * (math.cos(f) * h[1] + math.sin(f) * side[1]), z))
+            out.append(Prim("fill", [pt(f0, r0, z0), pt(f1, r0, z0),
+                                     pt(f1, r1, z1), pt(f0, r1, z1)], col, 1.0, fill=col))
+
+    strips(nozzle, body_top, rt, rt, COLOR_PIPE_FILL)          # thân mỏ
+    strips(tip, nozzle, rt * 0.32, rt * 0.8, COLOR_NOZZLE)     # béc đồng
+
+    hit = pose.section.surface_height(pose.rotary, x)          # điểm tia thẳng đứng chạm phôi
     if pose.state.torch:
-        # điểm chạm thật của tia cắt ở đúng tư thế hiện tại
-        hit = pose.section.surface_height(pose.rotary, x)
-        out.append(Prim("poly", [P((x, 0.0, tip)), P((x, 0.0, hit))], COLOR_TORCH_HOT, 3.0))
-        out.append(Prim("dot", [P((x, 0.0, hit))], COLOR_TORCH_HOT, 1.0,
-                        fill=COLOR_TORCH_HOT, radius=4.0))
+        a, b = P((x, 0.0, tip)), P((x, 0.0, hit))
+        out.append(Prim("poly", [a, b], COLOR_GLOW, 11.0))
+        out.append(Prim("poly", [a, b], COLOR_TORCH_HOT, 5.0))
+        out.append(Prim("poly", [a, b], COLOR_ARC_CORE, 2.0))
+        out.append(Prim("dot", [b], COLOR_TORCH_HOT, 1.0, fill=COLOR_TORCH_HOT, radius=7.0))
+        out.append(Prim("dot", [b], COLOR_ARC_CORE, 1.0, fill=COLOR_ARC_CORE, radius=3.0))
+    else:
+        gap = tip - hit
+        if 0.05 < gap < r * 4:
+            a, b = P((x, 0.0, tip)), P((x, 0.0, hit))
+            out.append(Prim("poly", [a, b], COLOR_GAP, 1.2, dash=(3, 3)))
+        if 0.5 < gap < r * 4:
+            # chữ nằm cạnh mỏ, trên nền tối riêng - đè lên thân ống sáng vẫn đọc được
+            out.append(Prim("text", [P((x + rt * 1.3 * side[0], rt * 1.3 * side[1],
+                                        (tip + nozzle) / 2))],
+                            COLOR_GAP, 1.0, fill=COLOR_HUD_BG, text=f"hở {gap:.1f} mm"))
     return out
 
 
 # ----------------------------------------------------------------------
 def scene_bounds(profile: MachineProfile, cam: Camera,
                  state: Optional[SimState] = None,
-                 along_range: Optional[Tuple[float, float]] = None
+                 along_range: Optional[Tuple[float, float]] = None,
+                 focus: str = "all",
                  ) -> Tuple[float, float, float, float]:
     """Khung bao của cảnh, dùng để canh tỉ lệ cho vừa khung nhìn.
 
-    Vì phôi **trượt qua lại** trong lúc chạy, khung nhìn phải bao trọn cả hành
-    trình của nó (``along_range`` = khoảng giá trị trục dọc trong chương trình),
-    nếu không hình sẽ nhảy ra ngoài mép mỗi khi ống đi xa.
+    * ``focus="work"`` - **vùng cắt**: một khúc ống quanh mỏ cắt, đủ rộng để
+      thấy trọn một lỗ hay một nhát cắt đứt.  Mỏ cắt đứng yên theo phương dọc
+      (ống trượt qua dưới nó) nên khung này đứng yên suốt chương trình.
+    * ``focus="all"`` - **toàn cảnh**: vì phôi trượt qua lại, khung phải bao
+      trọn cả hành trình (``along_range`` = khoảng giá trị trục dọc), nếu không
+      hình sẽ nhảy ra ngoài mép mỗi khi ống đi xa.
     """
     pose = MachinePose(profile, state or SimState())
+    if focus == "work":
+        r = pose.radius
+        span = max(r * 4.0, 60.0)
+        pts = [cam.project((x, y, z))
+               for x in (-r * 2.1, r * 1.7) for y in (-span, span)
+               for z in (-r * 1.2, pose.top_height + r * 2.6)]
+        return (min(p[0] for p in pts), min(p[1] for p in pts),
+                max(p[0] for p in pts), max(p[1] for p in pts))
     if along_range and profile.layout != "torch_moves":
         lo, hi = min(along_range), max(along_range)
         y0, y1 = -hi, pose.length - lo
@@ -414,8 +653,8 @@ def scene_bounds(profile: MachineProfile, cam: Camera,
             pts.append(cam.project(pose.surface(per * i / 24, y)))
         for x in (-pose.radius * 1.75, pose.radius * 1.75):   # bệ máy
             pts.append(cam.project((x, y, -pose.radius * 1.95)))
-    for x in (-pose.radius * 1.75, pose.radius * 1.75):       # cột mang mỏ cắt
-        pts.append(cam.project((x, 0.0, pose.radius * 3.1)))
+    for x in (-pose.radius * 2.2, pose.radius * 1.75):        # cột và cần mang mỏ cắt
+        pts.append(cam.project((x, 0.0, pose.top_height + pose.radius * 2.6)))
     return (min(p[0] for p in pts), min(p[1] for p in pts),
             max(p[0] for p in pts), max(p[1] for p in pts))
 
@@ -432,3 +671,22 @@ def axis_readout(profile: MachineProfile, state: SimState) -> List[str]:
         unit = "°" if ax.is_angular else " mm"
         rows.append(f"{ax.letter}  {state.axes.get(ax.letter, 0.0):9.2f}{unit}   {text}")
     return rows
+
+
+def axis_triad(profile: MachineProfile, cam: Camera, size: float = 30.0
+               ) -> List[Tuple[float, float, str, str]]:
+    """Ba trục nhỏ ở góc khung nhìn: (dx, dy điểm ảnh, màu, chữ cái trục máy).
+
+    Giúp biết ngay mình đang nhìn từ phía nào sau khi xoay góc nhìn.
+    """
+    p = _pal.current()
+    rows = [((1.0, 0.0, 0.0), p.axis_x, profile.letter(ROLE_CROSS) or "X"),
+            ((0.0, 1.0, 0.0), p.axis_y, profile.letter(ROLE_ALONG) or "Y"),
+            ((0.0, 0.0, 1.0), p.axis_z, profile.letter(ROLE_RADIAL) or "Z")]
+    # trục nào chĩa vào màn hình thì vẽ trước để trục chĩa ra đè lên
+    rows.sort(key=lambda t: cam.depth(t[0]))
+    out = []
+    for e, color, letter in rows:
+        sx, sy = cam.project(e)
+        out.append((sx * size, sy * size, color, letter))
+    return out

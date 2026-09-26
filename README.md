@@ -545,7 +545,10 @@ Trên Windows có thể nháy đúp `chay_gui.py` để mở giao diện.
 
 * **Mô phỏng** dựng lại đúng máy của bạn: đoạn ống dài theo kích thước đã nhập,
   **trượt ra vào** theo trục Y và **quay** theo trục A, mỏ cắt chạy ngang (X) và
-  lên xuống (Z), vết cắt đỏ hiện dần trên mặt ống. Chạy được offline — bấm ▶,
+  lên xuống (Z), vết cắt đỏ hiện dần trên mặt ống. Ống, mâm cặp và mỏ cắt có đổ
+  bóng nên thấy rõ khối tròn/hộp và miệng ống; mặc định nhìn cận **vùng cắt**
+  (nháy đúp để xem toàn cảnh); đường **sắp cắt** hiện nét đứt, lúc mỏ tắt có chữ
+  báo **khoảng hở** tới phôi. Chạy được offline — bấm ▶,
   tua tới lui bằng thanh trượt, đổi tốc độ 0,25× đến 20×, kéo chuột để xoay góc
   nhìn. Khi đã nối máy thật, bật *Bám theo máy thật* thì khung này phản chiếu
   đúng vị trí máy đang báo về.

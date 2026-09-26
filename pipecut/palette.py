@@ -80,6 +80,18 @@ class Palette:
     metal_edge: str      # cạnh phôi trong khung nhìn 3D
     torch_on: str
 
+    # --- khung nhìn 3D: máy, mỏ cắt, bảng số ---
+    machine_body: str    # khung máy, cột, dầm, mâm cặp (sơn than chì)
+    machine_edge: str    # cạnh sáng của khung máy
+    nozzle: str          # béc đồng
+    arc_core: str        # lõi hồ quang, gần trắng
+    specular: str        # vệt sáng phản chiếu trên kim loại
+    hud_bg: str          # nền bảng số góc khung nhìn (nền 3D luôn xanh, cả hai chế độ)
+    hud_fg: str
+    axis_x: str          # ba trục ở góc: X đỏ, Y lục, Z lam như mọi phần mềm CAD
+    axis_y: str
+    axis_z: str
+
     # --- bảng điều khiển dạng dòng lệnh ---
     console_bg: str
     console_fg: str
@@ -144,6 +156,9 @@ LIGHT = Palette(
     tool="#20272e", tool_ring="#ff8c1a",
     pipe_line="#7d8b99", pipe_fill="#eef2f6",
     metal_fill="#eaeff4", metal_edge="#374048", torch_on="#ff7a1a",
+    machine_body="#3b424b", machine_edge="#8a96a3", nozzle="#c47a3a",
+    arc_core="#fff4d8", specular="#ffffff", hud_bg="#142233", hud_fg="#eef4fa",
+    axis_x="#e5534b", axis_y="#3fb950", axis_z="#4c9ef8",
     console_bg="#141a21", console_fg="#c8d2dc",
     console_tx="#7fc8ff", console_rx="#aab6c2", console_err="#ff8a7a",
     console_ok="#7fdc9b", console_info="#f2c66d", highlight="#fff2c2",
@@ -166,6 +181,9 @@ DARK = Palette(
     tool="#f0f4f8", tool_ring="#ffa33d",
     pipe_line="#8f9daa", pipe_fill="#2a3138",
     metal_fill="#c6d0da", metal_edge="#39424b", torch_on="#ff9433",
+    machine_body="#2e343b", machine_edge="#7b8793", nozzle="#c47a3a",
+    arc_core="#fff4d8", specular="#ffffff", hud_bg="#0e1823", hud_fg="#e8eff6",
+    axis_x="#f06a62", axis_y="#56d364", axis_z="#6cb6ff",
     console_bg="#171c21", console_fg="#c4cdd6",
     console_tx="#7fc8ff", console_rx="#9aa6b2", console_err="#ff8a7a",
     console_ok="#7fdc9b", console_info="#f2c66d", highlight="#4a4326",

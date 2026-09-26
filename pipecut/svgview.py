@@ -313,21 +313,25 @@ def render_machine_svg(
     title: str = "",
     width: int = 1000,
     height: int = 560,
-    azimuth: float = 38.0,
-    elevation: float = 24.0,
+    azimuth: Optional[float] = None,
+    elevation: Optional[float] = None,
     show_frame: bool = True,
     along_range=None,
+    focus: str = "work",
+    plan=(),
 ) -> str:
     """Chụp lại khung mô phỏng máy tại một thời điểm thành ảnh SVG.
 
     Dùng đúng bộ dựng cảnh của tab Mô phỏng nên hình ảnh giống hệt những gì
     thấy trên giao diện - tiện để in kèm phiếu công nghệ hoặc gửi cho khách.
     """
-    from .machinescene import Camera, axis_readout, build_scene, scene_bounds
+    from .machinescene import Camera, axis_readout, axis_triad, build_scene, scene_bounds
 
-    cam = Camera(azimuth, elevation)
-    prims = build_scene(profile, state, list(trace), cam, show_frame=show_frame)
-    x0, y0, x1, y1 = scene_bounds(profile, cam, state, along_range)
+    cam = Camera(Camera.DEFAULT_AZIMUTH if azimuth is None else azimuth,
+                 Camera.DEFAULT_ELEVATION if elevation is None else elevation)
+    prims = build_scene(profile, state, list(trace), cam, show_frame=show_frame,
+                        plan=list(plan))
+    x0, y0, x1, y1 = scene_bounds(profile, cam, state, along_range, focus=focus)
     pad = 40.0
     scale = min((width - 2 * pad) / max(x1 - x0, 1e-6),
                 (height - 2 * pad) / max(y1 - y0, 1e-6))
@@ -352,27 +356,57 @@ def render_machine_svg(
         if prim.kind == "fill" and len(pts) >= 3:
             d = " ".join(f"{p[0]:.2f},{p[1]:.2f}" for p in pts)
             out.append(f'<polygon points="{d}" fill="{prim.fill or "none"}" '
-                       f'stroke="{prim.color}" stroke-width="{prim.width}"/>')
+                       f'stroke="{prim.color}" stroke-width="{prim.width}" '
+                       f'stroke-linejoin="round"/>')
         elif prim.kind == "dot" and pts:
             out.append(f'<circle cx="{pts[0][0]:.2f}" cy="{pts[0][1]:.2f}" '
                        f'r="{prim.radius}" fill="{prim.fill or prim.color}"/>')
+        elif prim.kind == "text" and pts:
+            if prim.fill:
+                tw = len(prim.text) * 7.2 + 8
+                out.append(f'<rect x="{pts[0][0] - 4:.1f}" y="{pts[0][1] - 9:.1f}" '
+                           f'width="{tw:.0f}" height="18" rx="3" fill="{prim.fill}"/>')
+            out.append(f'<text x="{pts[0][0]:.1f}" y="{pts[0][1] + 4:.1f}" '
+                       f'font-family="sans-serif" font-size="12" font-weight="bold" '
+                       f'fill="{prim.color}">{_esc(prim.text)}</text>')
         elif len(pts) >= 2:
-            out.append(_poly(pts, prim.color, prim.width))
-    y = 24.0
-    for row in axis_readout(profile, state):
-        out.append(f'<text x="16" y="{y:.0f}" font-family="monospace" font-size="13" '
-                   f'fill="{COLOR_TEXT}" xml:space="preserve">{_esc(row)}</text>')
-        y += 18
-    out.append(f'<text x="16" y="{y + 6:.0f}" font-family="sans-serif" font-size="12" '
-               f'fill="{COLOR_TEXT}">Ống ⌀{profile.pipe.outer_diameter:g} × dài '
-               f'{profile.pipe.length:g} mm</text>')
+            out.append(_poly(pts, prim.color, prim.width,
+                             dash=",".join(str(v) for v in prim.dash)))
+    # Bảng số: chữ sáng trên nền tối - khung nhìn luôn nền xanh ở cả hai chế độ
+    pal = _pal.current()
+    rows = axis_readout(profile, state)
+    extra = [f"{profile.pipe.size_text} × dài {profile.pipe.length:g} mm"]
     if getattr(state, "torch", False):
-        out.append(f'<text x="16" y="{y + 26:.0f}" font-family="sans-serif" '
-                   f'font-size="12" font-weight="bold" fill="{_pal.current().torch_on}">'
-                   f'● NGUỒN CẮT ĐANG BẬT</text>')
+        extra.append("● NGUỒN CẮT ĐANG BẬT")
+    box_w = max(len(r) for r in rows + extra) * 7.9 + 24
+    box_h = 18 * len(rows) + 22 * len(extra) + 16
+    out.append(f'<rect x="8" y="8" width="{box_w:.0f}" height="{box_h:.0f}" rx="4" '
+               f'fill="{pal.hud_bg}" stroke="{pal.machine_edge}"/>')
+    y = 28.0
+    for row in rows:
+        out.append(f'<text x="18" y="{y:.0f}" font-family="Consolas, DejaVu Sans Mono, Courier New, monospace" font-size="13" '
+                   f'fill="{pal.hud_fg}" xml:space="preserve">{_esc(row)}</text>')
+        y += 18
+    for k, line in enumerate(extra):
+        color = pal.torch_on if k == 1 else pal.hud_fg
+        weight = ' font-weight="bold"' if k == 1 else ""
+        out.append(f'<text x="18" y="{y + 6:.0f}" font-family="sans-serif" font-size="12" '
+                   f'fill="{color}"{weight}>{_esc(line)}</text>')
+        y += 22
+    ox, oy = 46, height - 46
+    out.append(f'<circle cx="{ox}" cy="{oy}" r="34" fill="{pal.hud_bg}"/>')
+    for dx, dy, color, letter in axis_triad(profile, cam, 24.0):
+        out.append(f'<line x1="{ox}" y1="{oy}" x2="{ox + dx:.1f}" y2="{oy + dy:.1f}" '
+                   f'stroke="{color}" stroke-width="3" stroke-linecap="round"/>')
+        out.append(f'<text x="{ox + dx * 1.3:.1f}" y="{oy + dy * 1.3 + 4:.1f}" '
+                   f'text-anchor="middle" font-family="sans-serif" font-size="12" '
+                   f'font-weight="bold" fill="{color}">{letter}</text>')
     if title:
-        out.append(f'<text x="{width - 16}" y="24" text-anchor="end" '
-                   f'font-family="sans-serif" font-size="13" fill="{COLOR_TEXT}">'
+        tw = len(title) * 7.4 + 20
+        out.append(f'<rect x="{width - tw - 8:.0f}" y="8" width="{tw:.0f}" height="24" '
+                   f'rx="4" fill="{pal.hud_bg}"/>')
+        out.append(f'<text x="{width - 18}" y="25" text-anchor="end" '
+                   f'font-family="sans-serif" font-size="13" fill="{pal.hud_fg}">'
                    f'{_esc(title)}</text>')
     out.append("</svg>")
     return "\n".join(out)

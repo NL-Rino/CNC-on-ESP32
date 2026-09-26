@@ -602,6 +602,11 @@ class MainWindow:
                         command=self.machine_view.redraw).pack(side="left", padx=(6, 0))
         ttk.Button(bar, text="Góc nhìn gốc", width=12,
                    command=self.machine_view.reset_view).pack(side="right")
+        self.btn_focus = ttk.Button(bar, text="Xem toàn cảnh", width=13,
+                                    command=self.machine_view.toggle_focus)
+        self.btn_focus.pack(side="right", padx=4)
+        self.machine_view.on_focus_change = lambda f: self.btn_focus.configure(
+            text="Xem toàn cảnh" if f == "work" else "Xem vùng cắt")
         ttk.Button(bar, text="Xuất ảnh...", width=11,
                    command=self.export_machine_svg).pack(side="right", padx=4)
 
@@ -696,7 +701,9 @@ class MainWindow:
                          title=f"{self.job.name} - giây {self.sim_time:.1f}",
                          azimuth=self.machine_view.cam.azimuth,
                          elevation=self.machine_view.cam.elevation,
-                         along_range=self.machine_view._along_range())
+                         along_range=self.machine_view._along_range(),
+                         focus=self.machine_view.focus,
+                         plan=self.playback.trace)
         self.status_var.set(f"Đã lưu ảnh mô phỏng: {path}")
 
     # ------------------------------------------------------------------

@@ -71,15 +71,16 @@ Type: filesandordirs; Name: "{app}\_internal"
 Source: "..\dist\PipeCutStudio\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-; Chạy trong thư mục Documents: mọi thứ người dùng lưu mặc định vào đó,
-; không vào Program Files (không ghi được)
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"; WorkingDir: "{userdocs}"
+; Không đặt WorkingDir: phần mềm tự tìm tài nguyên theo thư mục cài và tự lưu vào
+; Documents của **người đang dùng** (tính lúc chạy).  Đặt {userdocs} ở đây thì cài
+; cho mọi người sẽ trỏ vào Documents của tài khoản quản trị đã chạy bộ cài.
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
 Name: "{group}\{cm:GroupGuide}"; Filename: "{app}\docs"
 Name: "{group}\{cm:GroupExamples}"; Filename: "{app}\examples"
 Name: "{group}\{cm:GroupFirmware}"; Filename: "{app}\firmware"
 Name: "{group}\{cm:GroupConfig}"; Filename: "{app}\config"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; WorkingDir: "{userdocs}"; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; WorkingDir: "{userdocs}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent

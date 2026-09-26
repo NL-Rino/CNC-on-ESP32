@@ -505,7 +505,14 @@ Vài lưu ý theo từng nguyên công:
    (ảnh minh hoạ: [ống tròn](mo_phong_may.svg) · [ống hộp](mo_phong_ong_hop.svg)):
    ống trượt ra vào và quay, mỏ cắt chạy ngang và lên xuống, vết cắt đỏ hiện dần.
    Đây là bước phát hiện va chạm và sai gốc toạ độ **trước khi** đụng tới phôi thật.
-   Kéo chuột trái để xoay góc nhìn, chuột phải để dịch, lăn chuột để phóng to.
+   * Mặc định nhìn cận **vùng cắt** quanh mỏ; nút **Xem toàn cảnh** (hoặc nháy đúp
+     vào khung) để thấy cả cây ống, bấm lại để về vùng cắt.
+   * **Nét đứt đỏ** là đường *sắp* cắt, **nét đậm đỏ** là đường *đã* cắt. Mỏ đang
+     tắt thì có vạch và chữ **"hở … mm"** cho biết mũi béc còn cách phôi bao xa;
+     đang cắt thì thấy hồ quang.
+   * Ba trục nhỏ góc dưới trái (X đỏ, Y lục, Z lam) cho biết đang nhìn từ phía nào.
+   * Kéo chuột trái để xoay góc nhìn, chuột phải để dịch, lăn chuột để phóng to
+     **quanh chỗ con trỏ đang chỉ**.
    Thanh trượt cho phép tua tới đúng thời điểm cần soi kỹ, nút **Xuất ảnh...**
    lưu lại khung hình đang xem thành tệp SVG để in kèm phiếu công nghệ.
 3. Tab **6. Chạy** — bấm **BẮT ĐẦU CẮT**, xác nhận hộp thoại kiểm tra an toàn.

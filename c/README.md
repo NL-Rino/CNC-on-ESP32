@@ -10,9 +10,9 @@ những phần khó nhất đã có và đã đối chiếu từng con số vớ
 
 | | Bản Python (PipeCut Studio 1.14) | Bản C này (0.1) |
 |---|---|---|
-| Tệp phát hành | bộ cài 11,6 MB, bản chạy liền 16,3 MB | **một tệp `PipeCutC.exe` 229 KB** |
+| Tệp phát hành | bộ cài 11,6 MB, bản chạy liền 16,3 MB | **một tệp `PipeCutC.exe` 231 KB** (zip ~180 KB) |
 | Cần gì để chạy | tự mang theo Python bên trong | chỉ DLL có sẵn của Windows (user32, gdi32, comctl32, comdlg32, ws2_32, advapi32, shell32, msvcrt) |
-| Vẽ một khung 3D (1280×800) | 20–22 ms (Canvas của Tkinter) | **5,7 ms** (GDI, đo trong Wine) |
+| Vẽ một khung 3D (1280×800) | 20–22 ms (Canvas của Tkinter) | **1,2–3,2 ms** trên Windows (máy của GitHub), 5,7 ms trong Wine |
 | Lượng mã | ~14 900 dòng Python | ~4 200 dòng C |
 | Kiểm thử tự động | 315 bài | tự kiểm `--selftest` + đối chiếu số với bản Python |
 
@@ -32,6 +32,8 @@ Phần lõi chuyển nguyên công thức từ `pipecut/section.py`, `kinematics
   1600 mm/ph (chỉ lệch do làm tròn số và ngưỡng đổi F; qua góc ống hộp tụt còn
   ~375 vì trục A chạm tốc độ tối đa — bản Python cũng vậy, 379); lỗ D20/D16 ra đúng bán kính
   sau bù kerf (9,25 / 7,25 mm, lệch dưới 0,006 mm do chia đoạn).
+* **Chạy trên Windows thật** (máy Windows của GitHub, mỗi lần đẩy mã): tự kiểm ra
+  đúng các con số trên, 6 ảnh 3D đều vẽ đủ, chụp được cả ba thẻ của cửa sổ.
 * **Nạp lệnh qua mạng** tới máy FluidNC ảo của bản Python (`pipecut/simulator.py`):
   gửi đủ 813/813 dòng, **đúng từng ký tự và đúng thứ tự**, máy ảo dừng đúng điểm cuối
   chương trình. Cho máy ảo báo động giữa chừng: bản C dừng ngay, ghi

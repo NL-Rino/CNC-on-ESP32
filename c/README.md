@@ -101,8 +101,8 @@ Cần MinGW-w64 (GCC cho Windows), không cần gì khác.
 Ra hai tệp:
 
 * `PipeCutC.exe` — giao diện.
-* `pipecutc.exe` — dòng lệnh: `pipecutc gen round 60 ra.nc`,
-  `pipecutc gen box 50 50 0 3 ra.nc`, `pipecutc plan ra.nc` (thời gian chạy chia
+* `pipecutc-cli.exe` — dòng lệnh: `pipecutc-cli gen round 60 ra.nc`,
+  `pipecutc-cli gen box 50 50 0 3 ra.nc`, `pipecutc-cli plan ra.nc` (thời gian chạy chia
   theo cắt / chạy không / nâng hạ / xoay / chờ).
 
 Mỗi lần đẩy mã, [GitHub Actions](../.github/workflows/c-win32.yml) dựng lại và
@@ -131,6 +131,6 @@ src/planner.c   ước thời gian như bộ lập kế hoạch của FluidNC, t
 src/view3d.c    khung 3D vẽ bằng GDI
 src/comm.c      cổng COM / Winsock, nạp lệnh đếm ký tự, đọc trạng thái
 src/ui.c        cửa sổ chính (điều khiển chuẩn của Windows)
-src/cli.c       pipecutc.exe
+src/cli.c       pipecutc-cli.exe
 res/            biểu tượng, manifest (giao diện Windows hiện đại, DPI), thông tin phiên bản
 ```

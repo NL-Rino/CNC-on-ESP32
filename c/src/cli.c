@@ -1,12 +1,12 @@
-/* pipecutc.exe - dòng lệnh: sinh G-code, tính thời gian, và các lệnh đối chiếu
+/* pipecutc-cli.exe - dòng lệnh: sinh G-code, tính thời gian, và các lệnh đối chiếu
  * con số với bản Python (dùng khi kiểm thử phần lõi).
  *
- *   pipecutc gen round 60 ra.nc          sinh G-code chương trình mẫu (ống tròn D60)
- *   pipecutc gen box 50 50 0 3 ra.nc     ống hộp 50x50, góc lượn tự tính, thành 3
- *   pipecutc plan ra.nc                  thời gian chạy như FluidNC, chia theo loại
- *   pipecutc contact round 60 N          bảng tư thế máy theo vị trí chu vi (kiểm thử)
- *   pipecutc contact box W H rc t N
- *   pipecutc surface box W H rc t        độ cao mặt phôi dưới mỏ theo góc xoay (kiểm thử)
+ *   pipecutc-cli gen round 60 ra.nc          sinh G-code chương trình mẫu (ống tròn D60)
+ *   pipecutc-cli gen box 50 50 0 3 ra.nc     ống hộp 50x50, góc lượn tự tính, thành 3
+ *   pipecutc-cli plan ra.nc                  thời gian chạy như FluidNC, chia theo loại
+ *   pipecutc-cli contact round 60 N          bảng tư thế máy theo vị trí chu vi (kiểm thử)
+ *   pipecutc-cli contact box W H rc t N
+ *   pipecutc-cli surface box W H rc t        độ cao mặt phôi dưới mỏ theo góc xoay (kiểm thử)
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,7 +48,7 @@ int main(int argc, char **argv)
     Machine m;
     machine_defaults(&m);
     if (argc < 2) {
-        fprintf(stderr, "pipecutc gen|plan|contact|surface ... (xem đầu tệp cli.c)\n");
+        fprintf(stderr, "pipecutc-cli gen|plan|contact|surface ... (xem đầu tệp cli.c)\n");
         return 2;
     }
     if (!strcmp(argv[1], "plan") && argc >= 3) {

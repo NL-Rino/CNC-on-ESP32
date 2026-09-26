@@ -24,15 +24,10 @@ jobs:
       - name: Dựng
         run: |
           make -C c
-          # bản đối chứng: manifest không đặt trang mã UTF-8 (chẩn đoán)
-          sed '/activeCodePage/d' c/res/app.manifest > c/res/app-noacp.manifest
-          sed 's/app.manifest/app-noacp.manifest/' c/res/app.rc > c/res/app-noacp.rc
-          x86_64-w64-mingw32-windres -I c/res -i c/res/app-noacp.rc -o c/res-noacp.o
-          cd c && x86_64-w64-mingw32-gcc -O2 -std=c99 -Wall -DUNICODE -D_UNICODE -mwindows -municode \
-            -o PipeCutC-noacp.exe src/section.c src/ops.c src/gcode.c src/planner.c src/demo.c \
-            src/ui.c src/view3d.c src/comm.c res-noacp.o -s -static -static-libgcc \
-            -lm -lcomctl32 -lcomdlg32 -lgdi32 -luser32 -lws2_32 -ladvapi32 -lshell32
-          ls -l *.exe
+          ls -l c/*.exe
+          # Windows không phân biệt hoa thường: hai tệp trùng tên kiểu này sẽ đè nhau
+          dup=$(ls c/*.exe | tr A-Z a-z | sort | uniq -d)
+          if [ -n "$dup" ]; then echo "Tên tệp trùng trên Windows: $dup"; exit 1; fi
       - uses: actions/upload-artifact@v4
         with:
           name: PipeCutC-exe
@@ -52,28 +47,10 @@ jobs:
       - name: Dòng lệnh
         shell: pwsh
         run: |
-          & bin\pipecutc.exe gen round 60 t.nc
-          if ($LASTEXITCODE -ne 0 -or -not (Test-Path t.nc)) { throw "pipecutc gen hỏng" }
-          & bin\pipecutc.exe plan t.nc
-          if ($LASTEXITCODE -ne 0) { throw "pipecutc plan hỏng" }
-
-      - name: Chẩn đoán khởi động
-        shell: pwsh
-        env:
-          PIPECUT_TRACE: "1"
-        run: |
-          foreach ($exe in "PipeCutC.exe", "PipeCutC-noacp.exe") {
-            New-Item -ItemType Directory -Force -Path "d-$exe" | Out-Null
-            $p = Start-Process "bin\$exe" -ArgumentList "--selftest", "$PWD\d-$exe" -PassThru `
-                   -RedirectStandardError "err-$exe.txt" -RedirectStandardOutput "out-$exe.txt"
-            $null = $p.Handle
-            if (-not $p.WaitForExit(120000)) { $p.Kill() }
-            $p.WaitForExit()
-            Write-Host ("{0}: mã thoát 0x{1:X8}" -f $exe, $p.ExitCode)
-            Get-Content "err-$exe.txt", "out-$exe.txt" -ErrorAction SilentlyContinue
-            Get-Content "d-$exe\selftest.txt" -ErrorAction SilentlyContinue
-            Get-Content selftest_error.txt -ErrorAction SilentlyContinue
-          }
+          & bin\pipecutc-cli.exe gen round 60 t.nc
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path t.nc)) { throw "pipecutc-cli gen hỏng" }
+          & bin\pipecutc-cli.exe plan t.nc
+          if ($LASTEXITCODE -ne 0) { throw "pipecutc-cli plan hỏng" }
 
       - name: Tự kiểm giao diện trên Windows
         shell: pwsh
@@ -87,11 +64,12 @@ jobs:
           if (Test-Path st\selftest.txt) { Get-Content st\selftest.txt } else { Write-Host "không có selftest.txt" }
           if (Test-Path selftest_error.txt) { Get-Content selftest_error.txt }
           if ($p.ExitCode -ne 0) { throw "--selftest hỏng" }
-          # Ảnh 3D nào cũng phải có đủ màu - trắng trơn hay chỉ có nền là vẽ hỏng
+          # Ảnh 3D phải có nhiều màu hơn hẳn nền chuyển sắc (64 màu) - ít hơn là chưa vẽ gì.
+          # (Máy chạy thử của GitHub không làm mịn chữ nên chỉ ~200-300 màu; máy thật nhiều hơn.)
           $shots = Select-String -Path st\selftest.txt -Pattern "colors=(\d+)"
           if ($shots.Count -ne 6) { throw "Thiếu ảnh 3D" }
           foreach ($m in $shots) {
-            if ([int]$m.Matches[0].Groups[1].Value -lt 500) { throw "Ảnh 3D quá ít màu: $($m.Line)" }
+            if ([int]$m.Matches[0].Groups[1].Value -lt 120) { throw "Ảnh 3D quá ít màu: $($m.Line)" }
           }
           # Chụp cửa sổ ba thẻ (để xem phông chữ tiếng Việt trên Windows thật)
           foreach ($tab in 0, 1, 2) {
@@ -111,7 +89,7 @@ jobs:
         run: |
           $v = "${{ github.ref_name }}".Substring(3)
           New-Item -ItemType Directory -Force -Path "PipeCutC-$v" | Out-Null
-          Copy-Item bin\PipeCutC.exe, bin\pipecutc.exe, c\README.md "PipeCutC-$v\"
+          Copy-Item bin\PipeCutC.exe, bin\pipecutc-cli.exe, c\README.md "PipeCutC-$v\"
           Compress-Archive -Path "PipeCutC-$v" -DestinationPath "PipeCutC-$v-win64.zip"
 
       - name: Đăng bản Release (bản thử)
